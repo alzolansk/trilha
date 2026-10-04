@@ -1,0 +1,79 @@
+/* Início · história de scroll (SPEC §8.2) — medidas do protótipo */
+.hero { height: 260vh; position: relative; }
+.stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+.pat { position: absolute; inset: 0; opacity: .12; }
+.photo { position: absolute; inset: 0; overflow: hidden; background: var(--deep); will-change: clip-path; }
+.photo :global(svg.land), .photo img { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 50% 60%; }
+.photo img { object-fit: cover; }
+.scrim { position: absolute; inset: auto 0 0 0; height: 55%; background: linear-gradient(transparent, rgba(0, 0, 0, .5)); }
+.ttl { position: absolute; left: var(--gutter); right: var(--gutter); bottom: clamp(32px, 8vh, 80px); display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; color: #fff; }
+.ttl h1 { margin: 10px 0 0; font-size: clamp(56px, 10vw, 168px); line-height: .88; }
+.ttl :global(.btn) { background: transparent; color: #fff; border-color: #fff; cursor: pointer; }
+.cd { position: absolute; display: flex; gap: clamp(12px, 2vw, 34px); }
+.u { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.n { font-family: var(--font-display); font-weight: var(--display-weight); font-size: clamp(44px, 11vw, 190px); line-height: .85; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.l { font-family: var(--font-mono); font-size: 11px; letter-spacing: .2em; color: var(--mute); }
+.cdA { top: 50%; right: calc(50% + clamp(26px, 4vw, 70px)); }
+.cdB { top: 50%; left: calc(50% + clamp(26px, 4vw, 70px)); }
+.splitH .cdA { top: auto; right: 0; left: 0; bottom: calc(50% + 30px); justify-content: center; }
+.splitH .cdB { left: 0; right: 0; top: calc(50% + 30px); justify-content: center; }
+.cdLabel { position: absolute; top: 108px; left: 0; right: 0; text-align: center; font-size: 13px; letter-spacing: .22em; padding: 0 var(--gutter); }
+.big { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 0 var(--gutter); pointer-events: none; }
+.big b { font-family: var(--font-display); font-weight: var(--display-weight); font-size: clamp(56px, 12vw, 200px); line-height: .88; letter-spacing: -.03em; }
+.badge { position: absolute; left: var(--gutter); bottom: 40px; width: 132px; height: 132px; color: var(--ink); }
+.badge svg { animation: spin 30s linear infinite; }
+.badge i { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%); clip-path: var(--motif); background: var(--acc); }
+.hint { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .22em; }
+.hint span:last-child { width: 1.5px; height: 40px; background: var(--ink); animation: hint 2s ease-in-out infinite; }
+
+.route { height: 300vh; position: relative; background: var(--deep); color: var(--on-deep); }
+.route .stage { padding: 100px var(--gutter) 40px; display: flex; flex-wrap: wrap; align-items: center; gap: 24px 56px; }
+.routePat { position: absolute; right: -10%; top: -20%; width: 60%; height: 140%; opacity: .12; transform: rotate(8deg); }
+.routeInfo { position: relative; flex: 1 1 320px; display: flex; flex-direction: column; gap: 16px; max-width: 470px; }
+.routeInfo h2 { margin: 0; font-size: clamp(48px, 6.5vw, 108px); line-height: .92; }
+.segs { display: flex; gap: 6px; }
+.segs span { flex: 1; height: 4px; background: rgba(255, 255, 255, .2); transition: background .3s; }
+.routeTip { display: flex; gap: 12px; align-items: flex-start; padding-left: 16px; border-left: 3px solid var(--route); line-height: 1.5; }
+.routeTip :global(.tag) { border-color: var(--route); }
+.routeMap { position: relative; flex: 2 1 460px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.routeMap svg { width: 100%; max-height: 66vh; overflow: visible; }
+.mapNote { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; opacity: .7; }
+.routeEmpty { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 18px; padding: 100px var(--gutter); background: var(--deep); color: var(--on-deep); position: relative; overflow: hidden; }
+
+.marqueeWrap { position: relative; z-index: 2; margin-top: -28px; }
+.numbers { position: relative; overflow: hidden; min-height: 120vh; padding: 120px var(--gutter); display: flex; flex-direction: column; justify-content: center; gap: 48px; max-width: var(--maxw); margin: 0 auto; }
+.stats { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 44px 32px; }
+.stat { position: relative; display: flex; flex-direction: column; gap: 12px; padding-top: 20px; }
+.stat::before { content: ""; position: absolute; top: 0; left: 0; height: 3px; width: calc(var(--p, 0) * 100%); background: var(--c); }
+.stat b { font-family: var(--font-display); font-weight: var(--display-weight); font-size: clamp(48px, 5.5vw, 88px); letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--mute); }
+.pending { position: relative; overflow: hidden; min-height: 140vh; padding: 120px var(--gutter); display: flex; flex-direction: column; justify-content: center; max-width: var(--maxw); margin: 0 auto; }
+.pending ul { position: relative; list-style: none; margin: 28px 0 0; padding: 0; max-width: 1100px; }
+.pending li { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; padding: 26px 0; }
+.pending li::before { content: ""; position: absolute; top: 0; left: 0; height: 1px; width: calc(var(--q, 0) * 100%); background: var(--ink); opacity: .25; }
+.t { font-size: clamp(19px, 2vw, 26px); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.s { font-size: 15px; color: var(--mute); margin-top: 4px; }
+.go { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 500; text-decoration: none; border-bottom: 1.5px solid var(--acc); }
+.final { position: relative; overflow: hidden; min-height: 100vh; padding: 120px var(--gutter); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 32px; background: var(--acc); color: var(--fg-acc); }
+.final h2 { position: relative; margin: 0; font-size: clamp(60px, 11vw, 190px); line-height: .88; }
+.progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--acc); z-index: 80; width: 0; }
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 85; overflow: hidden; }
+.confetti i { position: absolute; top: -40px; width: 22px; height: 22px; clip-path: var(--motif-solid); animation: confetti 3.2s var(--ease-out) forwards; }
+
+/* Reduced motion: sem história de scroll, fenda aberta e conteúdo direto (SPEC §10) */
+.reduced .hero { height: auto; }
+.reduced .hero .stage { position: relative; height: auto; min-height: 0; display: flex; flex-direction: column; overflow: visible; }
+.reduced .photo { position: relative; height: 70vh; clip-path: none !important; }
+.reduced .cd, .reduced .cdLabel, .reduced .big { position: static; transform: none !important; opacity: 1 !important; justify-content: center; }
+.reduced .cdBox { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; padding: 40px var(--gutter) 20px; }
+.reduced .hint, .reduced .badge, .reduced .pat { display: none; }
+.reduced .route { height: auto; }
+.reduced .route .stage { position: relative; height: auto; }
+.reduced .numbers, .reduced .pending, .reduced .final { min-height: 0; }
+.reduced .pending li { opacity: 1 !important; transform: none !important; --q: 1; }
+.reduced .stat { --p: 1; }
+
+@media (max-width: 600px) {
+  .badge { display: none; }
+  .cdLabel { top: 90px; }
+}

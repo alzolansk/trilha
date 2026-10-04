@@ -1,0 +1,32 @@
+// Gerado a partir de ref/trilha-prototipo.html (window.TRILHA_DATA). Não editar à mão.
+export const ICONS = {
+ "plane": "<path d=\"M10.5 13.5 3 11l18-8-8 18-2.5-7.5Z\"></path>",
+ "bus": "<rect x=\"4\" y=\"3\" width=\"16\" height=\"15\" rx=\"3\"></rect><path d=\"M4 11h16M8 18v3M16 18v3\"></path>",
+ "train": "<rect x=\"5\" y=\"3\" width=\"14\" height=\"14\" rx=\"4\"></rect><path d=\"M5 10h14M8 21l2-4M16 21l-2-4\"></path>",
+ "pin": "<path d=\"M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z\"></path><circle cx=\"12\" cy=\"9\" r=\"2.5\"></circle>",
+ "doc": "<path d=\"M14 3H6v18h12V7l-4-4Z\"></path><path d=\"M14 3v4h4M9 13h6M9 17h6\"></path>",
+ "camera": "<path d=\"M4 8h3l2-3h6l2 3h3v11H4z\"></path><circle cx=\"12\" cy=\"13\" r=\"3.5\"></circle>",
+ "bag": "<rect x=\"5\" y=\"7\" width=\"14\" height=\"14\" rx=\"3\"></rect><path d=\"M9 7V5a3 3 0 0 1 6 0v2M5 13h14\"></path>",
+ "wallet": "<rect x=\"3\" y=\"6\" width=\"18\" height=\"14\" rx=\"3\"></rect><path d=\"M3 10h18M16 15h2\"></path>",
+ "users": "<circle cx=\"9\" cy=\"8\" r=\"3.5\"></circle><path d=\"M2.5 20a6.5 6.5 0 0 1 13 0\"></path><path d=\"M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6\"></path>",
+ "plus": "<path d=\"M12 5v14M5 12h14\"></path>",
+ "sparkle": "<path d=\"M12 3l2 6.5L20.5 12 14 14.5 12 21l-2-6.5L3.5 12 10 9.5z\"></path>",
+ "check": "<path d=\"M5 12.5l4.5 4.5L19 7\"></path>",
+ "cal": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"3\"></rect><path d=\"M3 10h18M8 3v4M16 3v4\"></path>",
+ "upload": "<path d=\"M12 16V4M7 9l5-5 5 5M4 16v4h16v-4\"></path>",
+ "arrow": "<path d=\"M5 12h14M13 6l6 6-6 6\"></path>",
+ "bed": "<path d=\"M3 18V6M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5\"></path><circle cx=\"7\" cy=\"11\" r=\"2\"></circle>",
+ "map": "<path d=\"M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z\"></path><path d=\"M9 4v14M15 6v14\"></path>",
+ "home": "<path d=\"M4 11 12 4l8 7v9h-5v-6H9v6H4z\"></path>",
+ "search": "<circle cx=\"11\" cy=\"11\" r=\"6.5\"></circle><path d=\"m16 16 4.5 4.5\"></path>",
+ "book": "<path d=\"M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z\"></path><path d=\"M4 19V5\"></path>",
+ "cloud": "<path d=\"M7 18a4.5 4.5 0 1 1 .9-8.9A6 6 0 0 1 19 11a3.5 3.5 0 0 1-1 7z\"></path><path d=\"m9.5 14 2 2 3.5-3.5\"></path>",
+ "link": "<path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7L11.5 6.8\"></path><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5\"></path>",
+ "alert": "<path d=\"M12 3 2 20h20L12 3Z\"></path><path d=\"M12 10v4M12 17v.5\"></path>",
+ "edit": "<path d=\"M4 20h4L19 9l-4-4L4 16z\"></path>",
+ "swap": "<path d=\"M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7\"></path>",
+ "chev": "<path d=\"m6 9 6 6 6-6\"></path>",
+ "sun": "<circle cx=\"12\" cy=\"12\" r=\"4\"></circle><path d=\"M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5\"></path>",
+ "heart": "<path d=\"M12 20s-8-4.7-8-10.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5C20 15.3 12 20 12 20Z\"></path>"
+} as const;
+export type IconName = keyof typeof ICONS;

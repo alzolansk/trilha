@@ -1,0 +1,18 @@
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 26px 22px; margin-top: 28px; }
+.ticketBtn { all: unset; display: flex; flex-direction: column; flex: 1; cursor: pointer; border-radius: var(--r-lg); }
+.ticketBtn:focus-visible { outline: 2.5px solid var(--acc); outline-offset: 3px; }
+.off { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--line); }
+.drop { position: relative; margin-top: 64px; padding: 60px 24px; border-radius: 34px; background: var(--card); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; cursor: pointer; }
+.dropHero { margin-top: 40px; padding: 90px 24px; }
+.over { background: var(--soft); }
+.bd { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ic { width: 76px; height: 76px; clip-path: var(--motif-solid); background: var(--acc); color: var(--fg-acc); display: grid; place-items: center; animation: floaty 7s ease-in-out infinite; }
+.drop:focus-within { outline: 2.5px solid var(--acc); outline-offset: 3px; }
+.shots { display: flex; flex-wrap: wrap; gap: 24px; }
+.shots figure { margin: 0; flex: 1 1 170px; max-width: 260px; display: flex; flex-direction: column; gap: 10px; }
+.shotBtn { all: unset; cursor: pointer; display: block; }
+.shotBtn:focus-visible { outline: 2.5px solid var(--acc); outline-offset: 3px; }
+.ph { aspect-ratio: 1 / 1; display: grid; place-items: center; overflow: hidden; }
+.review { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); }
+.viewer { min-height: 120px; }
+.offRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; border-radius: 16px; background: var(--bg); }

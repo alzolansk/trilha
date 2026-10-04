@@ -1,0 +1,16 @@
+node_modules
+dist
+dev-dist
+.env
+.env.local
+.env.*.local
+!.env.example
+test-results
+playwright-report
+*.log
+.wrangler
+.next
+next-env.d.ts
+*.tsbuildinfo
+.vercel
+tmp

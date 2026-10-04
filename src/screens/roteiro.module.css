@@ -1,0 +1,44 @@
+.segbar { display: flex; gap: 6px; margin-top: 36px; }
+.segbar button { min-width: 0; min-height: 64px; padding: 10px 12px; border: 0; border-radius: var(--r-md); text-align: left; cursor: pointer; transition: transform .35s var(--ease-spring), box-shadow .35s; }
+.segbar button[aria-pressed=true] { transform: translateY(-8px); box-shadow: 0 8px 0 var(--ink); }
+.segbar b { display: block; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .12em; }
+.segbar span { display: block; font-size: 12px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stopBtn { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; padding: 14px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink); }
+.stopBtn[aria-pressed=true] { background: var(--ink); color: var(--bg); }
+.stopRow { display: flex; align-items: center; gap: 6px; }
+.reorder { display: flex; flex-direction: column; gap: 4px; }
+.reorder button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink); display: grid; place-items: center; }
+.reorder button:disabled { opacity: .3; cursor: default; }
+.leg { display: flex; align-items: center; gap: 12px; padding: 4px 0 4px 40px; }
+.leg span { font-family: var(--font-mono); font-size: 12px; padding: 6px 12px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--card); }
+.detail { overflow: hidden; scroll-margin-top: 90px; }
+.detailHead { position: relative; overflow: hidden; padding: 40px 36px 34px; }
+.detailHead h2 { position: relative; margin: 10px 0 0; font-size: clamp(52px, 6.5vw, 96px); line-height: .9; animation: popin .6s var(--ease-spring) both; }
+.detailBody { padding: 30px 36px 36px; display: flex; flex-direction: column; gap: 28px; }
+.pass { position: relative; display: flex; flex-wrap: wrap; border-radius: var(--r-lg); background: var(--bg); border: 1px solid var(--line); }
+.pass :global(.notch) { top: 50%; margin-top: -11px; background: var(--card); }
+.passMain { flex: 999 1 320px; padding: 24px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.code { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 44px; line-height: 1; }
+.passSide { flex: 1 1 150px; padding: 24px 28px; border-left: 1.5px dashed var(--line); display: flex; flex-direction: column; justify-content: center; gap: 6px; font-size: 13px; }
+.plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.plan li { display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 16px; border-radius: var(--r-md); background: var(--bg); }
+.box { padding: 20px; border-radius: 20px; border: 1px solid var(--line); }
+.secHead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.secHead :global(.h3) { margin: 0; }
+.newStop { margin-top: 28px; padding: 24px; border-radius: 24px; border: 1.5px dashed var(--ink); display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 90px; }
+.results { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); max-height: 240px; overflow: auto; }
+.results button { width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; color: var(--ink); }
+.results button:hover, .results button:focus-visible { background: var(--soft); }
+.weather { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.weather div { flex: none; min-width: 84px; padding: 10px 12px; border-radius: 14px; background: var(--bg); font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 600px) {
+  .segbar span { display: none; }
+  .segbar b { font-size: 11px; }
+}
+@media (max-width: 820px) {
+  .detailHead, .detailBody { padding-left: 20px; padding-right: 20px; }
+  .segbar button { min-height: 54px; padding: 8px; }
+  .passMain, .passSide { padding: 18px; }
+  .code { font-size: 34px; }
+}

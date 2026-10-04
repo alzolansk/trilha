@@ -1,0 +1,30 @@
+.tabs { display: none; gap: 8px; margin-top: 28px; }
+.left { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.right { flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 26px; }
+.ring { position: relative; overflow: hidden; display: flex; align-items: center; gap: 22px; padding: 24px; border-radius: 26px; background: var(--deep); color: var(--on-deep); }
+.v { transition: stroke-dasharray .6s var(--ease-spring); }
+.group { margin: 0; padding: 16px 20px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--card); }
+.group legend { padding: 0 8px; font-family: var(--font-display); font-weight: var(--display-weight); font-size: 20px; }
+.itemRow { display: flex; align-items: center; gap: 4px; }
+.itemRow > label { flex: 1; }
+.linkBtn { border: 0; background: transparent; color: var(--mute); text-decoration: underline; cursor: pointer; font-size: 13px; padding: 8px 0 0; min-height: 32px; }
+.sugs { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 20px; border: 1px dashed var(--acc); background: var(--soft); }
+.sug { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.task { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.task[data-done=true] { opacity: .65; }
+.status { min-height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
+.sticker { width: 130px; height: 130px; flex: none; clip-path: var(--motif-solid); background: var(--acc2); color: var(--fg-acc2); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; animation: wig 3.4s ease-in-out infinite; }
+.cols { display: flex; gap: 12px; align-items: flex-end; height: 170px; }
+.cols div { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; }
+.cols i { width: 100%; border-radius: 14px 14px 4px 4px; display: block; }
+.exp { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--bg); }
+.mobileTiles { display: none; gap: 10px; }
+.mobileTiles div { flex: 1; padding: 14px; border-radius: 20px; display: flex; flex-direction: column; }
+.mobileTiles span { font-size: 10px; letter-spacing: .1em; }
+.mobileTiles b { font-size: 20px; }
+
+@media (max-width: 820px) {
+  .tabs { display: flex; }
+  .hideMobile { display: none; }
+  .mobileTiles { display: flex; }
+}
