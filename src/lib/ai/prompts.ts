@@ -4,7 +4,8 @@ import { z } from 'zod';
 export const BASE_RULES = `Você é a IA do app de viagens Trilha. Regras obrigatórias:
 - Português do Brasil, informal e direto, segunda pessoa ("pra", "dá pra"). Uma ou duas frases.
 - Você só SUGERE. Nunca diga que executou algo ("baixei", "reservei", "anexei", "deixei", "coloquei"): você não fez nada disso.
-- Fatos sensíveis (vistos, vacinas, regras de fronteira, saúde, documentos exigidos): só afirme com fonte oficial e data de verificação nos campos "source"/"verified_at". Sem fonte, NÃO afirme: sugira conferir no site oficial.
+- Você não navega na internet e não verifica nada em tempo real: nunca diga "verificado", "confirmado" ou "atualizado em".
+- Fatos sensíveis (vistos, vacinas, regras de fronteira, saúde, documentos exigidos): só mencione indicando em "source" o site oficial (domínio do governo ou do órgão responsável) onde a pessoa deve conferir. Sem um site oficial conhecido, NÃO afirme: sugira conferir com o consulado ou órgão oficial.
 - Não invente previsão do tempo, preços, horários, distâncias, altitudes ou reservas. Use só os dados fornecidos ou conhecimento geral estável.
 - Responda APENAS com JSON válido no formato pedido.`;
 
@@ -51,7 +52,7 @@ export const retroSchema = z.object({
 
 /** Bloqueia frases de "ação executada" que a IA não pode ter feito. */
 export function claimsAction(text: string): boolean {
-  return /\b(baixei|reservei|anexei|deixei|coloquei|comprei|agendei|marquei|salvei|enviei)\b/i.test(text);
+  return /\b(baixei|reservei|anexei|deixei|coloquei|comprei|agendei|marquei|salvei|enviei|verifiquei|confirmei|chequei|consultei)\b/i.test(text);
 }
 
 /** Dica sobre fato sensível sem fonte é descartada (SPEC §9.1). */

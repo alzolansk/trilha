@@ -29,7 +29,7 @@ export function AiNote({ by = 'ai', children, source }: { by?: 'ai' | 'rules'; c
       <AiTag by={by} solid />
       <span>
         {children}
-        {source ? <small>Fonte: {source}</small> : null}
+        {source ? <small>{by === 'ai' ? 'Confira em' : 'Fonte'}: {source}</small> : null}
       </span>
     </div>
   );

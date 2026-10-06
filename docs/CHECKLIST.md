@@ -25,20 +25,20 @@ Nada é marcado ✅ só porque a interface existe.
 | Next.js App Router + TS estrito | `src/app`, `tsconfig.json` | `npm run build`, `npm run typecheck` | ✅ |
 | Countdown meses de calendário/dias/horas/min, fusos | `lib/time.ts` | unit (dia 31, DST Lisboa, referência) | ✅ |
 | Estados antes/hoje/durante/depois | `derive.tripPhase`, `Home.tsx` | unit fases | ✅ |
-| RLS em todas as tabelas, papéis organizer/editor/viewer | migrations 0001–0003 | 26 testes RLS em PGlite | ✅ (local) / ⛔ (projeto real) |
+| RLS em todas as tabelas, papéis organizer/editor/viewer | migrations 0001–0003 | 26 testes RLS em PGlite + `tmp/real-e2e.mjs` no projeto real (6 out 2026): papéis, leitora não edita nem se promove | ✅ |
 | Convites com hash, expiração, revogação, limite | RPCs + `Turma.tsx` | testes RLS | ✅ local |
-| Storage privado + políticas | migration 0002 | testes RLS com `storage.objects` simulado | ✅ local / ⛔ real |
-| Upload sem órfãos (linha uploading → arquivo → ready; desfaz em erro) | `Documentos.saveOne` | — | ⛔ Supabase |
+| Storage privado + políticas | migration 0002 | projeto real: envio, leitura por visibilidade, terceiro não baixa nem assina link, bucket não público | ✅ |
+| Upload sem órfãos (linha uploading → arquivo → ready; desfaz em erro) | `Documentos.saveOne` | protocolo testado por script no projeto real; fluxo pela tela pendente | 🟡 |
 | Offline real de documentos (IndexedDB, estado separado da preferência) | `offline.ts`, `offlineSync.ts`, `sw.js` | — | ⛔ Supabase (precisa de arquivo real) |
 | Limpeza local ao sair | `wipeAllLocalData` | — | 🟡 |
-| Colaboração em tempo real e conflitos (versão) | `supabaseSource.subscribe`, `update(..., version)` | teste RLS de versão | ✅ local / ⛔ duas sessões |
-| Gastos: rateio em centavos, taxa gravada, acertos registrados | `money.ts`, `save_expense`, `Mala.tsx` | unit + RLS | ✅ |
+| Colaboração em tempo real e conflitos (versão) | `supabaseSource.subscribe`, `update(..., version)` | projeto real: duas sessões, evento recebido; gravação com versão antiga não altera | ✅ |
+| Gastos: rateio em centavos, taxa gravada, acertos registrados | `money.ts`, `save_expense`, `Mala.tsx` | unit + RLS local; projeto real: gasto com rateio grava, rateio que não fecha é recusado | ✅ |
 | Câmbio com fonte e data, taxa manual | `/api/fx`, `ExpenseDialog` | fontes testadas por curl | ✅ |
 | Mapa com atribuição, linha não é trajeto | `RouteMap.tsx` | — | 🟡 |
 | Busca de lugares (Nominatim) | `/api/geo` | requer login | ⛔ Supabase |
-| IA: 6 endpoints, alternância, validação, fallback | `lib/ai/*`, `api/ai/*` | sem chaves no ambiente | ⛔ chaves |
-| Identidade: dicionário → IA → validação → regras → persistência | `api/ai/identity`, onboarding | unit gerador/validador | ✅ local / ⛔ IA |
+| IA: 6 endpoints, alternância, validação, fallback | `lib/ai/*`, `api/ai/*` | pelo app logado (6 out 2026): identidade, dicas, mala, alertas, classificação e retrospectiva respondem via Gemini `gemini-3.5-flash-lite` e Groq `openai/gpt-oss-120b`; troca de provedor observada. OpenRouter sem chave | ✅ (Gemini/Groq) / ⛔ OpenRouter |
+| Identidade: dicionário → IA → validação → regras → persistência | `api/ai/identity`, onboarding | unit gerador/validador; real: Cusco/Marrakech → dicionário, Lisboa/Hanói/Ushuaia → Gemini, Cartagena → Groq | ✅ |
 | Notificações push diárias | `api/cron/daily`, `conta` | — | ⛔ VAPID + deploy |
 | Analytics opt-in | migration 0003, `analytics.ts` | teste RLS opt-in | ✅ local |
 | Demonstração separada dos dados reais | `/demo/[key]`, `demoSource` (memória) | e2e | ✅ |
-| Fluxos de duas contas, acesso de terceiro negado | — | — | ⛔ Supabase |
+| Fluxos de duas contas, acesso de terceiro negado | convites, RLS | projeto real com 3 contas de teste: convite, aceite, token inválido, terceiro sem leitura/escrita/convite | ✅ |

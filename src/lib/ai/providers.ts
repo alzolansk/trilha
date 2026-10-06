@@ -79,7 +79,7 @@ function openAiCompatible(id: ProviderId, url: string, key: string | undefined, 
 
 export function providers(): Record<ProviderId, Provider> {
   const geminiKey = process.env.GEMINI_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.7-flash';
+  const geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
   return {
     gemini: {
       id: 'gemini',
@@ -143,18 +143,25 @@ export async function runWithFallback<T>(
     if (!p.available) continue;
     if ((cooldown.get(id) ?? 0) > now) continue;
     for (let attempt = 0; attempt < 2; attempt++) {
+      let text: string;
       try {
-        const text = await p.call(system, user, { maxTokens: opts.maxTokens ?? 900, temperature: opts.temperature ?? 0.5 });
-        const data = validate(extractJson(text));
-        if (data != null) return { data, provider: id, model: p.model };
-        // JSON fora do schema: tenta mais uma vez neste provedor e depois passa adiante
+        text = await p.call(system, user, { maxTokens: opts.maxTokens ?? 900, temperature: opts.temperature ?? 0.5 });
       } catch (e) {
         const status = e instanceof ProviderError ? e.status : 0;
         if (status === 429 || status >= 500 || status === 0) cooldown.set(id, Date.now() + (status === 429 ? 10 * 60_000 : 60_000));
         if (status === 404 || status === 400 || status === 401 || status === 403) cooldown.set(id, Date.now() + 30 * 60_000);
-        console.warn(`[ai] ${task} via ${id} falhou (${status || 'rede'})`);
+        console.warn(`[ai] ${task} via ${id} falhou (${status || 'rede'}: ${(e as Error).message.slice(0, 120)})`);
         break;
       }
+      // JSON malformado ou fora do schema não é falha do provedor: tenta mais uma vez e depois passa adiante.
+      let data: T | null = null;
+      try {
+        data = validate(extractJson(text));
+      } catch {
+        data = null;
+      }
+      if (data != null) return { data, provider: id, model: p.model };
+      console.warn(`[ai] ${task} via ${id}: resposta fora do formato (tentativa ${attempt + 1})`);
     }
   }
   return null;

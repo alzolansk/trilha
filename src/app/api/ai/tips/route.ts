@@ -26,7 +26,7 @@ export async function POST(req: Request) {
         BASE_RULES,
         `Dados da trilha: ${JSON.stringify(tripBrief(bundle))}
 Escreva UMA dica útil e específica para a parada "${stop.name}" (id ${stop.id}), considerando datas, altitude, transporte e plano informados. Não repita o óbvio.
-JSON: {"text": "...", "kind": "clima|altitude|fronteira|reserva|logistica|cultura|outro", "source": "URL oficial ou null", "verified_at": "AAAA-MM-DD ou null"}`,
+JSON: {"text": "...", "kind": "clima|altitude|fronteira|reserva|logistica|cultura|outro", "source": "site oficial onde conferir, ou null"}`,
         (raw) => {
           const v = tipSchema.safeParse(raw);
           if (!v.success || claimsAction(v.data.text) || sensitiveWithoutSource(v.data)) return null;
@@ -35,7 +35,8 @@ JSON: {"text": "...", "kind": "clima|altitude|fronteira|reserva|logistica|cultur
         { maxTokens: 400, temperature: 0.6 },
       );
       if (res) {
-        const src = res.data.source ? `${res.data.source}${res.data.verified_at ? ` (verificado em ${res.data.verified_at})` : ''}` : undefined;
+        // A IA não verifica nada: a fonte é só onde conferir, e a data de verificação dela é descartada.
+        const src = res.data.source ?? undefined;
         tip = { text: res.data.text, kind: res.data.kind, source: src, by: 'ai', model: `${res.provider}:${res.model}`, generated_at: now };
       }
     }
