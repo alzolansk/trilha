@@ -3,7 +3,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ConflictError, OfflineError, type Bucket, type TripSource } from './source';
 import type { TableName, TripBundle } from './types';
 
-const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, boolean][] }[] = [
+// optional: tabela de uma migration que pode ainda não ter sido aplicada no projeto. Se ela não
+// existir, o pacote segue com a lista vazia (em vez de a viagem inteira cair na cópia offline).
+const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, boolean][]; optional?: true }[] = [
   { table: 'trip_members', key: 'members' },
   { table: 'stops', key: 'stops', order: [['position', true], ['arrival_date', true]] },
   { table: 'transports', key: 'transports' },
@@ -20,11 +22,16 @@ const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, 
   { table: 'pool_contributions', key: 'poolContributions', order: [['contributed_on', false], ['created_at', false]] },
   { table: 'journal_entries', key: 'journalEntries', order: [['entry_date', true], ['created_at', true]] },
   { table: 'journal_photos', key: 'journalPhotos', order: [['position', true]] },
-  { table: 'inspiration_votes', key: 'inspirationVotes' },
-  { table: 'polls', key: 'polls', order: [['created_at', false]] },
-  { table: 'poll_options', key: 'pollOptions', order: [['position', true]] },
-  { table: 'poll_votes', key: 'pollVotes' },
+  { table: 'inspiration_votes', key: 'inspirationVotes', optional: true },
+  { table: 'polls', key: 'polls', order: [['created_at', false]], optional: true },
+  { table: 'poll_options', key: 'pollOptions', order: [['position', true]], optional: true },
+  { table: 'poll_votes', key: 'pollVotes', optional: true },
 ];
+
+/** Tabela inexistente: PGRST205 (PostgREST, fora do cache do esquema) ou 42P01 (Postgres). */
+export function isMissingTable(e: { code?: string } | null | undefined): boolean {
+  return e?.code === 'PGRST205' || e?.code === '42P01';
+}
 
 const REALTIME_TABLES = [
   'trip_members', 'stops', 'transports', 'stays', 'activities', 'documents',
@@ -48,11 +55,17 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
       if (tripRes.error) throw tripRes.error;
       if (!tripRes.data) throw Object.assign(new Error('Viagem não encontrada ou sem acesso.'), { code: 'NOT_FOUND' });
       const results = await Promise.all(
-        CHILD_TABLES.map(async ({ table, order }) => {
+        CHILD_TABLES.map(async ({ table, order, optional }) => {
           let q = sb.from(table).select('*').eq('trip_id', tripId);
           for (const [col, asc] of order ?? []) q = q.order(col, { ascending: asc, nullsFirst: false });
           const r = await q;
-          if (r.error) throw r.error;
+          if (r.error) {
+            if (optional && isMissingTable(r.error)) {
+              console.warn(`[trilha] tabela ${table} não existe no banco: aplique as migrations pendentes.`);
+              return [];
+            }
+            throw r.error;
+          }
           return r.data;
         }),
       );
