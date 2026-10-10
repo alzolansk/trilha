@@ -1,17 +1,20 @@
 'use client';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { AiNote, Floaters, Icon, PageTitle, Pattern, useReveal } from '../components/ui/primitives';
 import { useBundle } from '../data/TripContext';
-import type { JournalEntry, JournalPhoto, Stop } from '../data/types';
+import type { InspirationValue, JournalEntry, JournalPhoto, Stop, TripBundle } from '../data/types';
 import { callAi } from '../lib/ai/client';
+import { track } from '../lib/analytics';
 import { sortedStops, stopDates, stopIndexOn, tripPhase } from '../lib/derive';
-import { dayMonth } from '../lib/format';
+import { dayMonth, initials, plural } from '../lib/format';
 import { colorCycle } from '../lib/identity/theme';
 import { compressImage } from '../lib/image';
+import { inspirationScore, myInspirationVote } from '../lib/polls';
 import { ruleRetro } from '../lib/rules';
-import { todayIn } from '../lib/time';
+import { dateRange, todayIn } from '../lib/time';
 import s from './diario.module.css';
 
 type Tab = 'antes' | 'durante' | 'depois';
@@ -121,7 +124,7 @@ export default function Diario() {
             const photos = b.journalPhotos.filter((p) => es.some((e) => e.id === p.entry_id));
             const last = es.at(-1);
             return (
-              <DiaryCard key={st.id} stop={st} i={i} color={cols[i % 4]} entry={last ?? null} photos={photos} count={es.length} tab={tab}
+              <DiaryCard key={st.id} stop={st} i={i} color={cols[i % 4]} entry={last ?? null} photos={photos} count={es.length} tab={tab} summary={tab === 'antes' ? favoriteSummary(b, es) : null}
                 onOpen={() => setStopDlg(st)} onFav={last ? () => void favorite(last) : undefined} />
             );
           })}
@@ -139,7 +142,7 @@ export default function Diario() {
       {stopDlg ? (
         <Dialog open onClose={() => setStopDlg(null)} title={stopDlg.name}>
           <span className="mono" style={{ fontSize: 12 }}>{stopDates(stopDlg, true)} · {tab === 'antes' ? 'INSPIRAÇÕES' : 'REGISTROS'}</span>
-          <EntryList entries={entries.filter((e) => e.stop_id === stopDlg.id)} onEdit={(e) => { setStopDlg(null); setEntryDlg({ entry: e, stopId: stopDlg.id }); }} />
+          <EntryList entries={byScore(b, entries.filter((e) => e.stop_id === stopDlg.id), tab === 'antes')} onEdit={(e) => { setStopDlg(null); setEntryDlg({ entry: e, stopId: stopDlg.id }); }} />
           {canEdit ? <button className="btn btn-primary tap" onClick={() => { setEntryDlg({ entry: null, stopId: stopDlg.id }); setStopDlg(null); }}><Icon name="plus" size={16} />{tab === 'antes' ? 'Nova inspiração' : 'Novo registro'}</button> : null}
         </Dialog>
       ) : null}
@@ -148,7 +151,24 @@ export default function Diario() {
   );
 }
 
-function DiaryCard({ stop, i, color, entry, photos, count, tab, onOpen, onFav }: { stop: Stop; i: number; color: string; entry: JournalEntry | null; photos: JournalPhoto[]; count: number; tab: Tab; onOpen: () => void; onFav?: () => void }) {
+/** Inspirações mais queridas primeiro (score do termômetro); empate mantém a ordem original. */
+function byScore(b: TripBundle, es: JournalEntry[], on: boolean): JournalEntry[] {
+  if (!on) return es;
+  const score = new Map(es.map((e) => [e.id, inspirationScore(b, e.id).score]));
+  return [...es].sort((x, y) => score.get(y.id)! - score.get(x.id)!);
+}
+
+/** "3 inspirações · mais querida: X", só quando alguém já reagiu. */
+function favoriteSummary(b: TripBundle, es: JournalEntry[]): string | null {
+  const scored = es.map((e) => ({ e, t: inspirationScore(b, e.id) })).filter(({ t }) => t.muito.length + t.topo.length + t.passo.length > 0);
+  if (!scored.length) return null;
+  const top = scored.reduce((a, c) => (c.t.score > a.t.score ? c : a));
+  return `${plural(es.length, 'inspiração', 'inspirações')} · mais querida: ${entryTitle(top.e)}`;
+}
+
+const entryTitle = (e: JournalEntry) => e.title || e.place_name || (e.entry_date ? dayMonth(e.entry_date) : 'Registro');
+
+function DiaryCard({ stop, i, color, entry, photos, count, tab, summary, onOpen, onFav }: { stop: Stop; i: number; color: string; entry: JournalEntry | null; photos: JournalPhoto[]; count: number; tab: Tab; summary: string | null; onOpen: () => void; onFav?: () => void }) {
   const url = usePhotoUrl(photos[0]?.storage_path);
   return (
     <article className="rv lift card" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 18, borderRadius: 28, transform: `rotate(${[-2, 1.5, -1, 2, -1.5, 1][i % 6]}deg)` }}>
@@ -164,6 +184,7 @@ function DiaryCard({ stop, i, color, entry, photos, count, tab, onOpen, onFav }:
         <p style={{ margin: '10px 0 0', fontSize: 15, color: 'var(--mute)', textAlign: 'left' }}>
           {entry?.body?.slice(0, 140) || entry?.title || (tab === 'antes' ? `[Salve lugares que quer ver em ${stop.name}]` : `[Escreva como foi em ${stop.name}]`)}
         </p>
+        {summary ? <p className="mono" style={{ margin: '8px 0 0', fontSize: 12, textAlign: 'left' }}>{summary}</p> : null}
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span className="pill">{photos.length} {photos.length === 1 ? 'FOTO' : 'FOTOS'}</span>
@@ -196,17 +217,129 @@ function EntryList({ entries, onEdit }: { entries: JournalEntry[]; onEdit: (e: J
       {entries.map((e) => (
         <li key={e.id} className={s.entry}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-            <b>{e.title || (e.entry_date ? dayMonth(e.entry_date) : 'Registro')}</b>
+            <b>{entryTitle(e)}</b>
             <span className="mono" style={{ fontSize: 11 }}>{profileOf(e.author_id)?.display_name ?? ''}{e.favorite ? ' · ♥' : ''}</span>
           </div>
           {e.body ? <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{e.body}</p> : null}
           {e.place_name ? <span className="pill">{e.place_name}</span> : null}
           {e.link_url ? <a href={e.link_url} target="_blank" rel="noopener noreferrer nofollow" style={{ wordBreak: 'break-all' }}>{e.link_url}</a> : null}
           <div className={s.photos}>{b.journalPhotos.filter((p) => p.entry_id === e.id).map((p) => <Photo key={p.id} p={p} />)}</div>
-          {canEdit && e.author_id === me ? <button className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={() => onEdit(e)}>Editar</button> : null}
+          {e.kind === 'inspiracao' ? <Reactions entry={e} /> : null}
+          <div className={s.entryActions}>
+            {e.kind === 'inspiracao' ? <InRoute entry={e} /> : null}
+            {canEdit && e.author_id === me ? <button className="btn btn-sm tap" onClick={() => onEdit(e)}>Editar</button> : null}
+          </div>
         </li>
       ))}
     </ul>
+  );
+}
+
+const REACTIONS: [InspirationValue, string, string][] = [[2, 'Quero muito', 'QUERO MUITO'], [1, 'Topo', 'TOPO'], [-1, 'Passo', 'PASSO']];
+
+/** Termômetro da turma: todo membro reage (inclusive quem só consulta). Clicar de novo retira. */
+function Reactions({ entry }: { entry: JournalEntry }) {
+  const { bundle: b, me, role, source, reload, profileOf } = useBundle();
+  const { run, busy } = useAction();
+  const t = inspirationScore(b, entry.id);
+  const mine = myInspirationVote(b, entry.id, me);
+  const who: Record<InspirationValue, string[]> = { 2: t.muito, 1: t.topo, [-1]: t.passo };
+  const react = (value: InspirationValue) =>
+    run(async () => {
+      if (mine === value) await source.remove('inspiration_votes', { entry_id: entry.id, user_id: me });
+      else {
+        await source.upsert('inspiration_votes', { entry_id: entry.id, trip_id: b.trip.id, user_id: me, value, updated_at: new Date().toISOString() }, 'entry_id,user_id');
+        if (source.kind === 'supabase') track('inspiration.reacted', { value }, b.trip.id);
+      }
+      await reload();
+    });
+  const name = (uid: string) => profileOf(uid)?.display_name ?? 'Ex-membro';
+  return (
+    <div className={s.reactions}>
+      <div role="group" aria-label={`Termômetro da turma para ${entryTitle(entry)}`} className={s.reactBtns}>
+        {REACTIONS.map(([v, label]) => (
+          <button key={v} type="button" className="chip tap" aria-pressed={mine === v} disabled={!role || busy} onClick={() => void react(v)}
+            aria-label={`${label}, ${plural(who[v].length, 'pessoa', 'pessoas')}`}>
+            {label}<small>{who[v].length}</small>
+          </button>
+        ))}
+      </div>
+      {t.muito.length + t.topo.length + t.passo.length ? (
+        <p className={`mono ${s.voters}`}>
+          {REACTIONS.filter(([v]) => who[v].length).map(([v, , tag], i) => (
+            <span key={v}>
+              {i ? ' · ' : ''}{tag}:{' '}
+              {who[v].map((uid, j) => <span key={uid}>{j ? ', ' : ''}<abbr title={name(uid)}>{initials(name(uid))}</abbr></span>)}
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Pílula "NO ROTEIRO · dia" quando a inspiração já virou atividade; senão, botão para levar. */
+function InRoute({ entry }: { entry: JournalEntry }) {
+  const { bundle: b, base, canEdit } = useBundle();
+  const [open, setOpen] = useState(false);
+  const act = b.activities.find((a) => a.from_entry_id === entry.id);
+  if (act) {
+    return (
+      <Link className={`pill ${s.inRoute}`} data-tone="acc2" href={`${base}/roteiro?parada=${act.stop_id}`}>
+        NO ROTEIRO · {dayMonth(act.day).toUpperCase()}
+      </Link>
+    );
+  }
+  if (!canEdit || !b.stops.length) return null;
+  return (
+    <>
+      <button type="button" className="btn btn-sm tap" onClick={() => setOpen(true)}><Icon name="plus" size={16} />Levar pro roteiro</button>
+      {open ? <PromoteDialog entry={entry} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+function PromoteDialog({ entry, onClose }: { entry: JournalEntry; onClose: () => void }) {
+  const { bundle: b, source, reload } = useBundle();
+  const { run, busy } = useAction();
+  const stops = sortedStops(b);
+  // Padrão: primeiro dia da parada sem atividade; senão, o primeiro.
+  const defaultDay = (st: Stop) => {
+    const days = dateRange(st.arrival_date, st.departure_date);
+    return days.find((d) => !b.activities.some((a) => a.stop_id === st.id && a.day === d)) ?? days[0];
+  };
+  const first = stops.find((x) => x.id === entry.stop_id) ?? stops[0];
+  const [v, setV] = useState({ stop_id: first.id, day: defaultDay(first), time: '' });
+  const stop = stops.find((x) => x.id === v.stop_id) ?? first;
+  const save = async () => {
+    const ok = await run(async () => {
+      await source.rpc('promote_inspiration', { p_entry: entry.id, p_stop: stop.id, p_day: v.day, p_time: v.time || null });
+      if (source.kind === 'supabase') track('inspiration.promoted', {}, b.trip.id);
+      await reload();
+      return true;
+    }, { success: `Foi pro roteiro de ${stop.name}.` });
+    if (ok) onClose();
+  };
+  return (
+    <Dialog open onClose={onClose} title="Levar pro roteiro" footer={<>
+      <button className="btn tap" onClick={onClose}>Cancelar</button>
+      <button className="btn btn-primary tap" disabled={busy || !v.day} onClick={() => void save()}>{busy ? 'Salvando…' : 'Levar pro roteiro'}</button>
+    </>}>
+      <p style={{ margin: 0 }}><b>{entryTitle(entry)}</b> vira uma atividade no plano da parada. Dá pra editar ou excluir depois no Roteiro.</p>
+      <label className="field">Parada
+        <select value={v.stop_id} onChange={(e) => { const st = stops.find((x) => x.id === e.target.value)!; setV({ ...v, stop_id: st.id, day: defaultDay(st) }); }}>
+          {stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+      </label>
+      <div className="grid2">
+        <label className="field">Dia
+          <select value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })}>
+            {dateRange(stop.arrival_date, stop.departure_date).map((d) => <option key={d} value={d}>{dayMonth(d)}</option>)}
+          </select>
+        </label>
+        <label className="field">Horário (opcional)<input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /></label>
+      </div>
+    </Dialog>
   );
 }
 

@@ -1,8 +1,8 @@
 // Converte os dados FICTÍCIOS do protótipo em TripBundle, para a área de demonstração/QA.
 // Nada daqui é gravado no banco nem misturado com viagens reais.
 import type {
-  Activity, BudgetCategory, DocCategory, DocumentRow, Expense, ExpenseShare, Member, PackingCategory,
-  PackingItem, Profile, Stay, Stop, Task, Transport, TransportMode, Trip, TripBundle,
+  Activity, BudgetCategory, DocCategory, DocumentRow, Expense, ExpenseShare, InspirationValue, InspirationVote, JournalEntry, Member,
+  PackingCategory, PackingItem, Poll, PollOption, PollVote, Profile, Stay, Stop, Task, Transport, TransportMode, Trip, TripBundle,
 } from '../../data/types';
 import { DICTIONARY } from '../identity/dictionary';
 import { splitEqual } from '../money';
@@ -39,6 +39,41 @@ function parseSpan(span: string, year: number): [string, string] {
   const p = (n: number) => String(n).padStart(2, '0');
   return [`${year}-${p(mo1)}-${p(+m[1])}`, `${year}-${p(mo2)}-${p(+m[3])}`];
 }
+
+// Inspirações de exemplo (Diário · Antes). votes[i] é a reação da pessoa i da turma (0 = você).
+const INSPIRATIONS: Partial<Record<DemoKey, { stop: number; title: string; place: string | null; body: string; author: number; votes: (InspirationValue | null)[] }[]>> = {
+  andes: [
+    { stop: 1, title: 'Mercado de San Pedro', place: 'San Pedro, Cusco', body: 'Almoçar no balcão das sopas e provar suco de lúcuma.', author: 1, votes: [null, 2, 1] },
+    { stop: 5, title: 'Salar ao amanhecer', place: null, body: 'Sair de madrugada pra ver o sol nascer no espelho d’água.', author: 2, votes: [null, 2, -1] },
+    { stop: 1, title: 'Montanha Colorida', place: 'Vinicunca', body: 'Trilha de um dia saindo de Cusco. Passa dos 5.000 m: só depois de aclimatar.', author: 1, votes: [] },
+  ],
+};
+
+// Enquetes de exemplo. votes[i] = índices das opções que a pessoa i marcou (0 = você).
+interface DemoPoll {
+  stop: number; target: Poll['target']; question: string; detail: string | null; closes_at: string | null; author: number;
+  options: { label: string; detail?: string; price?: number; currency?: string; address?: string }[];
+  votes: number[][]; decided?: { option: number; dayOffset: number };
+}
+const POLLS: Partial<Record<DemoKey, DemoPoll[]>> = {
+  andes: [
+    {
+      stop: 2, target: 'stay', question: 'Onde dormir em Aguas Calientes?', detail: 'A pousada atual ainda não foi reservada. Quem decidir, reserva.',
+      closes_at: '2027-01-10T23:59:00-03:00', author: 1,
+      options: [
+        { label: 'Hostel Pirwa', detail: 'R$ 140 / noite, quarto de 4', price: 140, currency: 'BRL', address: 'Av. Pachacútec, Aguas Calientes' },
+        { label: 'Pousada Inti Wasi', detail: 'R$ 240 / noite, café incluso', price: 240, currency: 'BRL', address: 'Calle Imperio de los Incas' },
+        { label: 'Casa de família', detail: 'Indicação da Bia, pagamento em dinheiro' },
+      ],
+      votes: [[], [0], [1]],
+    },
+    {
+      stop: 4, target: 'activity', question: 'Qual passeio em La Paz?', detail: null, closes_at: null, author: 0,
+      options: [{ label: 'Teleférico ao pôr do sol', detail: 'Linha vermelha até El Alto' }, { label: 'Vale da Lua' }],
+      votes: [[0], [0], [1]], decided: { option: 0, dayOffset: 1 },
+    },
+  ],
+};
 
 const MODE: Record<string, TransportMode> = { VOO: 'plane', 'AVIÃO': 'plane', TREM: 'train', 'TREM-BALA': 'train', 'ÔNIBUS': 'bus', CARRO: 'car', BARCO: 'boat' };
 const CAT: Record<string, DocCategory> = { Passagens: 'passagem', Identidade: 'identidade', Reservas: 'reserva', Ingressos: 'ingresso', Seguro: 'seguro', Outros: 'outro' };
@@ -85,14 +120,14 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
     });
     stays.push({
       ...base, id: id(key, 'stay', i), trip_id: tripId, stop_id: sid, name: s.stay, address: null, checkin_date: a, checkin_time: null,
-      checkout_date: b, checkout_time: null, status: s.stayStatus === 'Sem reserva' ? 'pending' : 'booked', notes: null, document_id: null, suggested_by: null,
+      checkout_date: b, checkout_time: null, status: s.stayStatus === 'Sem reserva' ? 'pending' : 'booked', notes: null, document_id: null, suggested_by: null, from_poll_id: null,
     });
     s.plan.forEach((p, j) => {
       const m = p.match(/^(\d{1,2})\s+[A-ZÁ]{3}\s+·\s+(.*)$/);
       activities.push({
         ...base, id: id(key, 'act', `${i}${j}`), trip_id: tripId, stop_id: sid,
         day: m ? `${a.slice(0, 8)}${m[1].padStart(2, '0')}` : addDays(a, Math.min(j, Math.max(0, s.n - 1))),
-        time: null, title: m ? m[2] : p, notes: null, position: j, suggested_by: null,
+        time: null, title: m ? m[2] : p, notes: null, position: j, suggested_by: null, from_entry_id: null, from_poll_id: null,
       });
     });
   });
@@ -139,9 +174,53 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
     status: 'todo', created_by: DEMO_USER, link: LINK[r[0] as keyof typeof LINK] ?? 'roteiro', source: r[4] ? 'ai' : 'user', alert_key: null, dismissed: false,
   }));
 
+  const journalEntries: JournalEntry[] = [];
+  const inspirationVotes: InspirationVote[] = [];
+  (INSPIRATIONS[key] ?? []).forEach((ins, i) => {
+    const eid = id(key, 'insp', i);
+    const author = people[ins.author] ?? people[0];
+    journalEntries.push({
+      ...base, id: eid, trip_id: tripId, stop_id: stops[ins.stop]?.id ?? null, author_id: author.uid, phase: 'antes', entry_date: null,
+      title: ins.title, body: ins.body, link_url: null, favorite: false, kind: 'inspiracao', place_name: ins.place,
+    });
+    ins.votes.forEach((value, j) => {
+      if (value != null && people[j]) inspirationVotes.push({ entry_id: eid, trip_id: tripId, user_id: people[j].uid, value, updated_at: now });
+    });
+  });
+
+  const polls: Poll[] = [];
+  const pollOptions: PollOption[] = [];
+  const pollVotes: PollVote[] = [];
+  (POLLS[key] ?? []).forEach((dp, i) => {
+    const pid = id(key, 'poll', i);
+    const st = stops[dp.stop];
+    const author = (people[dp.author] ?? people[0]).uid;
+    const optIds = dp.options.map((_, j) => id(key, 'popt', `${i}${j}`));
+    dp.options.forEach((o, j) => pollOptions.push({
+      id: optIds[j], poll_id: pid, trip_id: tripId, label: o.label, detail: o.detail ?? null, link_url: null, price: o.price ?? null,
+      currency: o.currency ?? null, address: o.address ?? null, position: j, created_by: author, created_at: now,
+    }));
+    dp.votes.forEach((marks, u) => {
+      if (people[u]) for (const j of marks) pollVotes.push({ poll_id: pid, option_id: optIds[j], trip_id: tripId, user_id: people[u].uid, created_at: now });
+    });
+    polls.push({
+      ...base, id: pid, trip_id: tripId, question: dp.question, detail: dp.detail, target: dp.target, stop_id: st?.id ?? null, multi: false,
+      closes_at: dp.closes_at, status: dp.decided ? 'closed' : 'open', decided_option_id: dp.decided ? optIds[dp.decided.option] : null,
+      decided_by: dp.decided ? DEMO_USER : null, decided_at: dp.decided ? now : null, created_by: author,
+    });
+    if (dp.decided && st && dp.target === 'activity') {
+      const day = addDays(st.arrival_date, dp.decided.dayOffset);
+      const o = dp.options[dp.decided.option];
+      activities.push({
+        ...base, id: id(key, 'pact', i), trip_id: tripId, stop_id: st.id, day, time: null, title: o.label, notes: o.detail ?? null,
+        position: activities.filter((a) => a.stop_id === st.id && a.day === day).length, suggested_by: null, from_entry_id: null, from_poll_id: pid,
+      });
+    }
+  });
+
   return {
     trip, members, profiles, stops, transports, stays, activities, documents, documentShares: [], documentKeys: [], publicKeys: [], packingCategories, packingItems,
-    tasks, budgetCategories, expenses, expenseShares, settlements: [], poolContributions: [], journalEntries: [], journalPhotos: [], offlinePrefs: [], retro: null,
+    tasks, budgetCategories, expenses, expenseShares, settlements: [], poolContributions: [], journalEntries, journalPhotos: [], inspirationVotes, polls, pollOptions, pollVotes, offlinePrefs: [], retro: null,
     fetchedAt: now,
   };
 }

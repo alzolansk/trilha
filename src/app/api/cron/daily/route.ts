@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import webpush from 'web-push';
+import { pollPushes } from '@/lib/polls';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { daysBetween, todayIn } from '@/lib/time';
 
@@ -23,13 +24,26 @@ export async function GET(req: NextRequest) {
   const userIds = prefs.map((p) => p.user_id);
   const [{ data: subs }, { data: members }] = await Promise.all([
     admin.from('push_subscriptions').select('id,user_id,endpoint,p256dh,auth').in('user_id', userIds),
-    admin.from('trip_members').select('user_id, trip_id, trips(id,title,start_date,end_date,departure_tz)').in('user_id', userIds),
+    admin.from('trip_members').select('user_id, trip_id, role, trips(id,title,start_date,end_date,departure_tz)').in('user_id', userIds),
   ]);
   const tripIds = Array.from(new Set((members ?? []).map((m) => m.trip_id)));
-  const [{ data: tasks }, { data: stops }] = await Promise.all([
+  const wantsPolls = prefs.some((p) => p.poll_reminders !== false);
+  const [{ data: tasks }, { data: stops }, { data: polls }] = await Promise.all([
     admin.from('tasks').select('trip_id,title,assignee_id,due_date,status,dismissed').in('trip_id', tripIds).neq('status', 'done'),
     admin.from('stops').select('trip_id,name,arrival_date,lat,lng').in('trip_id', tripIds),
+    wantsPolls
+      ? admin.from('polls').select('id,trip_id,question,closes_at,status,created_by').in('trip_id', tripIds).eq('status', 'open').not('closes_at', 'is', null)
+      : Promise.resolve({ data: [] as { id: string; trip_id: string; question: string; closes_at: string | null; status: 'open' | 'closed'; created_by: string }[] }),
   ]);
+  const pollIds = (polls ?? []).map((p) => p.id);
+  const [{ data: pollOptions }, { data: pollVotes }] = pollIds.length
+    ? await Promise.all([
+        admin.from('poll_options').select('poll_id').in('poll_id', pollIds),
+        admin.from('poll_votes').select('poll_id,user_id').in('poll_id', pollIds),
+      ])
+    : [{ data: [] as { poll_id: string }[] }, { data: [] as { poll_id: string; user_id: string }[] }];
+  const pollsWithOptions = new Set((pollOptions ?? []).map((o) => o.poll_id));
+  const nowMs = Date.now();
 
   const weatherCache = new Map<string, string | null>();
   async function weather(lat: number, lng: number, date: string) {
@@ -61,6 +75,9 @@ export async function GET(req: NextRequest) {
       if (p.task_reminders) {
         const due = (tasks ?? []).filter((x) => x.trip_id === t.id && !x.dismissed && x.due_date && (x.assignee_id === p.user_id || !x.assignee_id) && daysBetween(today, x.due_date) >= 0 && daysBetween(today, x.due_date) <= 1);
         if (due.length) msgs.push({ title: `${t.title}: pendências`, body: due.map((x) => x.title).slice(0, 3).join(' · '), url: `/t/${t.id}/mala`, tag: `tasks-${t.id}` });
+      }
+      if (p.poll_reminders !== false) {
+        msgs.push(...pollPushes(t, polls ?? [], pollVotes ?? [], pollsWithOptions, { user_id: p.user_id, role: m.role }, nowMs));
       }
       if (p.weather) {
         for (const s of (stops ?? []).filter((x) => x.trip_id === t.id && x.lat != null && daysBetween(today, x.arrival_date) === 3)) {

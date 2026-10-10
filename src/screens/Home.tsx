@@ -14,6 +14,7 @@ import { landscapeInner } from '../lib/identity/render';
 import { clamp01, clipFor, easeOutCubic, pathFractions, routePoints, smoothPath } from '../lib/identity/shapes';
 import { colorCycle } from '../lib/identity/theme';
 import { compressImage } from '../lib/image';
+import { canDecide, myPendingVotes, pollState, votersCount } from '../lib/polls';
 import { ruleAlerts, ruleTip } from '../lib/rules';
 import { countdown } from '../lib/time';
 import s from './home.module.css';
@@ -67,7 +68,7 @@ function useCover() {
 }
 
 export default function Home() {
-  const { bundle: b, identity, base, canEdit, source, reload } = useBundle();
+  const { bundle: b, identity, base, canEdit, source, reload, me } = useBundle();
   const reduced = useReducedMotion();
   const toast = useToast();
   const { run } = useAction();
@@ -113,6 +114,14 @@ export default function Home() {
 
   const rows = useMemo(() => {
     const out: { key: string; title: string; detail: string; href: string; cta: string; by: 'ai' | 'rules' | null }[] = [];
+    // Votação: por pessoa e derivado do que já está no pacote (não vira tarefa no banco).
+    for (const p of myPendingVotes(b, me)) {
+      const { voted, total } = votersCount(b, p.id);
+      out.push({ key: `vote-${p.id}`, title: `Falta seu voto: ${p.question}`, detail: `${voted} de ${total} já votaram.`, href: `${base}/turma#decisoes`, cta: 'Votar', by: null });
+    }
+    for (const p of (b.polls ?? []).filter((x) => pollState(b, x.id) === 'awaiting_decision' && canDecide(b, x, me))) {
+      out.push({ key: `decide-${p.id}`, title: `Hora de decidir: ${p.question}`, detail: 'O prazo da votação acabou.', href: `${base}/turma#decisoes`, cta: 'Decidir', by: null });
+    }
     for (const t of b.tasks.filter((x) => x.status !== 'done' && !x.dismissed).sort((a, c) => (a.due_date ?? '9').localeCompare(c.due_date ?? '9'))) {
       out.push({ key: t.id, title: t.title, detail: t.detail ?? (t.due_date ? `Prazo ${t.due_date.split('-').reverse().slice(0, 2).join('/')}` : ''), href: `${base}/${t.link === 'turma' ? 'turma' : t.link}`, cta: 'Abrir', by: t.source === 'user' ? null : t.source });
     }
@@ -121,7 +130,7 @@ export default function Home() {
       out.push({ key: a.key, title: a.title, detail: a.detail, href: `${base}/${a.link}`, cta: a.cta, by: 'rules' });
     }
     return out.slice(0, 5);
-  }, [b, base]);
+  }, [b, base, me]);
 
   // Countdown: texto atualiza a cada 1s; leitores de tela recebem uma frase estável.
   useEffect(() => {

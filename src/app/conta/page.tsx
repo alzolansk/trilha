@@ -16,7 +16,15 @@ interface Prefs {
   task_reminders: boolean;
   departure_reminders: boolean;
   weather: boolean;
+  poll_reminders: boolean;
 }
+
+const PREF_LABEL: Record<Exclude<keyof Prefs, 'push_enabled'>, string> = {
+  task_reminders: 'Pendências com prazo chegando',
+  departure_reminders: 'Contagem para o embarque (30, 7 e 1 dia)',
+  weather: 'Previsão do tempo das paradas (3 dias antes)',
+  poll_reminders: 'Lembretes de votação (prazo acabando sem seu voto; hora de decidir)',
+};
 
 function b64ToBytes(b64: string) {
   const pad = '='.repeat((4 - (b64.length % 4)) % 4);
@@ -32,7 +40,7 @@ export default function Conta() {
   const toast = useToast();
   const [name, setName] = useState('');
   const [pass, setPass] = useState('');
-  const [prefs, setPrefs] = useState<Prefs>({ push_enabled: false, task_reminders: true, departure_reminders: true, weather: true });
+  const [prefs, setPrefs] = useState<Prefs>({ push_enabled: false, task_reminders: true, departure_reminders: true, weather: true, poll_reminders: true });
   const [est, setEst] = useState<{ usage: number; quota: number; persisted: boolean } | null>(null);
   const pushSupported = typeof window !== 'undefined' && 'PushManager' in window && 'serviceWorker' in navigator && !!VAPID_PUBLIC_KEY;
 
@@ -46,7 +54,7 @@ export default function Conta() {
     void storageEstimate().then(setEst);
     const sb = getSupabase();
     if (!sb || !user) return;
-    sb.from('notification_prefs').select('*').eq('user_id', user.id).maybeSingle().then(({ data }) => data && setPrefs(data as Prefs));
+    sb.from('notification_prefs').select('*').eq('user_id', user.id).maybeSingle().then(({ data }) => data && setPrefs((cur) => ({ ...cur, ...(data as Partial<Prefs>) })));
   }, [user]);
 
   if (!user) return null;
@@ -130,9 +138,9 @@ export default function Conta() {
           ) : (
             <p className="muted" style={{ margin: 0 }}>{VAPID_PUBLIC_KEY ? 'Este navegador não suporta notificações push (no iPhone, instale o app na tela inicial primeiro).' : 'Notificações ainda não configuradas no servidor (chaves VAPID, veja o README).'}</p>
           )}
-          {(['task_reminders', 'departure_reminders', 'weather'] as const).map((k) => (
+          {(['task_reminders', 'departure_reminders', 'weather', 'poll_reminders'] as const).map((k) => (
             <label key={k} className="check"><input type="checkbox" checked={prefs[k]} disabled={busy} onChange={(e) => void savePrefs({ ...prefs, [k]: e.target.checked })} /><span className="box" aria-hidden="true" />
-              <span>{k === 'task_reminders' ? 'Pendências com prazo chegando' : k === 'departure_reminders' ? 'Contagem para o embarque (30, 7 e 1 dia)' : 'Previsão do tempo das paradas (3 dias antes)'}</span></label>
+              <span>{PREF_LABEL[k]}</span></label>
           ))}
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>Enviadas uma vez por dia (limite do plano gratuito de hospedagem).</p>
         </section>

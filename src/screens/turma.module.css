@@ -1,0 +1,26 @@
+.decisions { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 110px; }
+.head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.poll { padding: 22px; border-radius: 26px; display: flex; flex-direction: column; gap: 14px; }
+.question { margin: 0; font-size: clamp(22px, 2.6vw, 26px); line-height: 1.1; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12px; }
+.options { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.option { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 12px; border-radius: 18px; background: var(--bg); border: 1px solid var(--line); }
+.option[data-win=true] { border: 2px solid var(--ink); }
+.pick :global(.lbl) { font-weight: 600; overflow-wrap: anywhere; }
+.pick input:checked ~ :global(.lbl) { text-decoration: none; opacity: 1; }
+.optText { margin: 0; font-size: 14px; color: var(--mute); overflow-wrap: anywhere; }
+.optRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 14px; }
+.optRow a { overflow-wrap: anywhere; min-height: 44px; display: inline-flex; align-items: center; }
+.bar { position: relative; height: 10px; border-radius: 999px; background: var(--soft, var(--line)); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; border-right: 2px solid var(--ink); }
+.bar i[data-zero=true] { border-right: 0; }
+.voters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 24px; }
+.voters :global(.av) { width: 24px; height: 24px; font-size: 9px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.closed summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+.closed summary:focus-visible { outline: 2.5px solid var(--acc); outline-offset: 3px; border-radius: 8px; }
+.closedList { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; }
+.optEdit { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); }
+.types { display: flex; flex-wrap: wrap; gap: 6px; }
+.warn { margin: 0; font-size: 14px; border-left: 3px solid var(--acc); padding-left: 10px; }
+.optEdit > :global(.err) { font-weight: 500; color: var(--ink); border-left: 3px solid var(--acc); padding-left: 8px; }

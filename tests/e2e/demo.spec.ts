@@ -116,3 +116,95 @@ test.describe('sem rolagem horizontal', () => {
     });
   }
 });
+
+test.describe('votação da turma', () => {
+  test('reagir a uma inspiração muda a contagem', async ({ page }) => {
+    await page.goto('/demo/andes/diario?momento=antes');
+    await page.getByRole('button', { name: 'Abrir inspirações de Cusco' }).click();
+    const muito = page.getByRole('dialog').getByRole('button', { name: /^Quero muito, 1 pessoa$/ });
+    await expect(muito).toHaveAttribute('aria-pressed', 'false');
+    await muito.click();
+    const after = page.getByRole('dialog').getByRole('button', { name: /^Quero muito, 2 pessoas$/ });
+    await expect(after).toHaveAttribute('aria-pressed', 'true');
+    await after.click();
+    await expect(page.getByRole('dialog').getByRole('button', { name: /^Quero muito, 1 pessoa$/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('levar inspiração ao roteiro cria a atividade na parada', async ({ page }) => {
+    await page.goto('/demo/andes/diario?momento=antes');
+    await page.getByRole('button', { name: 'Abrir inspirações de Cusco' }).click();
+    await page.getByRole('button', { name: 'Levar pro roteiro' }).first().click();
+    const dlg = page.getByRole('dialog', { name: 'Levar pro roteiro' });
+    await dlg.getByLabel('Dia').selectOption('2027-01-21');
+    await dlg.getByRole('button', { name: 'Levar pro roteiro' }).click();
+    await expect(page.getByText('Foi pro roteiro de Cusco.')).toBeVisible();
+    await page.getByRole('link', { name: 'NO ROTEIRO · 21 JAN' }).click();
+    await expect(page).toHaveURL(/roteiro\?parada=/);
+    const item = page.locator('li', { hasText: 'Mercado de San Pedro' }).filter({ hasText: 'DA INSPIRAÇÃO' });
+    await expect(item).toBeVisible();
+  });
+
+  test('votar na enquete da demo só com teclado', async ({ page }) => {
+    await page.goto('/demo/andes/turma');
+    const card = page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' }) });
+    await expect(card.getByText('2 de 3 votaram')).toBeVisible();
+    await card.getByRole('radio', { name: 'Hostel Pirwa' }).focus();
+    await page.keyboard.press('Space');
+    await expect(card.getByRole('radio', { name: 'Hostel Pirwa' })).toBeChecked();
+    await page.keyboard.press('ArrowDown');
+    await expect(card.getByRole('radio', { name: 'Pousada Inti Wasi' })).toBeChecked();
+    await page.keyboard.press('Tab');
+    await expect(card.getByRole('button', { name: 'Votar' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Voto registrado.')).toBeVisible();
+    await expect(card.getByText('3 de 3 votaram')).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Retirar voto' })).toBeVisible();
+  });
+
+  test('decidir a hospedagem vira "ESCOLHIDA NA VOTAÇÃO" no roteiro', async ({ page }) => {
+    await page.goto('/demo/andes/turma');
+    const card = page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' }) });
+    await card.getByRole('button', { name: 'Decidir' }).click();
+    const dlg = page.getByRole('dialog', { name: 'Decidir' });
+    await expect(dlg.getByText('Empate entre Hostel Pirwa e Pousada Inti Wasi. Você desempata.')).toBeVisible();
+    await dlg.locator('label', { hasText: 'Casa de família' }).click();
+    await expect(dlg.getByRole('radio', { name: 'Casa de família' })).toBeChecked();
+    await expect(dlg.getByText('Essa não foi a mais votada.')).toBeVisible();
+    await dlg.locator('label', { hasText: 'Hostel Pirwa' }).click();
+    await dlg.getByRole('button', { name: 'Confirmar decisão' }).click();
+    await expect(page.getByText('Decidido. Hostel Pirwa virou a hospedagem de Machu Picchu.')).toBeVisible();
+    await page.getByText(/^Encerradas \(2\)$/).click();
+    await page.getByRole('link', { name: 'Ver hospedagem no roteiro' }).click();
+    await expect(page).toHaveURL(/roteiro\?parada=/);
+    await expect(page.getByText('ESCOLHIDA NA VOTAÇÃO')).toBeVisible();
+    await expect(page.getByText('Hostel Pirwa', { exact: true })).toBeVisible();
+  });
+
+  test('Turma sem rolagem horizontal com encerradas abertas', async ({ page }) => {
+    for (const w of WIDTHS) {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.goto('/demo/andes/turma');
+      await page.getByText(/^Encerradas \(1\)$/).click();
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(over, `turma @${w}`).toBeLessThanOrEqual(0);
+    }
+  });
+});
+
+test.describe('lembretes de votação', () => {
+  test('Início mostra "Falta seu voto" só enquanto não votei', async ({ page }) => {
+    await page.goto('/demo/andes');
+    const pend = page.getByRole('region', { name: 'Antes de embarcar' });
+    const row = pend.getByText('Falta seu voto: Onde dormir em Aguas Calientes?');
+    await expect(row).toBeAttached();
+    await pend.locator('li', { hasText: 'Falta seu voto' }).getByRole('link', { name: /Votar/ }).click();
+    await expect(page).toHaveURL(/turma#decisoes/);
+    const card = page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' }) });
+    await card.locator('label', { hasText: 'Pousada Inti Wasi' }).click();
+    await card.getByRole('button', { name: 'Votar' }).click();
+    await expect(page.getByText('Voto registrado.')).toBeVisible();
+    await page.getByRole('link', { name: 'Início' }).first().click();
+    await expect(pend.getByText('Pousada em Aguas Calientes sem reserva')).toBeAttached();
+    await expect(pend.getByText(/Falta seu voto/)).toHaveCount(0);
+  });
+});

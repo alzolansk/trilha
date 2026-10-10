@@ -35,6 +35,7 @@ img { max-width: 100%; }
 .wrap { position: relative; z-index: 1; max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 110px; }
 .motif { clip-path: var(--motif); display: inline-block; }
 .muted { color: var(--mute); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .skip { position: absolute; left: 12px; top: -60px; z-index: 100; padding: 10px 14px; border-radius: 12px; background: var(--ink); color: var(--bg); }
 .skip:focus { top: 12px; }
 
