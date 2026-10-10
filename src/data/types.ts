@@ -129,6 +129,8 @@ export interface Stay extends Versioned {
   notes: string | null;
   document_id: string | null;
   suggested_by: Provenance | null;
+  /** enquete cuja decisão criou/atualizou esta hospedagem */
+  from_poll_id: string | null;
 }
 
 export interface Activity extends Versioned {
@@ -140,6 +142,10 @@ export interface Activity extends Versioned {
   notes: string | null;
   position: number;
   suggested_by: Provenance | null;
+  /** inspiração do Diário que virou esta atividade */
+  from_entry_id: string | null;
+  /** enquete cuja decisão criou esta atividade */
+  from_poll_id: string | null;
 }
 
 export interface DocumentRow extends Versioned {
@@ -293,6 +299,22 @@ export interface JournalEntry extends Versioned {
   place_name: string | null;
 }
 
+/** Reação a uma inspiração: 2 = quero muito · 1 = topo · -1 = passo */
+export type InspirationValue = -1 | 1 | 2;
+export interface InspirationVote { entry_id: string; trip_id: string; user_id: string; value: InspirationValue; updated_at: string }
+export type PollTarget = 'stay' | 'activity' | 'free';
+export interface Poll extends Versioned {
+  trip_id: string; question: string; detail: string | null; target: PollTarget; stop_id: string | null;
+  multi: boolean; closes_at: string | null; status: 'open' | 'closed';
+  decided_option_id: string | null; decided_by: string | null; decided_at: string | null; created_by: string;
+}
+export interface PollOption {
+  id: string; poll_id: string; trip_id: string; label: string; detail: string | null; link_url: string | null;
+  price: string | number | null; currency: string | null; address: string | null; position: number;
+  created_by: string; created_at: string;
+}
+export interface PollVote { poll_id: string; option_id: string; trip_id: string; user_id: string; created_at: string }
+
 export interface TripRetro {
   trip_id: string;
   content: RetroContent;
@@ -348,6 +370,10 @@ export interface TripBundle {
   poolContributions: PoolContribution[];
   journalEntries: JournalEntry[];
   journalPhotos: JournalPhoto[];
+  inspirationVotes: InspirationVote[];
+  polls: Poll[];
+  pollOptions: PollOption[];
+  pollVotes: PollVote[];
   offlinePrefs: OfflinePref[];
   retro: TripRetro | null;
   /** quando este pacote foi obtido do servidor (ISO) */
@@ -359,7 +385,8 @@ export type TableName =
   | 'activities' | 'documents' | 'document_shares' | 'packing_categories' | 'packing_items'
   | 'tasks' | 'budget_categories' | 'expenses' | 'expense_shares' | 'settlements'
   | 'journal_entries' | 'journal_photos' | 'document_offline_prefs' | 'trip_retros'
-  | 'notification_prefs' | 'push_subscriptions' | 'analytics_events' | 'document_keys' | 'user_keys' | 'pool_contributions';
+  | 'notification_prefs' | 'push_subscriptions' | 'analytics_events' | 'document_keys' | 'user_keys' | 'pool_contributions'
+  | 'inspiration_votes' | 'polls' | 'poll_options' | 'poll_votes';
 
 export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   trip_members: 'members',
@@ -381,6 +408,10 @@ export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   pool_contributions: 'poolContributions',
   journal_entries: 'journalEntries',
   journal_photos: 'journalPhotos',
+  inspiration_votes: 'inspirationVotes',
+  polls: 'polls',
+  poll_options: 'pollOptions',
+  poll_votes: 'pollVotes',
   document_offline_prefs: 'offlinePrefs',
 };
 

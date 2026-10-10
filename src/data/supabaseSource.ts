@@ -20,12 +20,17 @@ const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, 
   { table: 'pool_contributions', key: 'poolContributions', order: [['contributed_on', false], ['created_at', false]] },
   { table: 'journal_entries', key: 'journalEntries', order: [['entry_date', true], ['created_at', true]] },
   { table: 'journal_photos', key: 'journalPhotos', order: [['position', true]] },
+  { table: 'inspiration_votes', key: 'inspirationVotes' },
+  { table: 'polls', key: 'polls', order: [['created_at', false]] },
+  { table: 'poll_options', key: 'pollOptions', order: [['position', true]] },
+  { table: 'poll_votes', key: 'pollVotes' },
 ];
 
 const REALTIME_TABLES = [
   'trip_members', 'stops', 'transports', 'stays', 'activities', 'documents',
   'packing_categories', 'packing_items', 'tasks', 'budget_categories', 'expenses', 'expense_shares',
   'settlements', 'pool_contributions', 'journal_entries', 'journal_photos', 'trip_retros',
+  'inspiration_votes', 'polls', 'poll_options', 'poll_votes',
 ];
 
 function ensureOnline() {

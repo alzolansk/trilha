@@ -48,10 +48,20 @@ export async function saveBundle(userId: string, bundle: TripBundle) {
 export async function getBundle(userId: string, tripId: string): Promise<TripBundle | null> {
   if (!offlineSupported()) return null;
   try {
-    return ((await (await open(userId)).get('bundles', tripId)) as TripBundle | undefined) ?? null;
+    const b = (await (await open(userId)).get('bundles', tripId)) as TripBundle | undefined;
+    return b ? upgradeBundle(b) : null;
   } catch {
     return null;
   }
+}
+
+/** Cópias salvas antes de uma tabela nova existir não têm a lista: trata como vazia. */
+function upgradeBundle(b: TripBundle): TripBundle {
+  b.inspirationVotes ??= [];
+  b.polls ??= [];
+  b.pollOptions ??= [];
+  b.pollVotes ??= [];
+  return b;
 }
 export async function deleteBundle(userId: string, tripId: string) {
   if (!offlineSupported()) return;

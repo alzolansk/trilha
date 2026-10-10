@@ -143,10 +143,10 @@ export function useReveal(deps: unknown[] = []) {
   }, deps);
 }
 
-export function MotifCheck({ checked, onChange, label, disabled, children }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; children?: React.ReactNode }) {
+export function MotifCheck({ checked, onChange, label, disabled, children, type = 'checkbox', name, className }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; children?: React.ReactNode; type?: 'checkbox' | 'radio'; name?: string; className?: string }) {
   return (
-    <label className="check">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    <label className={className ? `check ${className}` : 'check'}>
+      <input type={type} name={name} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="box" aria-hidden="true" />
       <span className="lbl" style={{ flex: 1 }}>{label}</span>
       {children}

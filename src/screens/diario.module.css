@@ -13,3 +13,12 @@
 .chapters li { display: flex; flex-direction: column; gap: 4px; padding-left: 16px; border-left: 3px solid var(--acc); }
 .chapters b { font-size: 24px; }
 @media (max-width: 820px) { .banner { padding: 26px 20px; } }
+.entryActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.entryActions:empty { display: none; }
+.reactions { display: flex; flex-direction: column; gap: 6px; }
+.reactBtns { display: flex; flex-wrap: wrap; gap: 6px; }
+.reactBtns .chip { padding: 0 14px; font-size: 14px; }
+.voters { margin: 0; font-size: 11px; letter-spacing: .06em; color: var(--mute); }
+.voters abbr { text-decoration: none; cursor: help; }
+.inRoute { min-height: 44px; padding: 0 14px; text-decoration: none; }
+.inRoute:focus-visible { outline: 2.5px solid var(--ink); outline-offset: 3px; }

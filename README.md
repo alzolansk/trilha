@@ -56,8 +56,9 @@ Nunca use o prefixo `NEXT_PUBLIC_` para segredos. A service-role/secret key não
 
 1. Crie um projeto (plano Free) em https://supabase.com.
 2. Aplique as migrations de `supabase/migrations/` **em ordem** (SQL Editor, `supabase db push` ou MCP):
-   `…0001_schema.sql` → `…0002_policies.sql` → `…0003_spec_v3.sql`.
-   Elas criam tabelas, RLS em todas as tabelas, RPCs de convite (`create_invite`, `preview_invite`, `accept_invite`), `save_expense`, buckets privados (`documents` 25 MB, `journal`, `covers`) e políticas de Storage.
+   `…0001_schema.sql` → `…0002_policies.sql` → `…0003_spec_v3.sql` → `…0004_hardening.sql` → `…0005_e2e_documents.sql` → `…0006_pool.sql` → `…0007_votes.sql`.
+   Elas criam tabelas, RLS em todas as tabelas, RPCs de convite (`create_invite`, `preview_invite`, `accept_invite`), `save_expense`, buckets privados (`documents` 25 MB, `journal`, `covers`) e políticas de Storage; depois restringem permissões (0004), cifram documentos ponta a ponta (0005), criam o caixa da turma (0006) e a votação da turma (0007: termômetro das inspirações, enquetes, `promote_inspiration`, `cast_vote` e `close_poll`; ver `ref/SPEC-votacao.md`).
+   **Aplique a migration antes de publicar o código que a usa:** o app lê as tabelas novas ao abrir a viagem (e a Conta lê `notification_prefs.poll_reminders`).
 3. **Authentication → Providers → Email:** para seus amigos entrarem sem SMTP próprio, **desligue "Confirm email"**. O SMTP embutido do Supabase só envia para membros da equipe do projeto e no máximo 2 e-mails/hora; link mágico e "esqueci a senha" só funcionam de verdade com um SMTP próprio (ex.: Brevo gratuito, 300/dia) em *Authentication → SMTP Settings*. Depois ligue `NEXT_PUBLIC_AUTH_MAGIC_LINK=1`.
 4. **Authentication → URL Configuration:**
    - Site URL: `https://SEU-APP.vercel.app`

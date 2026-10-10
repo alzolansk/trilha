@@ -270,6 +270,8 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
   const docs = docsOfStop(b, stop.id);
   const status = stayStatusLabel(b, stay);
   const acts = b.activities.filter((a) => a.stop_id === stop.id).sort((x, y) => x.day.localeCompare(y.day) || x.position - y.position);
+  // abertas ou aguardando decisão (prazo vencido não fecha sozinho)
+  const openPolls = (b.polls ?? []).filter((p) => p.stop_id === stop.id && p.status === 'open').length;
   const tip = stop.tip ?? (ruleTip(b, stop) ? { ...ruleTip(b, stop)!, by: 'rules' as const, source: undefined } : null);
   const [edit, setEdit] = useState<null | 'stop' | 'transport' | 'stay' | { act: Activity | null }>(null);
   const [notes, setNotes] = useState(stop.notes ?? '');
@@ -318,6 +320,11 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
           {stopMeta(stop) ? <span>{stopMeta(stop)}</span> : null}
           {stop.tz ? <span>FUSO {stop.tz}</span> : null}
         </div>
+        {openPolls ? (
+          <Link href={`${base}/turma#decisoes`} className="chip tap" style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, textDecoration: 'none' }}>
+            <Icon name="users" size={16} />{openPolls} {openPolls === 1 ? 'votação aberta' : 'votações abertas'}
+          </Link>
+        ) : null}
         {canEdit ? (
           <div style={{ position: 'relative', display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
             <button className="btn btn-sm tap" onClick={() => setEdit('stop')}><Icon name="edit" size={16} />Editar parada</button>
@@ -380,6 +387,7 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
             {stay ? <div style={{ fontSize: 14, color: 'var(--mute)', marginTop: 4 }}>{[stay.checkin_time ? `Check-in ${hhmm(stay.checkin_time)}` : null, stay.address].filter(Boolean).join(' · ')}</div> : null}
             <span className="pill" data-tone={status.tone} style={{ marginTop: 12 }}>{status.label.toUpperCase()}</span>
             {stay?.suggested_by ? <span className="tag" data-src={stay.suggested_by} style={{ marginLeft: 8 }}>{stay.suggested_by === 'ai' ? 'SUGESTÃO IA' : 'AUTO'}</span> : null}
+            {stay?.from_poll_id ? <div className="mono" style={{ marginTop: 8, fontSize: 11, letterSpacing: '.12em' }}>ESCOLHIDA NA VOTAÇÃO</div> : null}
             {canEdit ? <div style={{ marginTop: 12 }}><button className="btn btn-sm tap" onClick={() => setEdit('stay')}>{stay ? 'Editar' : 'Adicionar'}</button></div> : null}
           </div>
           <div className={`${s.box} lift`}>
@@ -409,6 +417,8 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
                   <span className="mono" style={{ fontSize: 12, minWidth: 56 }}>{dayWeekU(a.day)}{a.time ? ` ${hhmm(a.time)}` : ''}</span>
                   <span style={{ flex: 1 }}>{a.title}{a.notes ? <span style={{ display: 'block', fontSize: 13, color: 'var(--mute)' }}>{a.notes}</span> : null}</span>
                   {a.suggested_by ? <span className="tag" data-src={a.suggested_by}>{a.suggested_by === 'ai' ? 'IA' : 'AUTO'}</span> : null}
+                  {a.from_entry_id ? <span className="tag" data-src="rules">DA INSPIRAÇÃO</span> : null}
+                  {a.from_poll_id ? <span className="tag" data-src="rules">DA VOTAÇÃO</span> : null}
                   {canEdit ? <button className="btn btn-icon btn-sm tap" aria-label={`Editar ${a.title}`} onClick={() => setEdit({ act: a })}><Icon name="edit" size={16} /></button> : null}
                 </li>
               ))}
