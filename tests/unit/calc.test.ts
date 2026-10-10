@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { suggestFromText } from '@/lib/classify';
-import { balances, budgetByCategory, splitEqual, suggestTransfers, toCents } from '@/lib/money';
+import { balances, budgetByCategory, POOL, poolSummary, splitEqual, suggestTransfers, toCents } from '@/lib/money';
 import { addMonthsClamped, countdown, daysBetween, humanUntil, wallToInstant } from '@/lib/time';
 import type { Stop, Transport } from '@/data/types';
 
@@ -53,6 +53,36 @@ describe('dinheiro e rateio', () => {
     expect(tr).toEqual([{ from: 'le', to: 'vc', cents: 13000 }, { from: 'bi', to: 'vc', cents: 4000 }]);
     net = balances(exp, [{ from_user: 'le', to_user: 'vc', amount_cents: 13000 }], ['vc', 'bi', 'le']);
     expect(suggestTransfers(net)).toEqual([{ from: 'bi', to: 'vc', cents: 4000 }]);
+  });
+  it('caixa da turma: aportes, gastos pelo caixa e devolução da sobra', () => {
+    const people = ['vc', 'bi', 'le'];
+    const pool = [
+      { user_id: 'vc', kind: 'deposit' as const, amount_cents: 50000 },
+      { user_id: 'bi', kind: 'deposit' as const, amount_cents: 30000 },
+    ];
+    const exp = [
+      { payer_id: 'vc', paid_from_pool: true, base_amount: '600.00', shares: splitEqual(60000, people) },
+      { payer_id: 'le', base_amount: '30.00', shares: splitEqual(3000, people) },
+    ];
+    expect(poolSummary(exp, pool)).toMatchObject({ deposited: 80000, spent: 60000, refunded: 0, balance: 20000 });
+    const net = balances(exp, [], people, pool);
+    // vc: aportou 500, consumiu 200 + 10 · bi: 300 − 210 · le: pagou 30, consumiu 210 · caixa: sobra 200
+    expect(Object.fromEntries(net)).toEqual({ vc: 29000, bi: 9000, le: -18000, [POOL]: -20000 });
+    expect([...net.values()].reduce((a, b) => a + b, 0)).toBe(0);
+    expect(suggestTransfers(net)).toEqual([
+      { from: POOL, to: 'vc', cents: 20000 },
+      { from: 'le', to: 'vc', cents: 9000 },
+      { from: 'le', to: 'bi', cents: 9000 },
+    ]);
+    // devolução registrada zera o caixa
+    const after = balances(exp, [], people, [...pool, { user_id: 'vc', kind: 'refund', amount_cents: 20000 }]);
+    expect(after.get(POOL)).toBe(0);
+    expect(after.get('vc')).toBe(9000);
+  });
+  it('caixa que gastou mais do que recebeu pede aporte', () => {
+    const net = balances([{ payer_id: 'vc', paid_from_pool: true, base_amount: '100.00', shares: splitEqual(10000, ['vc', 'bi']) }], [], ['vc', 'bi'], [{ user_id: 'vc', kind: 'deposit', amount_cents: 6000 }]);
+    // caixa recebeu 60 e pagou 100: falta 40, e a Bi (que consumiu 50 sem aportar) cobre
+    expect(suggestTransfers(net)).toEqual([{ from: 'bi', to: POOL, cents: 4000 }, { from: 'bi', to: 'vc', cents: 1000 }]);
   });
   it('orçamento por categoria e desvio', () => {
     const r = budgetByCategory(

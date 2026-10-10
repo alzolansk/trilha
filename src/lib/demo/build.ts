@@ -105,7 +105,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
       ...base, id: id(key, 'doc', i), trip_id: tripId, owner_id: DEMO_USER, title: d.title, category: CAT[d.cat] ?? 'outro',
       visibility: 'trip', stop_id: stop?.id ?? null, storage_path: `demo/${key}/${i}`, preview_path: null, original_name: `${d.title}.${ext.toLowerCase()}`,
       mime: ext === 'PDF' ? 'application/pdf' : ext === 'PNG' ? 'image/png' : 'image/jpeg', size_bytes: Math.round(mb), valid_from: null,
-      valid_until: null, notes: null, status: 'ready', subtitle: d.sub, classified_by: 'user', ai_confidence: null, is_shot: false,
+      valid_until: null, notes: null, status: 'ready', subtitle: d.sub, classified_by: 'user', ai_confidence: null, is_shot: false, encrypted: false,
     };
   });
 
@@ -127,7 +127,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
     const payer = people[i % people.length].uid;
     expenses.push({
       ...base, id: eid, trip_id: tripId, description: `${raw.budget.cats[i][0]} (exemplo)`, category_id: budgetCategories[i].id,
-      stop_id: stops[i % stops.length]?.id ?? null, payer_id: payer, amount: spent, currency: 'BRL', rate_to_base: 1, rate_source: 'Mesma moeda',
+      stop_id: stops[i % stops.length]?.id ?? null, payer_id: payer, paid_from_pool: false, amount: spent, currency: 'BRL', rate_to_base: 1, rate_source: 'Mesma moeda',
       rate_date: raw.obDates[0], rate_is_manual: false, base_amount: spent, spent_on: raw.obDates[0], created_by: payer,
     });
     for (const sh of splitEqual(Math.round(spent * 100), people.map((p) => p.uid))) expenseShares.push({ expense_id: eid, trip_id: tripId, ...sh });
@@ -140,8 +140,8 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
   }));
 
   return {
-    trip, members, profiles, stops, transports, stays, activities, documents, documentShares: [], packingCategories, packingItems,
-    tasks, budgetCategories, expenses, expenseShares, settlements: [], journalEntries: [], journalPhotos: [], offlinePrefs: [], retro: null,
+    trip, members, profiles, stops, transports, stays, activities, documents, documentShares: [], documentKeys: [], publicKeys: [], packingCategories, packingItems,
+    tasks, budgetCategories, expenses, expenseShares, settlements: [], poolContributions: [], journalEntries: [], journalPhotos: [], offlinePrefs: [], retro: null,
     fetchedAt: now,
   };
 }

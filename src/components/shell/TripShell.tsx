@@ -4,7 +4,9 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../data/AuthContext';
 import { useTrip } from '../../data/TripContext';
+import { grantMissingKeys } from '../../data/docKeys';
 import { syncOffline } from '../../data/offlineSync';
+import { useVault } from '../../data/VaultContext';
 import { track } from '../../lib/analytics';
 import { DEMO_KEYS } from '../../lib/demo/build';
 import { DICTIONARY } from '../../lib/identity/dictionary';
@@ -103,7 +105,8 @@ function IdentityMenu() {
 
 export function TripShell({ children }: { children: React.ReactNode }) {
   const { base, bundle, identity, loading, error, reload, stale, source } = useTrip();
-  const { online } = useAuth();
+  const { online, user } = useAuth();
+  const vault = useVault();
   const path = usePathname();
   const rel = path.slice(base.length) || '';
   const isHome = rel === '' || rel === '/';
@@ -122,6 +125,12 @@ export function TripShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (bundle && source.kind === 'supabase' && online) syncOffline(source, bundle);
   }, [bundle, source, online]);
+
+  // Libera chaves de documentos cifrados para quem da turma ainda não tem.
+  useEffect(() => {
+    if (!bundle || !user || source.kind !== 'supabase' || !online || vault.status !== 'unlocked') return;
+    void grantMissingKeys(source, bundle, user.id, vault.docKey).then((n) => (n ? reload() : undefined));
+  }, [bundle, source, online, user, vault.status, vault.docKey, reload]);
 
   useEffect(() => {
     document.body.dataset.route = isHome ? 'inicio' : rel.split('/')[1] ?? '';

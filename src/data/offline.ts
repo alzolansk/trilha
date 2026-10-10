@@ -79,6 +79,32 @@ export async function getTripList(userId: string): Promise<TripSummary[] | null>
   }
 }
 
+/** Chave privada desbloqueada neste aparelho (CryptoKey não exportável) e o cofre cifrado, para abrir offline. */
+export interface DeviceVault {
+  privateKey: CryptoKey | null;
+  record: import('../lib/crypto/e2e').VaultRecord;
+}
+export async function saveDeviceVault(userId: string, v: DeviceVault) {
+  if (!offlineSupported()) return;
+  try {
+    await (await open(userId)).put('kv', v, 'vault');
+  } catch {
+    /* sem IndexedDB: desbloqueio vale só nesta aba */
+  }
+}
+export async function getDeviceVault(userId: string): Promise<DeviceVault | null> {
+  if (!offlineSupported()) return null;
+  try {
+    return ((await (await open(userId)).get('kv', 'vault')) as DeviceVault | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+export async function deleteDeviceVault(userId: string) {
+  if (!offlineSupported()) return;
+  await (await open(userId)).delete('kv', 'vault').catch(() => undefined);
+}
+
 export class QuotaError extends Error {
   constructor() {
     super('Sem espaço no aparelho para guardar este arquivo offline. Libere espaço ou remova outras cópias.');

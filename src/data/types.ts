@@ -162,6 +162,20 @@ export interface DocumentRow extends Versioned {
   classified_by: 'user' | 'ai' | 'rules' | null;
   ai_confidence: number | null;
   is_shot: boolean;
+  /** arquivo e prévia cifrados no navegador (AES-256-GCM); falso só em documentos antigos */
+  encrypted: boolean;
+}
+
+/** Chave AES do documento embrulhada para uma pessoa (ver lib/crypto/e2e). */
+export interface DocumentKey {
+  document_id: string;
+  user_id: string;
+  wrapped_key: string;
+}
+
+export interface UserPublicKey {
+  user_id: string;
+  public_key: JsonWebKey;
 }
 
 export interface OfflinePref {
@@ -228,7 +242,22 @@ export interface Expense extends Versioned {
   rate_is_manual: boolean;
   base_amount: string | number;
   spent_on: string;
+  /** pago com dinheiro do caixa da turma */
+  paid_from_pool: boolean;
   created_by: string | null;
+}
+
+/** Aporte no caixa da turma (deposit) ou devolução do caixa para a pessoa (refund). */
+export interface PoolContribution {
+  id: string;
+  trip_id: string;
+  user_id: string;
+  kind: 'deposit' | 'refund';
+  amount_cents: number;
+  contributed_on: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface ExpenseShare {
@@ -305,6 +334,10 @@ export interface TripBundle {
   activities: Activity[];
   documents: DocumentRow[];
   documentShares: DocumentShare[];
+  /** chaves embrulhadas visíveis para mim (as minhas e quem mais já tem, nos documentos que leio) */
+  documentKeys: DocumentKey[];
+  /** chaves públicas da turma (só de quem já criou o cofre) */
+  publicKeys: UserPublicKey[];
   packingCategories: PackingCategory[];
   packingItems: PackingItem[];
   tasks: Task[];
@@ -312,6 +345,7 @@ export interface TripBundle {
   expenses: Expense[];
   expenseShares: ExpenseShare[];
   settlements: Settlement[];
+  poolContributions: PoolContribution[];
   journalEntries: JournalEntry[];
   journalPhotos: JournalPhoto[];
   offlinePrefs: OfflinePref[];
@@ -325,7 +359,7 @@ export type TableName =
   | 'activities' | 'documents' | 'document_shares' | 'packing_categories' | 'packing_items'
   | 'tasks' | 'budget_categories' | 'expenses' | 'expense_shares' | 'settlements'
   | 'journal_entries' | 'journal_photos' | 'document_offline_prefs' | 'trip_retros'
-  | 'notification_prefs' | 'push_subscriptions' | 'analytics_events';
+  | 'notification_prefs' | 'push_subscriptions' | 'analytics_events' | 'document_keys' | 'user_keys' | 'pool_contributions';
 
 export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   trip_members: 'members',
@@ -335,6 +369,8 @@ export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   activities: 'activities',
   documents: 'documents',
   document_shares: 'documentShares',
+  document_keys: 'documentKeys',
+  user_keys: 'publicKeys',
   packing_categories: 'packingCategories',
   packing_items: 'packingItems',
   tasks: 'tasks',
@@ -342,6 +378,7 @@ export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   expenses: 'expenses',
   expense_shares: 'expenseShares',
   settlements: 'settlements',
+  pool_contributions: 'poolContributions',
   journal_entries: 'journalEntries',
   journal_photos: 'journalPhotos',
   document_offline_prefs: 'offlinePrefs',

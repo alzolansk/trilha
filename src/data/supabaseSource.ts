@@ -17,6 +17,7 @@ const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, 
   { table: 'expenses', key: 'expenses', order: [['spent_on', false], ['created_at', false]] },
   { table: 'expense_shares', key: 'expenseShares' },
   { table: 'settlements', key: 'settlements', order: [['paid_on', false]] },
+  { table: 'pool_contributions', key: 'poolContributions', order: [['contributed_on', false], ['created_at', false]] },
   { table: 'journal_entries', key: 'journalEntries', order: [['entry_date', true], ['created_at', true]] },
   { table: 'journal_photos', key: 'journalPhotos', order: [['position', true]] },
 ];
@@ -24,7 +25,7 @@ const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, 
 const REALTIME_TABLES = [
   'trip_members', 'stops', 'transports', 'stays', 'activities', 'documents',
   'packing_categories', 'packing_items', 'tasks', 'budget_categories', 'expenses', 'expense_shares',
-  'settlements', 'journal_entries', 'journal_photos', 'trip_retros',
+  'settlements', 'pool_contributions', 'journal_entries', 'journal_photos', 'trip_retros',
 ];
 
 function ensureOnline() {
@@ -53,13 +54,18 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
       const bundle = { trip: tripRes.data } as TripBundle;
       CHILD_TABLES.forEach(({ key }, i) => ((bundle as unknown as Record<string, unknown>)[key] = results[i]));
       const docIds = bundle.documents.map((d) => d.id);
-      const [shares, prefs, retro, profiles] = await Promise.all([
+      const memberIds = bundle.members.map((m) => m.user_id);
+      const [shares, prefs, retro, profiles, docKeys, pubKeys] = await Promise.all([
         docIds.length ? sb.from('document_shares').select('*').in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
         docIds.length ? sb.from('document_offline_prefs').select('*').eq('user_id', userId).in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
         sb.from('trip_retros').select('*').eq('trip_id', tripId).maybeSingle(),
-        sb.from('profiles').select('*').in('id', bundle.members.map((m) => m.user_id)),
+        sb.from('profiles').select('*').in('id', memberIds),
+        docIds.length ? sb.from('document_keys').select('document_id,user_id,wrapped_key').in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
+        sb.from('user_keys').select('user_id,public_key').in('user_id', memberIds),
       ]);
-      for (const r of [shares, prefs, retro, profiles]) if (r.error) throw r.error;
+      for (const r of [shares, prefs, retro, profiles, docKeys, pubKeys]) if (r.error) throw r.error;
+      bundle.documentKeys = docKeys.data ?? [];
+      bundle.publicKeys = pubKeys.data ?? [];
       bundle.documentShares = shares.data ?? [];
       bundle.offlinePrefs = prefs.data ?? [];
       bundle.retro = retro.data ?? null;
@@ -157,6 +163,8 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` }, () => onChange('trips'));
       // sem coluna trip_id: o RLS só entrega eventos de documentos visíveis para a pessoa
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'document_shares' }, () => onChange('document_shares'));
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'document_keys' }, () => onChange('document_keys'));
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'user_keys' }, () => onChange('user_keys'));
       ch.subscribe();
       return () => {
         void sb.removeChannel(ch);

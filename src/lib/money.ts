@@ -61,27 +61,57 @@ export function splitEqual(totalCents: number, people: string[]): { user_id: str
 export interface ExpenseLike {
   payer_id: string;
   base_amount: number | string;
+  /** pago com dinheiro do caixa da turma (não do bolso de payer_id) */
+  paid_from_pool?: boolean;
   shares: { user_id: string; share_cents: number }[];
 }
+/** Aporte no caixa (deposit) ou devolução do caixa para a pessoa (refund), em centavos da moeda base. */
+export interface PoolEntryLike {
+  user_id: string;
+  kind: 'deposit' | 'refund';
+  amount_cents: number;
+}
+
+/** Id do caixa da turma quando ele entra no acerto como participante. */
+export const POOL = 'caixa';
 export interface SettlementLike {
   from_user: string;
   to_user: string;
   amount_cents: number;
 }
 
-/** Saldo de cada pessoa: positivo = tem a receber; negativo = deve. */
-export function balances(expenses: ExpenseLike[], settlements: SettlementLike[], people: string[]): Map<string, number> {
+/**
+ * Saldo de cada pessoa: positivo = tem a receber; negativo = deve.
+ * Havendo caixa, ele aparece como POOL: negativo = sobra a devolver; positivo = faltou dinheiro.
+ * A soma de todos os saldos é sempre zero.
+ */
+export function balances(expenses: ExpenseLike[], settlements: SettlementLike[], people: string[], pool: PoolEntryLike[] = []): Map<string, number> {
   const net = new Map<string, number>(people.map((p) => [p, 0]));
   const add = (u: string, v: number) => net.set(u, (net.get(u) ?? 0) + v);
   for (const e of expenses) {
-    add(e.payer_id, toCents(String(e.base_amount)));
+    add(e.paid_from_pool ? POOL : e.payer_id, toCents(String(e.base_amount)));
     for (const s of e.shares) add(s.user_id, -s.share_cents);
   }
   for (const s of settlements) {
     add(s.from_user, s.amount_cents);
     add(s.to_user, -s.amount_cents);
   }
+  for (const c of pool) {
+    const v = c.kind === 'deposit' ? c.amount_cents : -c.amount_cents;
+    add(c.user_id, v);
+    add(POOL, -v);
+  }
   return net;
+}
+
+/** Dinheiro que deveria estar no caixa agora: aportes − devoluções − gastos pagos pelo caixa. */
+export function poolSummary(expenses: Pick<ExpenseLike, 'base_amount' | 'paid_from_pool'>[], pool: PoolEntryLike[]) {
+  const deposited = pool.filter((c) => c.kind === 'deposit').reduce((a, c) => a + c.amount_cents, 0);
+  const refunded = pool.filter((c) => c.kind === 'refund').reduce((a, c) => a + c.amount_cents, 0);
+  const spent = expenses.filter((e) => e.paid_from_pool).reduce((a, e) => a + toCents(String(e.base_amount)), 0);
+  const byPerson = new Map<string, number>();
+  for (const c of pool) byPerson.set(c.user_id, (byPerson.get(c.user_id) ?? 0) + (c.kind === 'deposit' ? c.amount_cents : -c.amount_cents));
+  return { deposited, refunded, spent, balance: deposited - refunded - spent, byPerson };
 }
 
 export interface Transfer {

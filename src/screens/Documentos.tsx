@@ -3,11 +3,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { AiNote, Floaters, Icon, Marquee, PageTitle, useReveal } from '../components/ui/primitives';
+import { documentReaders, grantKey } from '../data/docKeys';
 import { useBundle } from '../data/TripContext';
+import { MissingKeyError, useVault, VaultLockedError } from '../data/VaultContext';
 import { getFile, storageEstimate } from '../data/offline';
 import { downloadOne, removeLocal, useLocalDocs, wantsOffline } from '../data/offlineSync';
 import type { DocCategory, DocVisibility, DocumentRow } from '../data/types';
 import { callAi } from '../lib/ai/client';
+import { decryptBlob, encryptBlob, fileAad, newDocumentKey } from '../lib/crypto/e2e';
 import { track } from '../lib/analytics';
 import { suggestFromText, guessTitleFromFileName } from '../lib/classify';
 import { sortedStops, tripPhase, tripTarget } from '../lib/derive';
@@ -48,6 +51,7 @@ export default function Documentos() {
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
+  const vault = useVault();
   const local = useLocalDocs();
   const [q, setQ] = useState('');
   const [queue, setQueue] = useState<Pending[]>([]);
@@ -133,26 +137,40 @@ export default function Documentos() {
   }
 
   async function saveOne(it: Pending) {
+    if (vault.status !== 'unlocked' || !vault.publicKey) {
+      vault.ask();
+      return toast('Desbloqueie o cofre para enviar: o arquivo é cifrado neste aparelho antes de sair dele.');
+    }
     patchQ(it.key, { status: 'saving' });
     const id = crypto.randomUUID();
-    const safe = it.file.name.replace(/[^\w.\-]+/g, '_').slice(-80);
-    const path = `${b.trip.id}/${id}/${safe}`;
-    const previewPath = it.preview ? `${b.trip.id}/${id}/preview.jpg` : null;
+    // o nome original fica só nos metadados; no Storage vai apenas conteúdo cifrado
+    const path = `${b.trip.id}/${id}/arquivo.bin`;
+    const previewPath = it.preview ? `${b.trip.id}/${id}/previa.bin` : null;
     let rowCreated = false;
     const uploaded: string[] = [];
     try {
-      // 1) metadados em "uploading" (só o dono vê); 2) arquivos; 3) "ready".
+      // 0) cifra aqui: chave AES-256 nova para este documento
+      const key = await newDocumentKey();
+      const body = await encryptBlob(key, it.file, fileAad(id, 'file'));
+      const preview = it.preview ? await encryptBlob(key, it.preview, fileAad(id, 'preview')) : null;
+      // 1) metadados em "uploading" (só o dono vê); 2) chaves embrulhadas; 3) arquivos; 4) "ready".
       await source.insert('documents', {
         id, trip_id: b.trip.id, owner_id: me, title: it.title.trim().slice(0, 120) || 'Documento', category: it.category, visibility: it.visibility,
         stop_id: it.stopId || null, storage_path: path, preview_path: previewPath, original_name: it.file.name.slice(0, 200), mime: it.mime,
         size_bytes: it.file.size, valid_until: it.validUntil || null, subtitle: it.subtitle.trim() || null, status: 'uploading',
-        classified_by: it.by, ai_confidence: it.confidence, is_shot: it.isShot,
+        classified_by: it.by, ai_confidence: it.confidence, is_shot: it.isShot, encrypted: true,
       }, { returning: false });
       rowCreated = true;
-      await source.upload('documents', path, it.file, it.mime);
+      const withMe = { ...b, publicKeys: [...(b.publicKeys ?? []).filter((p) => p.user_id !== me), { user_id: me, public_key: vault.publicKey }] };
+      await grantKey(source, withMe, id, key, [me]);
+      for (const u of documentReaders(withMe, { id, owner_id: me, visibility: it.visibility })) {
+        // quem não receber agora recebe depois (docKeys.grantMissingKeys)
+        if (u !== me) await grantKey(source, withMe, id, key, [u]).catch(() => undefined);
+      }
+      await source.upload('documents', path, body, 'application/octet-stream');
       uploaded.push(path);
-      if (previewPath && it.preview) {
-        await source.upload('documents', previewPath, it.preview, 'image/jpeg');
+      if (previewPath && preview) {
+        await source.upload('documents', previewPath, preview, 'application/octet-stream');
         uploaded.push(previewPath);
       }
       await source.update('documents', id, { status: 'ready' });
@@ -205,6 +223,8 @@ export default function Documentos() {
           </AiNote>
         </div>
       </div>
+
+      {source.kind === 'supabase' ? <VaultNote /> : null}
 
       {pendingUploads.length ? (
         <div className="errbox" style={{ marginTop: 18 }}>
@@ -317,14 +337,48 @@ function DocTicket({ d, stopName, state, onOpen }: { d: DocumentRow; stopName?: 
   );
 }
 
+function VaultNote() {
+  const vault = useVault();
+  if (vault.status === 'off' || vault.status === 'loading') return null;
+  return (
+    <div className="ai rv" style={{ marginTop: 14 }}>
+      <span className="pill" data-tone={vault.status === 'unlocked' ? undefined : 'acc'}>E2E</span>
+      <span style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 14px' }}>
+        {vault.status === 'unlocked' ? (
+          <>
+            <span style={{ flex: 1, minWidth: 220 }}>Cofre desbloqueado neste aparelho. Os arquivos são cifrados com AES-256-GCM antes do envio, e só quem tem acesso na turma consegue abrir.</span>
+            <button className="btn btn-sm tap" onClick={vault.openChange}>Trocar frase</button>
+            <button className="btn btn-sm tap" onClick={() => void vault.lock()}>Trancar</button>
+          </>
+        ) : (
+          <>
+            <span style={{ flex: 1, minWidth: 220 }}>
+              {vault.status === 'none'
+                ? 'Crie seu cofre para enviar e abrir documentos com criptografia ponta a ponta: o servidor guarda só o arquivo cifrado.'
+                : 'Cofre trancado neste aparelho. Desbloqueie para enviar ou abrir documentos cifrados.'}
+            </span>
+            <button className="btn btn-primary btn-sm tap" onClick={vault.ask}>{vault.status === 'none' ? 'Criar cofre' : 'Desbloquear'}</button>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function useDocUrl(d: DocumentRow | undefined, preferPreview = true) {
-  const { source } = useBundle();
+  const { source, bundle: b } = useBundle();
+  const vault = useVault();
   const [url, setUrl] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const me = source.userId;
+  const myKey = d?.encrypted ? (b.documentKeys ?? []).find((k) => k.document_id === d.id && k.user_id === me)?.wrapped_key : undefined;
+  const bRef = useRef(b);
+  bRef.current = b;
   useEffect(() => {
     if (!d) return;
     let obj: string | null = null;
     let alive = true;
+    setErr(null);
     (async () => {
       try {
         const usePreview = preferPreview && !!d.preview_path;
@@ -333,17 +387,22 @@ function useDocUrl(d: DocumentRow | undefined, preferPreview = true) {
         let blob: Blob;
         if (local) blob = local.blob;
         else blob = await source.download('documents', usePreview ? d.preview_path! : d.storage_path);
-        obj = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: usePreview ? 'image/jpeg' : d.mime }));
+        const mime = usePreview ? 'image/jpeg' : d.mime;
+        // cifrado: decifra aqui, a partir da cópia local ou do Storage
+        if (d.encrypted) blob = await decryptBlob(await vault.docKey(bRef.current, d), blob, fileAad(d.id, usePreview ? 'preview' : 'file'), mime);
+        obj = URL.createObjectURL(blob.type && !d.encrypted ? blob : new Blob([blob], { type: mime }));
         if (alive) setUrl(obj);
       } catch (e) {
-        if (alive) setErr(!navigator.onLine ? 'Sem internet e sem cópia neste aparelho.' : (e as Error).message);
+        if (!alive) return;
+        if (e instanceof VaultLockedError || e instanceof MissingKeyError) setErr(e.message);
+        else setErr(!navigator.onLine ? 'Sem internet e sem cópia neste aparelho.' : (e as Error).message);
       }
     })();
     return () => {
       alive = false;
       if (obj) URL.revokeObjectURL(obj);
     };
-  }, [d, source, preferPreview]);
+  }, [d, source, preferPreview, myKey, vault.docKey]);
   return { url, err };
 }
 
@@ -411,6 +470,7 @@ function DocViewer({ id, onClose }: { id: string; onClose: () => void }) {
   const { run, busy } = useAction();
   const confirm = useConfirm();
   const { url, err } = useDocUrl(d);
+  const vault = useVault();
   const [edit, setEdit] = useState(false);
   const [v, setV] = useState(() => ({ title: d?.title ?? '', subtitle: d?.subtitle ?? '', category: d?.category ?? 'outro', stop_id: d?.stop_id ?? '', valid_until: d?.valid_until ?? '', visibility: d?.visibility ?? 'private', notes: d?.notes ?? '' }));
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -462,7 +522,7 @@ function DocViewer({ id, onClose }: { id: string; onClose: () => void }) {
   return (
     <Dialog open onClose={onClose} title={d.title}>
       <div className={s.viewer}>
-        {err ? <div className="errbox">{err}</div> : !url ? <div className="skel" style={{ height: 300 }} /> : d.mime === 'application/pdf' ? (
+        {err ? <div className="errbox"><span style={{ flex: 1 }}>{err}</span>{d.encrypted && vault.status !== 'unlocked' ? <button className="btn btn-sm tap" onClick={vault.ask}>{vault.status === 'none' ? 'Criar cofre' : 'Desbloquear'}</button> : null}</div> : !url ? <div className="skel" style={{ height: 300 }} /> : d.mime === 'application/pdf' ? (
           <iframe ref={iframeRef} src={url} title={d.title} style={{ width: '100%', height: '60vh', border: 0, borderRadius: 14, background: '#fff' }} />
         ) : isImg ? (
           // eslint-disable-next-line @next/next/no-img-element

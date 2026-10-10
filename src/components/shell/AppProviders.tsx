@@ -1,5 +1,6 @@
 'use client';
 import { AuthProvider, useAuth } from '../../data/AuthContext';
+import { VaultProvider } from '../../data/VaultContext';
 import { ConfirmProvider, ToastProvider } from '../ui/feedback';
 import { Icon } from '../ui/primitives';
 import { ServiceWorker } from './ServiceWorker';
@@ -20,9 +21,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <ToastProvider>
         <ConfirmProvider>
-          <OfflineBanner />
-          {children}
-          <ServiceWorker />
+          <VaultProvider>
+            <OfflineBanner />
+            {children}
+            <ServiceWorker />
+          </VaultProvider>
         </ConfirmProvider>
       </ToastProvider>
     </AuthProvider>

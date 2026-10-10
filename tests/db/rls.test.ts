@@ -148,8 +148,8 @@ describe('documentos e storage', () => {
   it('documento pessoal é privado por padrão', async () => {
     const [d] = await db.as<{ id: string }>(
       ANA,
-      `insert into public.documents (trip_id, title, category, storage_path, original_name, mime, size_bytes)
-       values ($1, 'Passaporte', 'identidade', $2::text || '/p1/passaporte.jpg', 'passaporte.jpg', 'image/jpeg', 1000) returning id`,
+      `insert into public.documents (trip_id, title, category, storage_path, original_name, mime, size_bytes, encrypted)
+       values ($1, 'Passaporte', 'identidade', $2::text || '/p1/passaporte.jpg', 'passaporte.jpg', 'image/jpeg', 1000, true) returning id`,
       [trip, trip],
     );
     privateDoc = d.id;
@@ -173,8 +173,8 @@ describe('documentos e storage', () => {
   it('só o dono muda visibilidade, mesmo com permissão de edição', async () => {
     const [d] = await db.as<{ id: string }>(
       BIA,
-      `insert into public.documents (trip_id, title, category, visibility, storage_path, original_name, mime, size_bytes, status)
-       values ($1, 'Passagem', 'passagem', 'trip', $2::text || '/p2/voo.pdf', 'voo.pdf', 'application/pdf', 2000, 'uploading') returning id`,
+      `insert into public.documents (trip_id, title, category, visibility, storage_path, original_name, mime, size_bytes, status, encrypted)
+       values ($1, 'Passagem', 'passagem', 'trip', $2::text || '/p2/voo.pdf', 'voo.pdf', 'application/pdf', 2000, 'uploading', true) returning id`,
       [trip, trip],
     );
     tripDoc = d.id;
@@ -210,6 +210,75 @@ describe('documentos e storage', () => {
   });
 });
 
+describe('criptografia ponta a ponta', () => {
+  const pub = (n: string) => JSON.stringify({ kty: 'EC', crv: 'P-256', x: `x${n}`, y: `y${n}` });
+  const vault = (uid: string, n: string) =>
+    db.as(uid, `select public.create_key_vault($1::jsonb, 'w', 'iv', 'salt', 600000)`, [pub(n)]);
+  let privateDoc: string;
+  let tripDoc: string;
+
+  beforeAll(async () => {
+    [{ id: privateDoc }] = await db.as<{ id: string }>(ANA, `select id from public.documents where title = 'Passaporte'`);
+    [{ id: tripDoc }] = await db.as<{ id: string }>(BIA, `select id from public.documents where title = 'Passagem'`);
+  });
+
+  it('cofre: só pela RPC, uma vez; chave pública visível à turma, cofre só à dona', async () => {
+    for (const [u, n] of [[ANA, 'a'], [BIA, 'b'], [LEO, 'c'], [ZE, 'd']] as const) await vault(u, n);
+    await rejects(vault(ANA, 'a2'), /já tem um cofre/);
+    await rejects(db.as(ANA, `insert into public.user_keys (user_id, public_key) values ($1, $2::jsonb)`, [ANA, pub('z')]), /permission denied/);
+    await rejects(db.as(null, `select public.create_key_vault($1::jsonb, 'w', 'iv', 'salt', 600000)`, [pub('n')]));
+    // chave privada no JWK é recusada
+    await db.query(`delete from public.user_keys where user_id = $1`, [ZE]);
+    await rejects(db.as(ZE, `select public.create_key_vault($1::jsonb, 'w', 'iv', 'salt', 600000)`, [JSON.stringify({ kty: 'EC', crv: 'P-256', x: 'x', y: 'y', d: 'secreta' })]), /check/);
+    await vault(ZE, 'd');
+
+    expect(await db.as(BIA, `select user_id from public.user_keys where user_id = $1`, [ANA])).toHaveLength(1);
+    expect(await db.as(ZE, `select user_id from public.user_keys where user_id = $1`, [ANA])).toHaveLength(0);
+    expect(await db.as(BIA, `select * from public.user_vaults`)).toHaveLength(1);
+    expect(await db.as(BIA, `update public.user_vaults set wrap_iv = 'x' where user_id = $1 returning user_id`, [ANA])).toHaveLength(0);
+  });
+
+  it('chave do documento só é liberada por quem lê e para quem pode ler', async () => {
+    const grant = (by: string, doc: string, to: string) =>
+      db.as(by, `insert into public.document_keys (document_id, user_id, wrapped_key) values ($1, $2, 'v1.k')`, [doc, to]);
+    await grant(ANA, privateDoc, ANA);
+    await grant(ANA, privateDoc, BIA); // compartilhado com a Bia
+    await rejects(grant(ANA, privateDoc, LEO), /row-level security/); // não compartilhado com o Léo
+    await rejects(grant(LEO, privateDoc, LEO), /row-level security/); // Léo não lê o documento
+    await grant(BIA, tripDoc, BIA);
+    await grant(BIA, tripDoc, LEO); // da turma toda: qualquer membro com chave libera
+    await rejects(grant(BIA, tripDoc, ZE), /row-level security/); // fora da viagem
+    await rejects(grant(ZE, tripDoc, ZE), /row-level security/);
+    await rejects(db.as(ANA, `insert into public.document_keys (document_id, user_id, wrapped_key, created_by) values ($1, $2, 'v1.k', $3)`, [tripDoc, ANA, BIA]), /row-level security/);
+
+    expect(await db.as(LEO, `select user_id from public.document_keys where document_id = $1`, [privateDoc])).toHaveLength(0);
+    expect(await db.as(LEO, `select user_id from public.document_keys where document_id = $1`, [tripDoc])).toHaveLength(2);
+    await rejects(db.as(LEO, `update public.document_keys set wrapped_key = 'x'`), /permission denied/);
+  });
+
+  it('perder acesso apaga a chave embrulhada', async () => {
+    await db.as(ANA, `update public.documents set visibility = 'private' where id = $1`, [privateDoc]);
+    expect(await db.query(`select user_id from public.document_keys where document_id = $1`, [privateDoc]).then((r) => r.rows)).toEqual([{ user_id: ANA }]);
+    await db.query(`delete from public.trip_members where trip_id = $1 and user_id = $2`, [trip, LEO]);
+    expect(await db.query(`select 1 from public.document_keys where user_id = $1`, [LEO]).then((r) => r.rows)).toHaveLength(0);
+    await db.query(`insert into public.trip_members (trip_id, user_id, role) values ($1, $2, 'viewer')`, [trip, LEO]);
+  });
+
+  it('documento novo só entra cifrado e não deixa de ser cifrado', async () => {
+    await rejects(
+      db.as(ANA, `insert into public.documents (trip_id, title, storage_path, original_name, mime, size_bytes) values ($1::uuid, 'x', $1::text || '/p9/x', 'x.pdf', 'application/pdf', 1)`, [trip]),
+      /row-level security/,
+    );
+    await rejects(db.as(ANA, `update public.documents set encrypted = false where id = $1`, [privateDoc]), /imutáveis/);
+  });
+
+  it('recomeçar o cofre apaga as chaves da pessoa', async () => {
+    await db.as(BIA, `select public.reset_key_vault()`);
+    expect(await db.query(`select 1 from public.document_keys where user_id = $1`, [BIA]).then((r) => r.rows)).toHaveLength(0);
+    expect(await db.as(BIA, `select * from public.user_vaults`)).toHaveLength(0);
+  });
+});
+
 describe('gastos', () => {
   it('rateio precisa fechar com o total e envolver só membros', async () => {
     const base = {
@@ -232,6 +301,32 @@ describe('gastos', () => {
     await rejects(db.as(ANA, `insert into public.settlements (trip_id, from_user, to_user, amount_cents) values ($1, $2, $3, 100)`, [trip, ZE, ANA]), /não participa/);
     await rejects(db.as(LEO, `insert into public.settlements (trip_id, from_user, to_user, amount_cents) values ($1, $2, $3, 100)`, [trip, LEO, ANA]), /row-level security/);
     expect(await db.as(BIA, `insert into public.settlements (trip_id, from_user, to_user, amount_cents) values ($1, $2, $3, 7500) returning id`, [trip, BIA, ANA])).toHaveLength(1);
+  });
+});
+
+describe('caixa da turma', () => {
+  it('editor lança aporte de membro; leitor só consulta; fora da viagem não', async () => {
+    await db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 50000)`, [trip, ANA]);
+    expect(await db.as(LEO, `select amount_cents from public.pool_contributions`)).toHaveLength(1);
+    await rejects(db.as(LEO, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 100)`, [trip, LEO]), /row-level security/);
+    await rejects(db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 100)`, [trip, ZE]), /não participa/);
+    await rejects(db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents, created_by) values ($1, $2, 100, $3)`, [trip, BIA, ANA]), /row-level security/);
+    await rejects(db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 0)`, [trip, BIA]), /check/);
+    expect(await db.as(ZE, `select * from public.pool_contributions`)).toHaveLength(0);
+    expect(await db.as(LEO, `delete from public.pool_contributions returning id`)).toHaveLength(0);
+  });
+
+  it('save_expense grava gasto pago pelo caixa', async () => {
+    const [{ save_expense: id }] = await db.as<{ save_expense: string }>(
+      BIA,
+      `select public.save_expense($1::jsonb, $2::jsonb)`,
+      [
+        JSON.stringify({ trip_id: trip, description: 'Mercado', payer_id: BIA, amount: '60.00', currency: 'BRL', rate_to_base: 1, rate_source: 'Mesma moeda', rate_date: '2027-01-16', base_amount: '60.00', spent_on: '2027-01-16', paid_from_pool: true }),
+        JSON.stringify([{ user_id: ANA, share_cents: 3000 }, { user_id: BIA, share_cents: 3000 }]),
+      ],
+    );
+    const [row] = await db.as<{ paid_from_pool: boolean }>(LEO, `select paid_from_pool from public.expenses where id = $1`, [id]);
+    expect(row.paid_from_pool).toBe(true);
   });
 });
 

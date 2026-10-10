@@ -10,7 +10,7 @@ import { packingProgress, sortedStops, stopCode, tripPhase, tripTarget } from '.
 import { dayMonth, initials } from '../lib/format';
 import { fgOn } from '../lib/identity/contrast';
 import { colorCycle } from '../lib/identity/theme';
-import { balances, budgetByCategory, centsToDecimal, convertCents, formatMoney, splitEqual, suggestTransfers, toCents } from '../lib/money';
+import { balances, budgetByCategory, centsToDecimal, convertCents, formatMoney, POOL, poolSummary, splitEqual, suggestTransfers, toCents } from '../lib/money';
 import { rulePacking, type PackingSuggestion } from '../lib/rules';
 import { countdown, todayIn } from '../lib/time';
 import s from './mala.module.css';
@@ -94,6 +94,7 @@ export default function Mala() {
         </div>
         <div className={`${s.right} ${tab === 'gastos' ? '' : s.hideMobile}`}>
           <Budget cols={cols} />
+          <Pool cols={cols} />
           <StopSpend cols={cols} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(260px,100%),1fr))', gap: 26 }}>
             <Converter />
@@ -439,6 +440,104 @@ function BudgetDialog({ onClose, cols }: { onClose: () => void; cols: string[] }
   );
 }
 
+// ───────────────────── Caixa da turma ─────────────────────
+function Pool({ cols }: { cols: string[] }) {
+  const { bundle: b, canEdit, source, reload, profileOf } = useBundle();
+  const { run } = useAction();
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  const cur = b.trip.base_currency;
+  const entries = b.poolContributions ?? [];
+  const sum = poolSummary(b.expenses, entries);
+  const people = b.members.map((m) => m.user_id).filter((u) => sum.byPerson.get(u));
+  const max = Math.max(1, ...people.map((u) => Math.abs(sum.byPerson.get(u) ?? 0)));
+  const name = (uid: string) => profileOf(uid)?.display_name ?? 'Pessoa';
+  return (
+    <article className="card rv" style={{ padding: 30, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <div className="eyebrow">Caixa da turma</div>
+        <div className="disp" style={{ fontSize: 'clamp(40px,4vw,56px)', lineHeight: 1 }}>{formatMoney(sum.balance, cur, { compact: true })}</div>
+        <div style={{ color: 'var(--mute)', marginTop: 6 }}>
+          {entries.length || sum.spent
+            ? <>{formatMoney(sum.deposited, cur, { compact: true })} aportados · {formatMoney(sum.spent, cur, { compact: true })} gastos pelo caixa{sum.refunded ? ` · ${formatMoney(sum.refunded, cur, { compact: true })} devolvidos` : ''}</>
+            : 'Ninguém aportou ainda'}
+        </div>
+      </div>
+      {!entries.length && !sum.spent ? (
+        <p className="muted" style={{ margin: 0 }}>Se a turma juntar dinheiro num caixa comum, registre aqui quanto cada um colocou e marque os gastos como pagos pelo caixa. O acerto de contas leva tudo em conta.</p>
+      ) : null}
+      {sum.balance < 0 ? <AiNote by="rules">O caixa pagou {formatMoney(-sum.balance, cur)} a mais do que recebeu. O acerto de contas mostra quem precisa aportar.</AiNote> : null}
+      {people.length ? (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {people.map((u, i) => {
+            const v = sum.byPerson.get(u) ?? 0;
+            return (
+              <li key={u} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontWeight: 600 }}>
+                  <span>{name(u)}</span>
+                  <span className="mono" style={{ fontSize: 13, fontWeight: 400 }}>{formatMoney(v, cur)}</span>
+                </div>
+                <div className="bar"><i className="gw" style={{ width: `${Math.round((Math.abs(v) / max) * 100)}%`, background: cols[i % 4] }} /></div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {entries.length ? (
+        <details>
+          <summary style={{ cursor: 'pointer', fontSize: 14 }}>Movimentações ({entries.length})</summary>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14 }}>
+            {entries.map((x) => (
+              <li key={x.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ flex: 1 }}>
+                  {x.kind === 'deposit' ? `${name(x.user_id)} aportou` : `Caixa devolveu a ${name(x.user_id)}`} · {formatMoney(x.amount_cents, cur)} · {dayMonth(x.contributed_on)}
+                  {x.note ? <span style={{ display: 'block', fontSize: 13, color: 'var(--mute)' }}>{x.note}</span> : null}
+                </span>
+                {canEdit ? (
+                  <button className="btn btn-icon btn-sm" aria-label="Excluir movimentação" onClick={async () => {
+                    if (await confirm({ title: 'Excluir movimentação?', message: 'Ela sai do caixa e do acerto de contas.' })) await run(() => source.remove('pool_contributions', { id: x.id }).then(reload));
+                  }}>✕</button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      {canEdit ? <button className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>Registrar aporte</button> : null}
+      {open ? <PoolDialog onClose={() => setOpen(false)} /> : null}
+    </article>
+  );
+}
+
+function PoolDialog({ onClose }: { onClose: () => void }) {
+  const { bundle: b, source, reload, me, profileOf } = useBundle();
+  const { run, busy } = useAction();
+  const cur = b.trip.base_currency;
+  const [v, setV] = useState({ kind: 'deposit' as 'deposit' | 'refund', user_id: me, amount: '', on: todayIn(b.trip.departure_tz), note: '' });
+  const cents = toCents(v.amount || '0');
+  const valid = Number.isFinite(cents) && cents > 0 && !!v.user_id && !!v.on;
+  const save = () => run(async () => {
+    await source.insert('pool_contributions', { trip_id: b.trip.id, user_id: v.user_id, kind: v.kind, amount_cents: cents, contributed_on: v.on, note: v.note.trim() || null }, { returning: false });
+    await reload();
+    onClose();
+  }, { success: v.kind === 'deposit' ? 'Aporte registrado.' : 'Devolução registrada.' });
+  return (
+    <Dialog open onClose={onClose} title={v.kind === 'deposit' ? 'Registrar aporte' : 'Registrar devolução'} footer={<>
+      <button className="btn tap" onClick={onClose}>Cancelar</button>
+      <button className="btn btn-primary tap" disabled={!valid || busy} onClick={save}>Salvar</button>
+    </>}>
+      <div className="grid2">
+        <label className="field">Movimento<select value={v.kind} onChange={(x) => setV({ ...v, kind: x.target.value as 'deposit' | 'refund' })}><option value="deposit">Aporte (entrou no caixa)</option><option value="refund">Devolução (saiu do caixa)</option></select></label>
+        <label className="field">{v.kind === 'deposit' ? 'Quem aportou' : 'Para quem'}<select value={v.user_id} onChange={(x) => setV({ ...v, user_id: x.target.value })}>{b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}</select></label>
+        <label className="field">Valor em {cur}<input inputMode="decimal" value={v.amount} onChange={(x) => setV({ ...v, amount: x.target.value })} placeholder="0,00" autoFocus /></label>
+        <label className="field">Data<input type="date" value={v.on} onChange={(x) => setV({ ...v, on: x.target.value })} /></label>
+      </div>
+      <label className="field">Observação<input value={v.note} maxLength={200} onChange={(x) => setV({ ...v, note: x.target.value })} placeholder="Pix antes da viagem" /></label>
+      {Number.isFinite(cents) && cents > 0 ? <span className="mono" style={{ fontSize: 12 }}>{v.kind === 'deposit' ? 'ENTRA NO CAIXA' : 'SAI DO CAIXA'} {formatMoney(cents, cur)}</span> : null}
+    </Dialog>
+  );
+}
+
 function StopSpend({ cols }: { cols: string[] }) {
   const { bundle: b } = useBundle();
   const stops = sortedStops(b);
@@ -505,10 +604,19 @@ function Debts({ cols }: { cols: string[] }) {
   const { run, busy } = useAction();
   const [open, setOpen] = useState(false);
   const people = b.members.map((m) => m.user_id);
-  const exp = b.expenses.map((e) => ({ payer_id: e.payer_id, base_amount: e.base_amount, shares: b.expenseShares.filter((s2) => s2.expense_id === e.id) }));
-  const transfers = suggestTransfers(balances(exp, b.settlements, people));
+  const pool = b.poolContributions ?? [];
+  const exp = b.expenses.map((e) => ({ payer_id: e.payer_id, base_amount: e.base_amount, paid_from_pool: e.paid_from_pool, shares: b.expenseShares.filter((s2) => s2.expense_id === e.id) }));
+  const transfers = suggestTransfers(balances(exp, b.settlements, people, pool));
+  const usesPool = pool.length > 0 || b.expenses.some((e) => e.paid_from_pool);
   const colorOf = (uid: string) => cols[Math.max(0, people.indexOf(uid)) % 3];
+  const nameOf = (uid: string) => (uid === POOL ? 'Caixa da turma' : profileOf(uid)?.display_name ?? 'Pessoa');
+  // Transferência que envolve o caixa vira aporte ou devolução; entre pessoas, pagamento.
+  const settle = (t: { from: string; to: string; cents: number }) =>
+    t.to === POOL ? source.insert('pool_contributions', { trip_id: b.trip.id, user_id: t.from, kind: 'deposit', amount_cents: t.cents, contributed_on: todayIn(b.trip.departure_tz), note: 'Acerto de contas' }, { returning: false })
+      : t.from === POOL ? source.insert('pool_contributions', { trip_id: b.trip.id, user_id: t.to, kind: 'refund', amount_cents: t.cents, contributed_on: todayIn(b.trip.departure_tz), note: 'Acerto de contas' }, { returning: false })
+        : source.insert('settlements', { trip_id: b.trip.id, from_user: t.from, to_user: t.to, amount_cents: t.cents }, { returning: false });
   const av = (uid: string) => {
+    if (uid === POOL) return <span className="av" style={{ background: 'var(--ink)', color: 'var(--card)' }} title="Caixa da turma">CX</span>;
     const p = profileOf(uid);
     const c = colorOf(uid);
     return <span className="av" style={{ background: c, color: fgOn(c) }} title={p?.display_name}>{initials(p?.display_name ?? '?')}</span>;
@@ -516,19 +624,21 @@ function Debts({ cols }: { cols: string[] }) {
   return (
     <article className="card rv lift" style={{ padding: 26, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <h2 className="disp" style={{ margin: 0, fontSize: 22 }}>Acerto de contas</h2>
-      {people.length < 2 ? (
+      {people.length < 2 && !usesPool ? (
         <p style={{ margin: 0, color: 'var(--mute)' }}>Viajando sozinho por enquanto. Convide alguém pra dividir os gastos.</p>
       ) : transfers.length ? (
         transfers.map((t) => (
-          <div key={t.from + t.to} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, background: 'var(--bg)', flexWrap: 'wrap' }} title={`${profileOf(t.from)?.display_name} deve pra ${profileOf(t.to)?.display_name}`}>
+          <div key={t.from + t.to} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, background: 'var(--bg)', flexWrap: 'wrap' }} title={t.from === POOL ? `Caixa devolve a sobra para ${nameOf(t.to)}` : t.to === POOL ? `${nameOf(t.from)} aporta no caixa` : `${nameOf(t.from)} deve pra ${nameOf(t.to)}`}>
             {av(t.from)}<Icon name="arrow" size={18} />{av(t.to)}
+            {t.from === POOL || t.to === POOL ? <span className="mono" style={{ fontSize: 11 }}>{t.from === POOL ? 'DEVOLVER SOBRA' : 'APORTAR'}</span> : null}
             <span className="disp" style={{ marginLeft: 'auto', fontSize: 20, letterSpacing: 0 }}>{formatMoney(t.cents, b.trip.base_currency, { compact: true })}</span>
-            {canEdit ? <button className="btn btn-sm tap" disabled={busy} onClick={() => void run(() => source.insert('settlements', { trip_id: b.trip.id, from_user: t.from, to_user: t.to, amount_cents: t.cents }, { returning: false }).then(reload), { success: 'Pagamento registrado.' })}>Pago</button> : null}
+            {canEdit ? <button className="btn btn-sm tap" disabled={busy} onClick={() => void run(() => settle(t).then(reload), { success: t.from === POOL ? 'Devolução registrada.' : t.to === POOL ? 'Aporte registrado.' : 'Pagamento registrado.' })}>Pago</button> : null}
           </div>
         ))
       ) : (
         <p style={{ margin: 0, color: 'var(--mute)' }}>Tudo acertado. Ninguém deve nada.</p>
       )}
+      {transfers.some((t) => t.from === POOL) ? <p className="muted" style={{ margin: 0, fontSize: 13 }}>A sobra pode continuar no caixa durante a viagem; as devoluções são o acerto final.</p> : null}
       {b.settlements.length ? (
         <details>
           <summary style={{ cursor: 'pointer', fontSize: 14 }}>Pagamentos registrados ({b.settlements.length})</summary>
@@ -561,7 +671,7 @@ function ExpenseList() {
             <span style={{ flex: 1, minWidth: 0 }}>
               <b>{e.description}</b>
               <span style={{ display: 'block', fontSize: 13, color: 'var(--mute)' }}>
-                {dayMonth(e.spent_on)} · pagou {profileOf(e.payer_id)?.display_name ?? '—'}{e.currency !== b.trip.base_currency ? ` · ${formatMoney(toCents(String(e.amount)), e.currency)} a ${Number(e.rate_to_base).toLocaleString('pt-BR', { maximumFractionDigits: 6 })}${e.rate_is_manual ? ' (taxa manual)' : ` (${e.rate_source}, ${dayMonth(e.rate_date)})`}` : ''}
+                {dayMonth(e.spent_on)} · {e.paid_from_pool ? 'pago pelo caixa' : `pagou ${profileOf(e.payer_id)?.display_name ?? '—'}`}{e.currency !== b.trip.base_currency ? ` · ${formatMoney(toCents(String(e.amount)), e.currency)} a ${Number(e.rate_to_base).toLocaleString('pt-BR', { maximumFractionDigits: 6 })}${e.rate_is_manual ? ' (taxa manual)' : ` (${e.rate_source}, ${dayMonth(e.rate_date)})`}` : ''}
               </span>
             </span>
             <span className="mono">{formatMoney(toCents(String(e.base_amount)), b.trip.base_currency)}</span>
@@ -584,7 +694,7 @@ function ExpenseDialog({ e, onClose }: { e: Expense | null; onClose: () => void 
   const shareIds = e ? b.expenseShares.filter((x) => x.expense_id === e.id).map((x) => x.user_id) : b.members.map((m) => m.user_id);
   const [v, setV] = useState({
     description: e?.description ?? '', amount: e ? String(e.amount) : '', currency: e?.currency ?? base, manual: e?.rate_is_manual ?? false, rate: e ? String(e.rate_to_base) : '',
-    spent_on: e?.spent_on ?? todayIn(b.trip.departure_tz), category_id: e?.category_id ?? '', stop_id: e?.stop_id ?? '', payer_id: e?.payer_id ?? me, split: shareIds,
+    spent_on: e?.spent_on ?? todayIn(b.trip.departure_tz), category_id: e?.category_id ?? '', stop_id: e?.stop_id ?? '', payer_id: e?.paid_from_pool ? POOL : e?.payer_id ?? me, split: shareIds,
   });
   const amountCents = toCents(v.amount || '0');
   const autoRate = v.currency === base ? 1 : fx?.rates[v.currency] ? 1 / fx.rates[v.currency] : null;
@@ -600,7 +710,9 @@ function ExpenseDialog({ e, onClose }: { e: Expense | null; onClose: () => void 
   const save = () => run(async () => {
     await source.rpc('save_expense', {
       p_expense: {
-        id: e?.id ?? '', version: e?.version ?? '', trip_id: b.trip.id, description: v.description.trim(), category_id: v.category_id, stop_id: v.stop_id, payer_id: v.payer_id,
+        id: e?.id ?? '', version: e?.version ?? '', trip_id: b.trip.id, description: v.description.trim(), category_id: v.category_id, stop_id: v.stop_id,
+        // pelo caixa: payer_id guarda quem lançou; o dinheiro é do caixa
+        payer_id: v.payer_id === POOL ? (e?.paid_from_pool ? e.payer_id : me) : v.payer_id, paid_from_pool: v.payer_id === POOL,
         amount: centsToDecimal(amountCents), currency: v.currency, rate_to_base: Number(rate!.toFixed(8)), rate_source: rateSource, rate_date: rateDate,
         rate_is_manual: v.manual, base_amount: centsToDecimal(baseCents), spent_on: v.spent_on,
       },
@@ -624,7 +736,7 @@ function ExpenseDialog({ e, onClose }: { e: Expense | null; onClose: () => void 
         <label className="field">Data<input type="date" value={v.spent_on} onChange={(x) => setV({ ...v, spent_on: x.target.value })} /></label>
         <label className="field">Categoria<select value={v.category_id} onChange={(x) => setV({ ...v, category_id: x.target.value })}><option value="">Sem categoria</option>{b.budgetCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
         <label className="field">Parada<select value={v.stop_id} onChange={(x) => setV({ ...v, stop_id: x.target.value })}><option value="">Nenhuma</option>{stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label className="field">Quem pagou<select value={v.payer_id} onChange={(x) => setV({ ...v, payer_id: x.target.value })}>{b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}</select></label>
+        <label className="field">Quem pagou<select value={v.payer_id} onChange={(x) => setV({ ...v, payer_id: x.target.value })}>{b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}<option value={POOL}>Caixa da turma</option></select></label>
       </div>
       {v.currency !== base ? (
         <div className="errbox" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
