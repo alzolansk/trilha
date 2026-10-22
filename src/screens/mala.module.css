@@ -2,6 +2,9 @@
 .left { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
 .right { flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 26px; }
 .ring { position: relative; overflow: hidden; display: flex; align-items: center; gap: 22px; padding: 24px; border-radius: 26px; background: var(--deep); color: var(--on-deep); }
+.ringSvg { flex: none; position: relative; }
+.count { font-size: 36px; line-height: 1; }
+.body { margin-top: 44px; }
 .v { transition: stroke-dasharray .6s var(--ease-spring); }
 .group { margin: 0; padding: 16px 20px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--card); }
 .group legend { padding: 0 8px; font-family: var(--font-display); font-weight: var(--display-weight); font-size: 20px; }
@@ -11,6 +14,7 @@
 .sugs { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 20px; border: 1px dashed var(--acc); background: var(--soft); }
 .sug { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .task { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.taskText { flex: 1; min-width: 0; }
 .task[data-done=true] { opacity: .65; }
 .status { min-height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); padding: 0 8px; }
 .sticker { width: 130px; height: 130px; flex: none; clip-path: var(--motif-solid); background: var(--acc2); color: var(--fg-acc2); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; animation: wig 3.4s ease-in-out infinite; }
@@ -27,4 +31,20 @@
   .tabs { display: flex; }
   .hideMobile { display: none; }
   .mobileTiles { display: flex; }
+  .tabs { margin-top: 20px; }
+  .body { margin-top: 20px; }
+}
+@media (max-width: 600px) {
+  .task { gap: 8px 10px; padding: 12px 14px; }
+  /* texto na linha toda; etiqueta, estado e editar descem pra linha de baixo */
+  .taskText { flex-basis: calc(100% - 24px); }
+  .ring { gap: 16px; padding: 16px 18px; border-radius: 22px; }
+  .ringSvg { width: 84px; height: 84px; }
+  .count { font-size: 28px; }
+  .group { padding: 12px 14px 14px; }
+  .group legend { font-size: 18px; }
+  .mobileTiles div { padding: 12px 14px; border-radius: 16px; }
+  .mobileTiles b { font-size: 18px; }
+  .sticker { width: 96px; height: 96px; }
+  .cols { height: 130px; }
 }

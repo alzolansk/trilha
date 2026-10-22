@@ -71,17 +71,17 @@ export default function Mala() {
         <button className="chip tap" aria-pressed={tab === 'mala'} onClick={() => setTab('mala')}>Mala e pendências</button>
         <button className="chip tap" aria-pressed={tab === 'gastos'} onClick={() => setTab('gastos')}>Gastos</button>
       </div>
-      <section className="split" style={{ marginTop: 44 }}>
+      <section className={`split ${s.body}`}>
         <div className={`${s.left} ${tab === 'mala' ? '' : s.hideMobile}`}>
           <div className={`${s.ring} rv`}>
             <div aria-hidden="true" style={{ position: 'absolute', right: -30, top: -30, width: 130, height: 130, clipPath: 'var(--motif)', background: 'var(--acc2)', opacity: 0.5, animation: 'floaty 8s ease-in-out infinite' }} />
-            <svg aria-hidden="true" width="120" height="120" viewBox="0 0 120 120" style={{ flex: 'none', position: 'relative' }}>
+            <svg aria-hidden="true" className={s.ringSvg} width="120" height="120" viewBox="0 0 120 120">
               <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeOpacity=".18" strokeWidth="14" />
               <circle className={s.v} cx="60" cy="60" r="48" fill="none" stroke="var(--acc2)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${((C * pack.pct) / 100).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 60 60)" />
               <text x="60" y="68" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="22" fill="currentColor">{pack.pct}%</text>
             </svg>
             <div style={{ position: 'relative' }}>
-              <div className="disp" style={{ fontSize: 36, lineHeight: 1 }}>{pack.done} de {pack.total}</div>
+              <div className={`disp ${s.count}`}>{pack.done} de {pack.total}</div>
               <div style={{ marginTop: 6, opacity: 0.85 }}>itens na mochila</div>
             </div>
           </div>
@@ -293,7 +293,7 @@ function Tasks() {
           return (
             <li key={t.id} className={`${s.task} rv lift`} data-done={t.status === 'done'}>
               <span aria-hidden="true" className="bullet" style={{ width: 14, height: 14, background: cols[i % 4] }} />
-              <span style={{ flex: 1, minWidth: 0 }}>
+              <span className={s.taskText}>
                 <b style={{ display: 'block', fontWeight: 600, textDecoration: t.status === 'done' ? 'line-through' : undefined }}>{t.title}</b>
                 <span style={{ fontSize: 14, color: 'var(--mute)' }}>
                   {[t.detail, who ? `com ${who.display_name}` : null, t.due_date ? `${late ? 'atrasada · ' : 'até '}${dayMonth(t.due_date)}` : null].filter(Boolean).join(' · ')}
