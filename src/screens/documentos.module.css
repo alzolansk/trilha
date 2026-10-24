@@ -16,3 +16,9 @@
 .review { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); }
 .viewer { min-height: 120px; }
 .offRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; border-radius: 16px; background: var(--bg); }
+@media (max-width: 600px) {
+  .grid { gap: 18px; margin-top: 20px; }
+  .drop { margin-top: 36px; padding: 36px 18px; border-radius: 24px; }
+  .dropHero { margin-top: 24px; padding: 48px 18px; }
+  .ic { width: 60px; height: 60px; }
+}

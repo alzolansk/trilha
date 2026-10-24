@@ -3,6 +3,9 @@
 .segbar button[aria-pressed=true] { transform: translateY(-8px); box-shadow: 0 8px 0 var(--ink); }
 .segbar b { display: block; font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .12em; }
 .segbar span { display: block; font-size: 12px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list { display: flex; flex-direction: column; }
+.listHead { margin-bottom: 14px; }
+.stopName { display: block; font-size: 24px; line-height: 1.05; letter-spacing: -.01em; }
 .stopBtn { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; padding: 14px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--ink); }
 .stopBtn[aria-pressed=true] { background: var(--ink); color: var(--bg); }
 .stopRow { display: flex; align-items: center; gap: 6px; }
@@ -32,9 +35,36 @@
 .weather { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
 .weather div { flex: none; min-width: 84px; padding: 10px 12px; border-radius: 14px; background: var(--bg); font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
 
+/* Sem espaço pra duas colunas: detalhe primeiro, depois a ordem das paradas e por fim o formulário.
+   O limite acompanha o select() em Roteiro.tsx. */
+@media (max-width: 1023px) {
+  .layout { flex-direction: column; align-items: stretch; gap: 28px; margin-top: 28px; }
+  .side { display: contents; }
+  .layout > .detail, .side > * { flex: none; width: 100%; }
+  .layout > .detail { order: 1; }
+  .side > .list { order: 2; }
+  .side > .newStop { order: 3; margin-top: 0; }
+}
 @media (max-width: 600px) {
+  .segbar { gap: 4px; margin-top: 22px; }
   .segbar span { display: none; }
   .segbar b { font-size: 11px; }
+  .segbar button[aria-pressed=true] { transform: translateY(-4px); box-shadow: 0 4px 0 var(--ink); }
+  .stopBtn { gap: 12px; padding: 10px 14px; border-radius: var(--r-md); }
+  .stopBtn :global(.num) { width: 38px; height: 38px; }
+  .stopBtn :global(.num b) { font-size: 13px; }
+  .stopName { font-size: 19px; }
+  .reorder button { width: 32px; height: 30px; }
+  .leg { padding-left: 26px; gap: 10px; }
+  .leg svg { height: 26px; }
+  .leg span { font-size: 11px; padding: 4px 10px; }
+  .detailHead { padding-top: 24px; padding-bottom: 22px; }
+  .detailHead h2 { font-size: 40px; }
+  .detailBody { padding-top: 22px; padding-bottom: 24px; gap: 22px; }
+  .passMain, .passSide { padding: 14px 16px; }
+  .code { font-size: 28px; }
+  .box { padding: 16px; }
+  .newStop { padding: 18px; border-radius: 20px; }
 }
 @media (max-width: 820px) {
   .detailHead, .detailBody { padding-left: 20px; padding-right: 20px; }

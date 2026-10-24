@@ -47,7 +47,7 @@ export default function Roteiro() {
     const q = new URLSearchParams(params.toString());
     q.set('parada', stops[i].id);
     router.replace(`?${q.toString()}`, { scroll: false });
-    if (window.innerWidth < 900) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (window.matchMedia('(max-width: 1023px)').matches) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
   const phase = tripPhase(b.trip);
@@ -93,39 +93,45 @@ export default function Roteiro() {
         </div>
       ) : null}
 
-      <section className="split">
-        <div className="col-side">
-          {stops.map((st, i) => {
-            const c = cols[i % 4];
-            const leg = legToNext(b, stops, i);
-            return (
-              <div key={st.id} className="rv">
-                <div className={s.stopRow}>
-                  <button className={`${s.stopBtn} lift tap`} aria-pressed={i === sel} onClick={() => select(i)}>
-                    <span className="num">
-                      <i style={{ background: c }} />
-                      <b style={{ color: fgOn(c) }}>{i + 1}</b>
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span className="disp" style={{ display: 'block', fontSize: 24, lineHeight: 1.05, letterSpacing: '-.01em' }}>{st.name}</span>
-                      <span className="mono" style={{ display: 'block', fontSize: 12, marginTop: 4, opacity: 0.8 }}>
-                        {stopDates(st)} · {stopNights(st)}
-                      </span>
-                    </span>
-                  </button>
-                  {canEdit ? <Reorder stops={stops} i={i} /> : null}
-                </div>
-                {leg ? (
-                  <div className={s.leg}>
-                    <svg aria-hidden="true" width="4" height="44" viewBox="0 0 4 44">
-                      <path className="dm" d="M2 0 V44" stroke="currentColor" strokeWidth="2.5" strokeOpacity=".5" />
-                    </svg>
-                    <span>{leg}</span>
+      {/* No celular o detalhe da parada vem logo depois da barra de paradas; lista e "Nova parada" descem (roteiro.module.css). */}
+      <section className={`split ${s.layout}`}>
+        <div className={`col-side ${s.side}`}>
+          {stops.length ? (
+            <div className={s.list}>
+              <h3 className={`h3 ${s.listHead}`}>Ordem das paradas</h3>
+              {stops.map((st, i) => {
+                const c = cols[i % 4];
+                const leg = legToNext(b, stops, i);
+                return (
+                  <div key={st.id} className="rv">
+                    <div className={s.stopRow}>
+                      <button className={`${s.stopBtn} lift tap`} aria-pressed={i === sel} onClick={() => select(i)}>
+                        <span className="num">
+                          <i style={{ background: c }} />
+                          <b style={{ color: fgOn(c) }}>{i + 1}</b>
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span className={`disp ${s.stopName}`}>{st.name}</span>
+                          <span className="mono" style={{ display: 'block', fontSize: 12, marginTop: 4, opacity: 0.8 }}>
+                            {stopDates(st)} · {stopNights(st)}
+                          </span>
+                        </span>
+                      </button>
+                      {canEdit ? <Reorder stops={stops} i={i} /> : null}
+                    </div>
+                    {leg ? (
+                      <div className={s.leg}>
+                        <svg aria-hidden="true" width="4" height="44" viewBox="0 0 4 44">
+                          <path className="dm" d="M2 0 V44" stroke="currentColor" strokeWidth="2.5" strokeOpacity=".5" />
+                        </svg>
+                        <span>{leg}</span>
+                      </div>
+                    ) : i < stops.length - 1 ? <div style={{ height: 12 }} /> : null}
                   </div>
-                ) : i < stops.length - 1 ? <div style={{ height: 12 }} /> : null}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          ) : null}
           {canEdit ? <NewStopForm stops={stops} onCreated={(id) => router.replace(`?parada=${id}`, { scroll: false })} /> : null}
           {!canEdit && !stops.length ? <div className="empty"><h3 className="disp">Roteiro vazio</h3><p style={{ margin: 0 }}>Quem organiza ainda não adicionou paradas.</p></div> : null}
         </div>
