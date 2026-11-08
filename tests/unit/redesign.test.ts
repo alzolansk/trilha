@@ -4,7 +4,7 @@ import { buildDemoBundle, DEMO_USER } from '@/lib/demo/build';
 import { budgetOverview, categoryKind, categoryStatus, expenseImpact, memberPoolStatus, toBaseCents } from '@/lib/money';
 import { budgetFromPlan, diffSince, plannedUpdates, snapshotOf } from '@/lib/budgetPlan';
 import { bestDayFor, fitsSlot, rankForHome, slotsForDay, stopsNeedingSuggestions, suggestionsForDay } from '@/lib/suggestions';
-import { isUnfitImage, parseImageInfo, photoCredit, pickPageImage, stripHtml, thumbAt, titleMatches } from '@/lib/photos';
+import { isUnfitImage, parseImageInfo, photoCredit, photoSrcSet, pickPageImage, stripHtml, thumbAt, titleMatches } from '@/lib/photos';
 import type { TripBundle } from '@/data/types';
 
 const NOW = Date.parse('2026-11-08T12:00:00-03:00');
@@ -231,6 +231,8 @@ describe('photos', () => {
       author: 'Fulano & Cia', license: 'CC BY-SA 4.0', source_url: 'https://commons.wikimedia.org/wiki/File:Cusco.jpg',
     });
     expect(photoCredit(p)).toBe('Foto: Fulano & Cia · CC BY-SA 4.0 · Wikimedia Commons');
+    expect(photoSrcSet(p.url!)).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/400px-Cusco.jpg 400w, https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/800px-Cusco.jpg 800w, https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/1200px-Cusco.jpg 1200w');
+    expect(photoSrcSet('https://exemplo.com/foto.jpg')).toBeNull();
     expect(thumbAt(p.url!, 400)).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/400px-Cusco.jpg');
     const noLicense = structuredClone(json);
     noLicense.query.pages[0].imageinfo[0].extmetadata.LicenseShortName.value = '';

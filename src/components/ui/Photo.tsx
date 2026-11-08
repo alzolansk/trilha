@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { photoSrcSet } from '../../lib/photos';
 import { Icon } from './primitives';
 import s from './Photo.module.css';
 
@@ -17,7 +18,7 @@ export interface PhotoData {
  * Imagem com `object-fit: cover`, legenda "foto · {lugar}" e crédito (autor e licença) no botão ⓘ.
  * Sem foto, desenha o placeholder ilustrado na `--trip-accent`. Reserva o espaço (sem CLS).
  */
-export function Photo({ photo, place, alt, ratio, height, radius = 'var(--r-thumb)', caption = true, overlay = false, priority = false, className, children }: {
+export function Photo({ photo, place, alt, ratio, height, radius = 'var(--r-thumb)', caption = true, overlay = false, priority = false, sizes = '(min-width: 1024px) 480px, 100vw', className, children }: {
   photo?: PhotoData | null;
   /** nome do lugar, usado na legenda e no alt */
   place?: string;
@@ -30,13 +31,17 @@ export function Photo({ photo, place, alt, ratio, height, radius = 'var(--r-thum
   /** escurece a base só o necessário para texto branco por cima (4.5:1) */
   overlay?: boolean;
   priority?: boolean;
+  /** atributo `sizes` do srcset (só vale para fotos da Wikimedia) */
+  sizes?: string;
   className?: string;
   children?: React.ReactNode;
 }) {
   const [failed, setFailed] = useState(false);
+  const [plain, setPlain] = useState(false);
   const [credit, setCredit] = useState(false);
   const has = !!photo?.url && !failed;
   const style: React.CSSProperties = { borderRadius: radius, ...(height !== undefined ? { height } : { aspectRatio: ratio ?? '4/3' }) };
+  const srcSet = !plain && photo?.url ? photoSrcSet(photo.url) : null;
   const hasCredit = has && (photo?.author || photo?.license);
   return (
     <figure className={`${s.photo} ${className ?? ''}`} style={style}>
@@ -45,12 +50,14 @@ export function Photo({ photo, place, alt, ratio, height, radius = 'var(--r-thum
         <img
           className={s.img}
           src={photo!.url}
+          srcSet={srcSet ?? undefined}
+          sizes={srcSet ? sizes : undefined}
           alt={alt ?? (place ? `Foto de ${place}` : '')}
           width={photo!.width ?? undefined}
           height={photo!.height ?? undefined}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
-          onError={() => setFailed(true)}
+          onError={() => (srcSet ? setPlain(true) : setFailed(true))}
         />
       ) : (
         <Placeholder label={alt ?? (place ? `Ilustração: ${place} (sem foto)` : undefined)} />

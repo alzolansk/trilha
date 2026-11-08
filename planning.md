@@ -46,7 +46,13 @@ Este plano implementa esse design **no app Next.js atual**:
 | 4 — Início | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
 | 5 — Roteiro e página da parada | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
 | 6 — Dinheiro | ✅ implementada e validada localmente (ressalvas abaixo; validação remota pendente) | branch `docs/planning-redesign` |
-| 7 a 9 | ⏳ não iniciadas | — |
+| 7 — Turma | ✅ implementada e validada localmente (ressalvas abaixo; validação remota pendente) | branch `docs/planning-redesign` |
+| 8 — Descobrir e nova trilha | ✅ implementada e validada localmente (ressalvas abaixo; validação com IA/Supabase pendente) | branch `docs/planning-redesign` |
+| 9 | ⏳ não iniciada | — |
+
+**Verificação da Fase 8 (08/11/2026):** `npx tsc --noEmit` ok; `npm test` com **208/208** (entraram 5 em `tests/unit/discover.test.ts`; saíram os testes de gerador/validação/fendas de identidade); `npm run build` ok; `npx playwright test` **46/46** (entraram 2 do Descobrir). Uma execução completa teve 1 falha intermitente em `money.spec.ts:4` (`pool-balance`, tela que a Fase 8 não toca); o arquivo passou 6/6 isolado e a suíte voltou a passar. **Nenhuma migration nova**: `trip_preferences` já vem da `00008`. Comparação visual com `Descobrir.dc.html`/PDF **não feita**.
+
+**Verificação da Fase 7 (08/11/2026):** `npx tsc --noEmit`, `npm test` (211/211) e `npm run build` ok; `npx playwright test` passou **45/45** contra o build de produção (os testes de voto passaram a abrir `/turma/votos`; entraram 3 do hub: conteúdo/navegação, sem rolagem horizontal de 360 a 1440 px e o campo "Quem leva" na Mala). **Nenhuma migration nova**: `packing_items.assignee_id` já vem da `00008`. A comparação visual com `Turma.dc.html`/PDF **não foi feita nesta execução**.
 
 **Verificação da Fase 6 (08/11/2026):** `npm run typecheck` e `npm run build` ok; `npm test` com **211/211 testes** (unitários e banco PGlite). `npx playwright test` passou **41/41** contra o build de produção; depois, a suíte financeira ganhou a conferência do selo pago no Roteiro e o teste de lembretes/CSV, e `npx playwright test tests/e2e/money.spec.ts --timeout=30000` passou **6/6**. São 42 cenários E2E na base atual (36 anteriores + 6 financeiros). Capturas de Dinheiro e Orçamento conferidas em **390 e 1280 px** contra as páginas 6 e 7 de `ref/Trilha — nova proposta.pdf`; as quatro telas financeiras foram testadas sem rolagem horizontal em 360, 390, 768, 1280 e 1440 px. O PDF foi usado como referência visual; os valores financeiros já existentes na demo foram preservados.
 
@@ -75,8 +81,8 @@ Este plano implementa esse design **no app Next.js atual**:
 ### Ressalvas de handoff: Fase 2
 
 - **`/roteiro/[stopId]` é temporária.** Hoje ela redireciona para `/roteiro?parada=X` (`screens/Parada.tsx`), o contrário do que pede a §4.3. Na **Fase 5**, a `Parada` real ocupa a rota e o `Roteiro` passa a fazer `router.replace` de `?parada=X` para `/roteiro/X`.
-- **Telas temporárias nas rotas novas.** `Dinheiro`, `Orcamento`, `Extrato`, `Acerto` e `Votos` (em `src/screens/`) só embrulham pedaços que agora são exportados de `Mala.tsx` (`Budget`, `Pool`, `StopSpend`, `Converter`, `Debts`, `ExpenseList`) e de `Turma.tsx` (`Decisions`). Esse era o estado ao fim da Fase 2. **Atualização da Fase 6:** os quatro wrappers financeiros foram substituídos e os pedaços de dinheiro removidos de `Mala.tsx`; a **Fase 7** continua responsável por `TurmaHub` e `Votos`.
-- **`/turma` ainda é a tela Turma antiga**, agora com uma lista de atalhos para Votos, Documentos, Mala, Diário, Ajustes e Conta, que saíram da navegação principal. `Decisions` continua em `/turma`, porque links existentes (`plan.ts`, push de `polls.ts`) usam `/turma#decisoes` e `#nova-votacao`. A Fase 7 precisa migrar esses links para `/turma/votos`.
+- **Telas temporárias nas rotas novas.** `Dinheiro`, `Orcamento`, `Extrato`, `Acerto` e `Votos` (em `src/screens/`) só embrulham pedaços que agora são exportados de `Mala.tsx` (`Budget`, `Pool`, `StopSpend`, `Converter`, `Debts`, `ExpenseList`) e de `Turma.tsx` (`Decisions`). Esse era o estado ao fim da Fase 2. **Atualização da Fase 6:** os quatro wrappers financeiros foram substituídos e os pedaços de dinheiro removidos de `Mala.tsx`; a **Fase 7** (concluída) trocou `TurmaHub` e `Votos`.
+- **`/turma` ainda é a tela Turma antiga**, agora com uma lista de atalhos para Votos, Documentos, Mala, Diário, Ajustes e Conta, que saíram da navegação principal. `Decisions` continua em `/turma`, porque links existentes (`plan.ts`, push de `polls.ts`) usam `/turma#decisoes` e `#nova-votacao`. **Atualização da Fase 7:** os links (`plan.ts`, `polls.ts`, `suggestions.ts`, `Explorar`, `PlanningHome`) agora apontam para `/turma/votos`; a antiga âncora `/turma#decisoes` não existe mais (push já enviados com ela caem em `/turma`).
 - **Topo da Início no celular.** ✅ Resolvido na Fase 4: o seletor e a `AvatarStack` estão dentro do hero de `Inicio.tsx`, e o bloco `homeTop` saiu do shell.
 - **`OfflineBanner`** continua em `AppProviders`, que é global e cobre também `/entrar`, `/conta` etc. Não foi para o `TripShell`.
 - **Sheet e o botão Voltar.** O Sheet empurra uma entrada no histórico (`history.pushState`, integrado ao router do Next 16) e a remove ao fechar. Um clique em link interno dentro do Sheet é detectado e não chama `back()`. Se uma ação chamar `router.push` logo depois de fechar o Sheet, sobra uma entrada extra no histórico: inofensiva, mas pede um Voltar a mais. O diálogo de confirmação usa `closeOnBack={false}`. Ainda não existe fechar o Sheet arrastando para baixo.
@@ -146,6 +152,42 @@ Este plano implementa esse design **no app Next.js atual**:
 - **Testes e2e.** Saíram os 2 da história de scroll. Entraram: hero e números do Dinheiro, 3 visíveis + "ver todas", "Pôr no dia 6" cria a atividade e o cartão some (conferido na Parada Cusco do Roteiro), dispensar, e reduced motion. O teste de lembrete de voto agora vai para `/turma/votos`.
 
 ---
+
+### Ressalvas e decisões da Fase 9
+
+- **Escopo desta rodada:** restilização de `Mala`, `Documentos` e `Diário`, `srcset` das fotos, limpeza e testes. A validação com Supabase real e em aparelho físico (PWA Android/iOS, modo avião) foi **dada como feita pelo responsável do projeto**, que tem ressalvas próprias; elas não estão registradas aqui e não foram reproduzidas por mim.
+- **Mala / Documentos / Diário** usam `Button`, `Field`, `FieldGrid`, `Chip`, `Segmented`, `Checkbox`, `Badge`, `Card`, `EmptyState`, `Progress`, `ScreenHeader` e `IconButton`; os módulos CSS usam só tokens novos. Mudanças visíveis: Mala com cartão `dark` de progresso, Pendências sem a cor rotativa; Documentos como cartões com faixa da categoria (sem "furos" de ingresso), zona de soltar com borda tracejada, aviso do cofre como `Card suggest`; Diário com `Segmented` Antes/Durante/Depois, cartões de parada sem rotação e sem recortes de forma (`clip-path`), placeholder listrado mais suave, reações com `Chip`. A comparação visual foi por screenshot em 375 e ~1280 px, **não** pixel a pixel contra o canvas (ele não tem artboard para essas três telas). O visualizador de documento, a revisão de upload e os Sheets de item/pendência/inspiração mantêm o fluxo anterior, só com os componentes novos.
+- **Seletor de teste:** os cartões de documento têm `data-doc` (`article[data-doc]`), porque a classe `ticket` virou CSS Module.
+- **Foto de Fotos e prints** deixou de girar e de ter formas; a variável `CYCLE` ainda colore os placeholders (misturada a 22% com `--field`).
+- **`srcset`:** `Photo` usa `photoSrcSet()` (`lib/photos.ts`, `PHOTO_WIDTHS = 400/800/1200`) para URLs de `upload.wikimedia.org/.../NNNpx-arquivo`, com `sizes` padrão `(min-width: 1024px) 480px, 100vw`. Se o `srcset` falhar, o `<img>` volta ao `src` simples antes de cair no placeholder. **Não validado ao vivo (sem rede para a Wikimedia):** a Wikimedia tem restringido thumbs a larguras "oficiais"; se 400/800 forem recusadas, ajuste `PHOTO_WIDTHS`. Fotos próprias (URL assinada do Supabase) não ganham `srcset`: seguem no tamanho original comprimido.
+- **Compatibilidade em `globals.css` NÃO foi removida por inteiro.** Saíram os aliases de variáveis (`--acc`, `--card`, `--soft`, `--deep`, `--font-display`, `--font-mono`, `--r-*`, `--motif`…; os 4 CSS Modules que ainda os usavam foram migrados) e as classes sem uso (`.av`, `.bar`, `.bullet`, `.ticket*`, `.notch`, `.view`, `.btn-ghost`, `.btn-icon`, `.rv`/`.gw`/`.gy`). **Continuam** `.btn*`, `.field`, `.grid2`, `.card`, `.chip`, `.check`, `.pill`, `.tag`, `.ai*`, `.disp`, `.mono`, `.h3`, `.hint`/`.err`, `.page-title`, `.split`/`.col-*`, `.tap`, `.motif`, usadas por telas fora desta rodada: `conta`, `entrar`, `convite`, `offline`, `EditTrip`, `Votos` (partes), `Turma` (partes), `Descobrir` (partes), `VaultContext`, `feedback` (confirmação), `ErrorBox`, `PlaceSearch`, `money/ExpenseSheet`, `PoolSheets`, `Converter` e `dev/ui`. Foi feita uma conversão automática de botões, campos e selos de uma linha nessas telas (`<button className="btn…">` → `Button`, `label.field` → `Field`, `.pill` → `Badge`), validada só por typecheck e pelos e2e; o que ficou em várias linhas ou com formato diferente continua com a classe antiga. Para fechar a limpeza, migrar esses arquivos e apagar o bloco "compatibilidade".
+- **`Botão perigoso`:** `btn-danger` virou `Button variant="secondary"` com texto na cor `--warn` (não há variante `danger` no `Button`).
+- **Limpeza que já estava feita:** `dinheiro.module.css` removido; ícones `map`, `book` e `chev` removidos (`minus` fica); `ORS_API_KEY` fora do `.env.example`; README sem referências a identidade e com a nota "Colunas sem uso". `plan.module.css` e `planning.module.css` seguem em uso.
+- **Redirects** passaram de 307 para **308** (`permanent: true`): navegadores guardam o 308 em cache.
+- **Testes:** a suíte e2e já cobria abas, sugestão aceita, links da Parada, Orçamento, gasto ligado, aporte, votação, teclado, reduced motion e overflow de 360 a 1440 px; não foi reescrita. Entrou 1 asserção nova de unidade (`photoSrcSet`). `hookTimeout: 120000` no `vitest.config.ts`, porque o PGlite estourava 10 s de inicialização sob carga.
+- **Verificação:** `npm run typecheck` ok; `npm run build` ok; `vitest` 208 testes verdes (unitários e banco); `npx playwright test` 47 de 47 verdes contra o build de produção. **Lighthouse (acessibilidade ≥ 95, performance ≥ 85) não foi medido**: o ambiente do agente não roda o Lighthouse; falta rodar no celular contra o deploy. Se um `next dev` ficou rodando antes do `typecheck`/`build`, apague `.next` (o dev gera tipos que quebram o `tsc`).
+
+### Ressalvas e decisões da Fase 8
+
+- **Descobrir** (`screens/Descobrir.tsx`, `lib/discover.ts`): 5 perguntas em `StepChat` (teto por pessoa, quando/dias, pessoas, vibe, origem), respostas viram chips editáveis no resultado e são gravadas por pessoa em `trip_preferences` (upsert; se a tabela não existir, o resultado sai mesmo assim). Resultado: três lugares (o 1º com foto), "% com a turma", custo ≈ por pessoa com selo ESTIMATIVA e `fitOf`, roteiro resumido, chips de fatos, **"Montar esta trilha"** e **"Votar"** (poll `free`, como era em Explorar).
+- **"% com a turma"** (`groupAffinity`): média, entre quem respondeu, da adequação por teto e vibe (`personFit`); com menos de 2 respondentes o selo some. A vibe vem de `tags` devolvidas pela IA; é uma heurística local, não uma medida de preferência real.
+- **"Montar esta trilha"**: grava `trips.destinations` e cria as paradas do `stops[]` da IA, repartindo as noites da viagem (`planStops`; o resto vai para as primeiras paradas; menos noites que paradas reduz a lista) e vai para a Início. **As paradas ficam sem coordenadas, altitude e transporte**: o mapa e os trechos precisam ser preenchidos depois. Se uma etapa falhar no meio, o destino pode ficar gravado com parte das paradas (as escritas não são atômicas).
+- **Chip "sem visto" não existe**: sem fonte oficial a regra manda deixar de fora (§5.4). Os fatos mostrados são nº de paradas, tempo/modo e vibes.
+- **API** `explore kind:'destinations'` agora devolve `stops[]`, `photo_query` e `tags` (campos com padrão vazio, então respostas antigas continuam válidas). **Não foi testado com provedor de IA real.**
+- **Sem destino leva ao Descobrir pela trilha:** como a IA e a cota exigem uma trilha existente, "Começar sem destino" em `/nova-trilha` pede só nome e datas, **cria a trilha** e abre `/t/[id]/descobrir`, em vez de rodar o questionário antes de criar (o planning previa o questionário dentro do passo 2).
+- **Trilha com destino:** o Descobrir ainda abre, mas só mostra as sugestões; "Montar" e "Votar" ficam ocultos. O antigo modo "O que mais dá pra ver?" (bate-voltas perto das paradas) **foi removido** com `Explorar.tsx`; as extras por parada vivem na página da parada (Fase 5). Na demonstração o questionário funciona, mas a IA fica desligada.
+- **`/nova-trilha`:** reescrita em `StepChat` (destino → [nome] → datas), sem passo de identidade, sem a tela de geração e sem `onboarding.module.css`; só a cor de destaque acompanha o destino do dicionário (grava `trips.accent`). A trilha passa a ser criada com `identity: null`.
+- **Identidade removida:** saíram `api/ai/identity`, `lib/identity/{generate,validate,render,shapes,fontmap}`, a tarefa `identity` de `lib/ai` e os testes correspondentes. `/identidades` já tinha saído na Fase 1. **Continuam**, de propósito, `dictionary(.data)`, `types`, `accent` e `contrast` (usados pela demo, pelo accent e pelos destinos sugeridos), a coluna `trips.identity` (agora nula nas trilhas novas) e `identity` no `TripContext` (`@deprecated`). A limpeza final do que sobrou fica para a Fase 9.
+
+### Ressalvas e decisões da Fase 7
+
+- **Hub:** `Turma.tsx` virou o `TurmaHub` (§5.7): grid de membros com pendência principal (voto › documento › aporte; `memberPending`), "Decidir juntos" (poll aberto mais urgente expandido, demais em `ListRow`, "Ver todas (N)"), matriz de documentos (`docMatrix`), Mala da turma com "quem leva o quê" e 2 cartões do Diário. Convite e membro viraram Sheets (`InviteSheet`, `MemberSheet`); o membro abre para o organizador e para a própria pessoa (necessário para "Sair da trilha").
+- **Votos:** toda a lógica (votar, decidir/empate/aplicar ao roteiro, nova votação, editar) foi movida **sem mudança de regras** para `Votos.tsx`; `/turma/votos` é a tela completa. No hub, tocar nas opções leva a Votos, onde o voto acontece (o hub não vota inline). O texto do empate cita "Dinheiro › Hospedagem" como no canvas, mas o hub só avisa; a aplicação continua sendo a do `close_poll`.
+- **Matriz de documentos:** colunas Passaporte/RG, Passagens e Seguro. **Vacina ficou de fora** (sem regra com fonte oficial, SPEC §9.1). Documento **privado de outra pessoa não chega ao cliente (RLS)**, então aparece "—" mesmo existindo; mostrar "existente sem revelar" exigiria uma RPC/view agregada, não criada aqui.
+- **Mala:** campo "Quem leva" (pessoa ou "Todos") ao adicionar e no editar item, chip na cor da pessoa nas linhas. A escrita usa `packing_items.assignee_id` (migration `00008`); sem ela, salvar com responsável falha. A tela de Mala em si ganhou só isso: **o redesign completo de `Mala`, `Documentos` e `Diario` ainda não foi feito** (continuam com o visual da compatibilidade da Fase 1; a limpeza fica para a Fase 9).
+- **Sheets 6.6:** convite (com Compartilhar quando há `navigator.share`) e membro foram feitos. Nova votação, votar/decidir e item da mala usam o `Dialog` (já é o `Sheet`) com o formulário anterior, só trocando de lugar. Documento (OCR/visualizador) e entrada do diário **não foram restilizados**.
+- **Diário no hub:** mostra as 2 últimas entradas só com texto (sem foto) e sem o "Hoje" durante a viagem.
+- **Não validado:** fluxos com Supabase real, realtime entre aparelhos e comparação visual com o PDF.
 
 ### Ressalvas e decisões da Fase 6
 
@@ -768,19 +810,19 @@ Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/
   - um aporte muda "Juntado" e o status da pessoa;
   - o Orçamento recalcula ao trocar o estilo ou o ritmo, igual ao artboard interativo.
 
-### Fase 7 — Turma
+### Fase 7 — Turma · ✅ implementada e validada localmente (ver ressalvas no topo; Documentos/Diário/Mala restilizados na Fase 9)
 
 - `TurmaHub` (5.7), `Votos`, e `Documentos`, `Mala` e `Diario` restilizados como subtelas. Sheets 6.6.
 - Matriz de documentos e "quem leva o quê".
 - **Aceite:** comparar com `Turma.dc.html`; os fluxos de voto atuais continuam funcionando (decidir, empate, aplicar ao roteiro).
 
-### Fase 8 — Descobrir e nova trilha
+### Fase 8 — Descobrir e nova trilha · ✅ implementada e validada localmente (ver ressalvas no topo)
 
 - `Descobrir.tsx` (5.4), `trip_preferences`, `/nova-trilha` em `StepChat` sem o passo de identidade, `/t/[id]/descobrir`.
 - Remover `screens/Explorar.tsx` e `/identidades`.
 - **Aceite:** comparar com `Descobrir.dc.html`; "Montar esta trilha" cria as paradas e leva à Início; "Votar" cria o poll de destino.
 
-### Fase 9 — Polimento, PWA, acessibilidade e testes
+### Fase 9 — Polimento, PWA, acessibilidade e testes · ✅ implementada e validada localmente (ver ressalvas no topo; faltam o Lighthouse e remover o resto da compatibilidade em `globals.css`)
 
 - Reescrever `tests/e2e/demo.spec.ts` com as rotas e textos novos:
   - abas;

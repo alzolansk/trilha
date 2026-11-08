@@ -85,6 +85,12 @@ export const exploreDestSchema = z.object({
     hours: z.number().min(0.2).max(40),
     cost_low: money,
     cost_high: money,
+    /** paradas sugeridas do roteiro (2–6 nomes), usadas por "Montar esta trilha" */
+    stops: z.array(z.string().min(2).max(60)).max(6).default([]),
+    /** busca de foto (nome do lugar + palavra-chave) */
+    photo_query: z.string().max(80).nullable().optional(),
+    /** vibes que o lugar atende (natureza, cidade, praia, cultura, aventura, comida) */
+    tags: z.array(z.string().max(20)).max(6).default([]),
   })).min(1).max(6),
 });
 

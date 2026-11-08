@@ -1,10 +1,10 @@
 import { Suspense } from 'react';
-import Explorar from '@/screens/Explorar';
+import Descobrir from '@/screens/Descobrir';
 
 export default function Page() {
   return (
     <Suspense>
-      <Explorar />
+      <Descobrir />
     </Suspense>
   );
 }

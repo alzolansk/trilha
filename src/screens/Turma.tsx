@@ -1,41 +1,284 @@
 'use client';
+// TurmaHub (planning §5.7 · Turma.dc.html): membros, decidir juntos, documentos, mala da turma e diário.
+// Votos, Documentos, Mala e Diário vivem nas subtelas /turma/*.
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { Avatar, Icon, useReveal } from '../components/ui/primitives';
+import { useAction, useConfirm, useToast } from '../components/ui/feedback';
+import { Sheet } from '../components/ui/Sheet';
+import { Avatar, Icon } from '../components/ui/primitives';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
 import { ListRow } from '../components/ui/ListRow';
+import { Progress } from '../components/ui/Progress';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
-import { Checkbox } from '../components/ui/Checkbox';
 import { useAuth } from '../data/AuthContext';
 import { useBundle } from '../data/TripContext';
-import type { Invite, Poll, PollOption, PollTarget, Role } from '../data/types';
-import { packingProgress, sortedStops } from '../lib/derive';
-import { track } from '../lib/analytics';
+import type { DocCategory, Invite, Poll, Role, TripBundle } from '../data/types';
+import { packingProgress } from '../lib/derive';
 import { SITE_URL } from '../lib/env';
-import { dayMonth, initials, MONTHS, pad2, plural, ROLE_LABEL } from '../lib/format';
-import { fgOn } from '../lib/identity/contrast';
-import { CYCLE } from '../lib/identity/accent';
-import { formatMoney, toCents } from '../lib/money';
-import { canDecide, myVotes, optionsOf, pollState, pollWinners, tallyPoll, votersCount } from '../lib/polls';
+import { dayMonth, plural, ROLE_LABEL } from '../lib/format';
+import { memberPoolStatus } from '../lib/money';
+import { myVotes, optionsOf, pollState, tallyPoll, votersCount, pollWinners } from '../lib/polls';
 import { getSupabase } from '../lib/supabase/client';
-import { dateRange, instantToWall, wallToInstant } from '../lib/time';
 import t from './turma.module.css';
+import { Field, FieldGrid } from '../components/ui';
+
+/** Documentos esperados por viagem (planning §5.7). Vacina só entraria com regra de fonte oficial (SPEC §9.1): fica de fora. */
+export const DOC_COLUMNS: { cat: DocCategory; label: string }[] = [
+  { cat: 'identidade', label: 'Passaporte / RG' },
+  { cat: 'passagem', label: 'Passagens' },
+  { cat: 'seguro', label: 'Seguro' },
+];
+
+/** Quem tem cada documento. Documento privado só aparece para quem pode vê-lo (RLS): para os outros conta como "—". */
+export function docMatrix(b: Pick<TripBundle, 'documents' | 'members'>): { cat: DocCategory; label: string; has: Map<string, boolean>; missing: number }[] {
+  return DOC_COLUMNS.map((c) => {
+    const has = new Map<string, boolean>();
+    for (const m of b.members) has.set(m.user_id, b.documents.some((d) => d.owner_id === m.user_id && d.category === c.cat && d.status === 'ready'));
+    return { ...c, has, missing: b.members.filter((m) => !has.get(m.user_id)).length };
+  });
+}
+
+/** Pendência principal da pessoa: voto, documento ou aporte (ordem do planning). `null` = em dia. */
+export function memberPending(b: TripBundle, uid: string, now = Date.now()): string | null {
+  const openPolls = (b.polls ?? []).filter((p) => pollState(b, p.id, now) === 'open');
+  if (openPolls.some((p) => myVotes(b, p.id, uid).length === 0)) return 'Falta votar';
+  if (!docMatrix(b)[0].has.get(uid)) return 'Falta documento';
+  if (memberPoolStatus(b, now).find((m) => m.userId === uid)?.status === 'atrasado') return 'Aporte atrasado';
+  return null;
+}
 
 export default function Turma() {
-  const { bundle: b, isOrganizer, canEdit, source, reload, me, profileOf, base } = useBundle();
+  const { bundle: b, isOrganizer, canEdit, me, profileOf, base } = useBundle();
+  const [member, setMember] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
   const packed = packingProgress(b);
-  const openPolls = (b.polls ?? []).filter((p) => pollState(b, p.id, Date.now()) === 'open').length;
+  const now = Date.now();
+  const polls = b.polls ?? [];
+  const deadline = (p: Poll) => (p.closes_at ? Date.parse(p.closes_at) : Infinity);
+  const open = polls.filter((p) => pollState(b, p.id, now) === 'open').sort((x, y) => deadline(x) - deadline(y));
+  const awaiting = polls.filter((p) => pollState(b, p.id, now) === 'awaiting_decision');
+  const pending = [...open, ...awaiting];
+  const matrix = docMatrix(b);
+  const missingDocs = matrix.reduce((n, c) => n + c.missing, 0);
+  const entries = [...b.journalEntries].sort((a, c) => (c.entry_date ?? '').localeCompare(a.entry_date ?? '')).slice(0, 2);
+
+  return (
+    <div className="wrap">
+      <ScreenHeader title="Turma" subtitle="Quem viaja junto e o que falta decidir." action={canEdit ? <Button size="sm" onClick={() => setInviting(true)}><Icon name="plus" size={16} />Convidar</Button> : null} />
+
+      <section aria-label="Membros" className={t.members}>
+        {b.members.map((m) => {
+          const p = profileOf(m.user_id);
+          const name = p?.display_name ?? 'Pessoa';
+          const pend = memberPending(b, m.user_id, now);
+          const body = (
+            <>
+              <Avatar name={name} color={p?.color} me={m.user_id === me} size={44} />
+              <b className={t.mName}>{name}{m.user_id === me ? ' (você)' : ''}</b>
+              <span className={t.mPend} data-ok={!pend}>{pend ?? 'em dia'}</span>
+            </>
+          );
+          return isOrganizer || m.user_id === me ? (
+            <button key={m.user_id} type="button" className={t.member} onClick={() => setMember(m.user_id)} aria-label={`Abrir ${name}`}>{body}</button>
+          ) : <div key={m.user_id} className={t.member}>{body}</div>;
+        })}
+      </section>
+
+      <section aria-labelledby="t-decidir" className={t.block}>
+        <div className={t.blockHead}>
+          <h2 id="t-decidir" className="disp">Decidir juntos</h2>
+          <Link href={`${base}/turma/votos`} className={t.seeAll}>Ver todas ({open.length + awaiting.length})</Link>
+        </div>
+        {pending.length ? (
+          <>
+            <TopPoll poll={pending[0]} />
+            {pending.slice(1).map((p) => {
+              const { voted, total } = votersCount(b, p.id);
+              return <ListRow key={p.id} icon="check" title={p.question} subtitle={`${voted} de ${total} votaram`} href={`${base}/turma/votos`} />;
+            })}
+          </>
+        ) : <p className="muted" style={{ margin: 0 }}>Nada pra decidir agora. Quando tiver dúvida entre opções, abra uma votação.</p>}
+      </section>
+
+      <section aria-labelledby="t-docs" className={t.block}>
+        <div className={t.blockHead}>
+          <h2 id="t-docs" className="disp">Documentos</h2>
+          <Badge tone={missingDocs ? 'warn' : 'ok'}>{missingDocs ? `faltam ${missingDocs}` : 'completo'}</Badge>
+        </div>
+        <Link href={`${base}/turma/documentos`} className={t.matrixLink} aria-label="Abrir documentos da turma">
+          <div className={t.matrix} role="table" aria-label="Documentos por pessoa" style={{ gridTemplateColumns: `minmax(0,1.4fr) repeat(${b.members.length}, minmax(34px,1fr))` }}>
+            <span role="row" style={{ display: 'contents' }}>
+              <span role="columnheader" className="sr-only">Documento</span>
+              {b.members.map((m) => <span role="columnheader" key={m.user_id} className={t.mHead}><Avatar name={profileOf(m.user_id)?.display_name ?? '?'} color={profileOf(m.user_id)?.color} size={24} /></span>)}
+            </span>
+            {matrix.map((row) => (
+              <span role="row" key={row.cat} style={{ display: 'contents' }}>
+                <span role="rowheader" className={t.mLabel}>{row.label}</span>
+                {b.members.map((m) => {
+                  const ok = row.has.get(m.user_id);
+                  return <span role="cell" key={m.user_id} className={t.cell} data-ok={ok} aria-label={`${profileOf(m.user_id)?.display_name ?? 'Pessoa'}: ${ok ? 'tem' : 'falta'}`}>{ok ? '✓' : '—'}</span>;
+                })}
+              </span>
+            ))}
+          </div>
+        </Link>
+        <p className={t.note}><Icon name="lock" size={14} /> Criptografados e disponíveis sem internet.</p>
+      </section>
+
+      <section aria-labelledby="t-mala" className={t.block}>
+        <div className={t.blockHead}>
+          <h2 id="t-mala" className="disp">Mala da turma</h2>
+          <Link href={`${base}/turma/mala`} className={t.seeAll} aria-label="Abrir a mala">Abrir</Link>
+        </div>
+        <Progress value={packed.total ? packed.done / packed.total : 0} label={`${packed.done} de ${packed.total} itens na mochila`} />
+        <p className={t.note} style={{ margin: 0 }}>{packed.done} de {packed.total} prontos</p>
+        <WhoBrings />
+      </section>
+
+      <section aria-labelledby="t-diario" className={t.block}>
+        <div className={t.blockHead}>
+          <h2 id="t-diario" className="disp">Diário</h2>
+          <Link href={`${base}/turma/diario`} className={t.seeAll} aria-label="Abrir o diário">Abrir</Link>
+        </div>
+        {entries.length ? (
+          <div className={t.diary}>
+            {entries.map((e) => (
+              <Link key={e.id} href={`${base}/turma/diario`} className={t.entry}>
+                <span className={t.eyebrow}>{e.kind === 'inspiracao' ? 'INSPIRAÇÃO' : 'REGISTRO'}{e.entry_date ? ` · ${dayMonth(e.entry_date)}` : ''}</span>
+                <b>{e.title || e.place_name || 'Sem título'}</b>
+              </Link>
+            ))}
+          </div>
+        ) : <p className="muted" style={{ margin: 0 }}>Inspirações e registros da viagem aparecem aqui.</p>}
+      </section>
+
+      <nav aria-label="Da trilha" className={t.hub}>
+        {canEdit ? <ListRow icon="settings" title="Ajustes da trilha" subtitle="Datas, destino, moeda e aparência" href={`${base}/ajustes`} /> : null}
+        <ListRow icon="users" title="Conta" subtitle="Notificações e cofre" href="/conta" />
+      </nav>
+
+      {member ? <MemberSheet uid={member} onClose={() => setMember(null)} /> : null}
+      {inviting ? <InviteSheet onClose={() => setInviting(false)} /> : null}
+    </div>
+  );
+}
+
+/** O poll aberto mais urgente, expandido (opções como botões grandes). O voto em si acontece em /turma/votos. */
+function TopPoll({ poll }: { poll: Poll }) {
+  const { bundle: b, base, me, profileOf } = useBundle();
+  const options = optionsOf(b, poll.id);
+  const tally = new Map(tallyPoll(b, poll.id).map((r) => [r.optionId, r]));
+  const { voted, total } = votersCount(b, poll.id);
+  const winners = pollWinners(b, poll.id);
+  const max = Math.max(1, ...options.map((o) => tally.get(o.id)?.votes ?? 0));
+  const mine = myVotes(b, poll.id, me);
+  const tie = winners.length > 1 && pollState(b, poll.id) === 'open';
+  return (
+    <article className={t.top} aria-labelledby={`top-${poll.id}`}>
+      <span className={t.eyebrow}>{voted} de {total} votaram</span>
+      <h3 id={`top-${poll.id}`} className="disp">{poll.question}</h3>
+      <ul className={t.topOpts}>
+        {options.map((o) => {
+          const r = tally.get(o.id);
+          const votes = r?.votes ?? 0;
+          return (
+            <li key={o.id}>
+              <Link href={`${base}/turma/votos`} className={t.topOpt} data-mine={mine.includes(o.id)}>
+                <span className={t.optHead}><b>{o.label}</b>{o.price != null && o.currency ? <span className="mono">{o.price} {o.currency}</span> : null}</span>
+                <span className={t.optBar}><i style={{ width: `${(votes / max) * 100}%` }} /></span>
+                <span className={t.optMeta}>
+                  {plural(votes, 'voto', 'votos')}
+                  {r?.voters.length ? ` · ${r.voters.map((u) => profileOf(u)?.display_name ?? 'Pessoa').join(', ')}` : ''}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {tie ? <p className={t.tie}>Empate. Seu voto decide, e a escolha já vai para Dinheiro › Hospedagem.</p> : null}
+    </article>
+  );
+}
+
+/** "Quem leva o quê": itens com responsável (chip na cor da pessoa) e "todos" para os individuais. */
+function WhoBrings() {
+  const { bundle: b, profileOf, base } = useBundle();
+  const items = b.packingItems.filter((i) => !i.done).slice(0, 6);
+  if (!items.length) return null;
+  return (
+    <ul className={t.who} aria-label="Quem leva o quê">
+      {items.map((i) => {
+        const p = i.assignee_id ? profileOf(i.assignee_id) : null;
+        return (
+          <li key={i.id}>
+            <Link href={`${base}/turma/mala`} className={t.whoRow}>
+              <span>{i.label}</span>
+              <span className={t.chipWho} style={p?.color ? { background: p.color } : undefined} data-all={!p}>{p ? p.display_name.split(' ')[0] : 'todos'}</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function MemberSheet({ uid, onClose }: { uid: string; onClose: () => void }) {
+  const { bundle: b, isOrganizer, me, profileOf, source, reload } = useBundle();
   const { refreshTrips } = useAuth();
   const { run, busy } = useAction();
   const confirm = useConfirm();
+  const m = b.members.find((x) => x.user_id === uid);
+  if (!m) return null;
+  const p = profileOf(uid);
+  const name = p?.display_name ?? 'Pessoa';
+  const self = uid === me;
+  const pend = memberPending(b, uid);
+  const changeRole = (r: Role) => run(() => source.updateWhere('trip_members', { trip_id: b.trip.id, user_id: uid }, { role: r }).then(reload), { success: 'Papel atualizado.' });
+  const remove = async () => {
+    const ok = await confirm({
+      title: self ? 'Sair da trilha?' : `Remover ${name}?`,
+      message: self ? 'Você perde o acesso a esta trilha neste e em outros aparelhos.' : 'A pessoa perde o acesso imediatamente. Cópias já baixadas num aparelho desconectado só somem quando ele voltar a sincronizar; não dá pra apagar remotamente um aparelho offline.',
+      confirmLabel: self ? 'Sair' : 'Remover',
+    });
+    if (!ok) return;
+    await run(async () => {
+      await source.remove('trip_members', { trip_id: b.trip.id, user_id: uid });
+      if (self) {
+        await refreshTrips();
+        window.location.href = '/';
+      } else await reload();
+    });
+    onClose();
+  };
+  return (
+    <Sheet open onClose={onClose} title={name} description={`${ROLE_LABEL[m.role]}${self ? ' · você' : ''}`}>
+      <div className={t.sheetBody}>
+        <p style={{ margin: 0 }}><b>Pendências:</b> {pend ?? 'em dia'}</p>
+        {isOrganizer && !self ? (
+          <label className="field">Papel
+            <select aria-label={`Papel de ${name}`} value={m.role} disabled={busy} onChange={(e) => void changeRole(e.target.value as Role)}>
+              <option value="organizer">Organiza</option>
+              <option value="editor">Pode editar</option>
+              <option value="viewer">Só consulta</option>
+            </select>
+          </label>
+        ) : null}
+        <button type="button" className="btn btn-danger tap" onClick={() => void remove()} disabled={busy}>{self ? 'Sair da trilha' : `Remover ${name}`}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+function InviteSheet({ onClose }: { onClose: () => void }) {
+  const { bundle: b, isOrganizer, source } = useBundle();
+  const { run, busy } = useAction();
   const toast = useToast();
-  const cols = CYCLE;
   const [invites, setInvites] = useState<Invite[]>([]);
   const [link, setLink] = useState<string | null>(null);
   const [role, setRole] = useState<Exclude<Role, 'organizer'>>('editor');
   const [hours, setHours] = useState(168);
   const [uses, setUses] = useState(5);
-  useReveal([b.members.length]);
 
   const loadInvites = useCallback(async () => {
     const sb = getSupabase();
@@ -51,521 +294,72 @@ export default function Turma() {
     run(async () => {
       const token = await source.rpc<string>('create_invite', { p_trip: b.trip.id, p_role: role, p_hours: hours, p_max_uses: uses });
       // Token no fragmento (#): não vai para logs de servidor nem cabeçalho Referer.
-      const origin = SITE_URL || window.location.origin;
-      setLink(`${origin}/convite/aceitar#${token}`);
+      setLink(`${SITE_URL || window.location.origin}/convite/aceitar#${token}`);
       await loadInvites();
     }, { success: 'Convite criado. Copie o link agora: ele não é mostrado de novo.' });
 
   const revoke = (i: Invite) =>
     run(async () => {
-      const sb = getSupabase()!;
-      const r = await sb.from('trip_invites').update({ revoked_at: new Date().toISOString() }).eq('id', i.id);
+      const r = await getSupabase()!.from('trip_invites').update({ revoked_at: new Date().toISOString() }).eq('id', i.id);
       if (r.error) throw r.error;
       await loadInvites();
     }, { success: 'Convite revogado.' });
 
-  const changeRole = (uid: string, r: Role) => run(() => source.updateWhere('trip_members', { trip_id: b.trip.id, user_id: uid }, { role: r }).then(reload), { success: 'Papel atualizado.' });
-  const removeMember = async (uid: string) => {
-    const self = uid === me;
-    const ok = await confirm({
-      title: self ? 'Sair da trilha?' : `Remover ${profileOf(uid)?.display_name ?? 'pessoa'}?`,
-      message: self ? 'Você perde o acesso a esta trilha neste e em outros aparelhos.' : 'A pessoa perde o acesso imediatamente. Cópias já baixadas num aparelho desconectado só somem quando ele voltar a sincronizar; não dá pra apagar remotamente um aparelho offline.',
-      confirmLabel: self ? 'Sair' : 'Remover',
-    });
-    if (!ok) return;
-    await run(async () => {
-      await source.remove('trip_members', { trip_id: b.trip.id, user_id: uid });
-      if (self) {
-        await refreshTrips();
-        window.location.href = '/';
-      } else await reload();
-    });
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link!); toast('Link copiado.'); } catch { toast('Copie manualmente.'); }
   };
-
-  const now = Date.now();
-  return (
-    <div className="wrap">
-      <ScreenHeader title="Turma" subtitle="Quem viaja junto. Organizador administra; editores mexem no conteúdo; leitores consultam e votam." />
-      {/* Fase 2: Documentos, Mala e Diário saíram da navegação principal e vivem aqui (planning §4.3).
-          A Fase 7 troca esta lista pelos blocos do TurmaHub (Turma.dc.html). */}
-      <nav aria-label="Da turma" className={t.hub}>
-        <ListRow icon="check" title="Votos" subtitle={`${openPolls} ${openPolls === 1 ? 'aberta' : 'abertas'}`} href={`${base}/turma/votos`} />
-        <ListRow icon="doc" title="Documentos" subtitle={`${b.documents.length} salvos · criptografados e disponíveis sem internet`} href={`${base}/turma/documentos`} />
-        <ListRow icon="bag" title="Mala e pendências" subtitle={`${packed.done} de ${packed.total} itens`} href={`${base}/turma/mala`} />
-        <ListRow icon="book" title="Diário" subtitle="Inspirações, registros e a retrospectiva" href={`${base}/turma/diario`} />
-        {canEdit ? <ListRow icon="settings" title="Ajustes da trilha" subtitle="Datas, destino, moeda e aparência" href={`${base}/ajustes`} /> : null}
-        <ListRow icon="users" title="Conta" subtitle="Notificações e cofre" href="/conta" />
-      </nav>
-      <section className="split">
-        <div className="col-side" style={{ gap: 12 }}>
-          {b.members.map((m, i) => {
-            const p = profileOf(m.user_id);
-            const c = cols[i % 3];
-            return (
-              <div key={m.user_id} className="card rv" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, borderRadius: 22, flexWrap: 'wrap' }}>
-                <span className="av" style={{ width: 42, height: 42, background: c, color: fgOn(c) }}>{initials(p?.display_name ?? '?')}</span>
-                <span style={{ flex: 1, fontWeight: 600 }}>{p?.display_name ?? 'Pessoa'}{m.user_id === me ? ' (você)' : ''}</span>
-                {isOrganizer && m.user_id !== me ? (
-                  <select aria-label={`Papel de ${p?.display_name}`} value={m.role} disabled={busy} onChange={(e) => void changeRole(m.user_id, e.target.value as Role)} style={{ minHeight: 40, borderRadius: 12, border: '1px solid var(--line)', background: 'var(--bg)' }}>
-                    <option value="organizer">Organiza</option>
-                    <option value="editor">Pode editar</option>
-                    <option value="viewer">Só consulta</option>
-                  </select>
-                ) : <span className="mono" style={{ fontSize: 12, color: 'var(--mute)' }}>{ROLE_LABEL[m.role]}</span>}
-                {(isOrganizer && m.user_id !== me) || m.user_id === me ? (
-                  <button className="btn btn-sm btn-danger tap" onClick={() => void removeMember(m.user_id)}>{m.user_id === me ? 'Sair' : 'Remover'}</button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-        <div className="col-main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <Decisions />
-          {source.kind === 'demo' ? (
-            <div className="empty"><h2 className="disp">Convites na trilha real</h2><p style={{ margin: 0 }}>Na demonstração não dá pra convidar. Crie uma trilha para chamar a turma.</p></div>
-          ) : isOrganizer ? (
-            <article className="card rv" style={{ padding: 26, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <h2 className="disp" style={{ margin: 0, fontSize: 26 }}>Convidar</h2>
-              <div className="grid2">
-                <label className="field">Papel<select value={role} onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')}><option value="editor">Pode editar</option><option value="viewer">Só consulta</option></select></label>
-                <label className="field">Validade<select value={hours} onChange={(e) => setHours(Number(e.target.value))}><option value={24}>1 dia</option><option value={72}>3 dias</option><option value={168}>7 dias</option><option value={720}>30 dias</option></select></label>
-                <label className="field">Usos<input type="number" min={1} max={100} value={uses} onChange={(e) => setUses(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} /></label>
-              </div>
-              <button className="btn btn-primary tap" style={{ alignSelf: 'flex-start' }} onClick={create} disabled={busy}><Icon name="plus" size={18} />Gerar link de convite</button>
-              {link ? (
-                <label className="field">Link (aparece só agora)
-                  <span style={{ display: 'flex', gap: 8 }}>
-                    <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0 }} />
-                    <button className="btn btn-icon tap" aria-label="Copiar link" onClick={async () => { try { await navigator.clipboard.writeText(link); toast('Link copiado.'); } catch { toast('Copie manualmente.'); } }}><Icon name="link" size={20} /></button>
-                  </span>
-                  <span className="hint">Quem abrir precisa entrar na conta. Saber o endereço da trilha não dá acesso: só o convite válido.</span>
-                </label>
-              ) : null}
-              {invites.length ? (
-                <div>
-                  <h3 className="h3">Convites</h3>
-                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {invites.map((i) => {
-                      const expired = Date.parse(i.expires_at) <= now;
-                      const status = i.revoked_at ? 'REVOGADO' : expired ? 'EXPIRADO' : i.uses >= i.max_uses ? 'ESGOTADO' : 'ATIVO';
-                      return (
-                        <li key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', borderRadius: 14, background: 'var(--bg)', flexWrap: 'wrap' }}>
-                          <span className="pill" data-tone={status === 'ATIVO' ? 'acc2' : undefined}>{status}</span>
-                          <span style={{ flex: 1, fontSize: 14 }}>{ROLE_LABEL[i.role]} · {i.uses}/{i.max_uses} usos · até {new Date(i.expires_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                          {status === 'ATIVO' ? <button className="btn btn-sm tap" onClick={() => void revoke(i)}>Revogar</button> : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : null}
-            </article>
-          ) : (
-            <div className="empty"><h2 className="disp">Convites</h2><p style={{ margin: 0 }}>Só quem organiza a trilha cria e revoga convites.</p></div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// ───────────────────────── Decisões (ref/SPEC-votacao.md §6.2) ─────────────────────────
-
-const TARGET_LABEL: Record<PollTarget, string> = { stay: 'HOSPEDAGEM', activity: 'PASSEIO', free: 'LIVRE' };
-
-/** "ATÉ 18 JAN 23:59" no fuso da partida. */
-function deadlineLabel(iso: string, tz: string): string {
-  const w = instantToWall(tz, Date.parse(iso));
-  return `ATÉ ${w.d} ${MONTHS[w.mo - 1].toUpperCase()} ${pad2(w.h)}:${pad2(w.mi)}`;
-}
-
-function priceLabel(o: PollOption): string | null {
-  return o.price != null && o.currency ? formatMoney(toCents(o.price), o.currency) : null;
-}
-
-export function Decisions() {
-  const { bundle: b, canEdit } = useBundle();
-  const [creating, setCreating] = useState(false);
-  // Link do "Próximo passo" (#nova-votacao): abre a votação do destino já preenchida.
-  const [preset, setPreset] = useState<PollPreset | null>(null);
-  useEffect(() => {
-    if (!canEdit) return;
-    const h = window.location.hash;
-    const stay = /^#nova-votacao-stay-([0-9a-f-]{36})$/i.exec(h);
-    const stop = stay ? b.stops.find((x) => x.id === stay[1]) : null;
-    if (stop) setPreset({ question: `Onde ficar em ${stop.name}?`, target: 'stay', stop_id: stop.id });
-    else if (h === '#nova-votacao') setPreset({ question: 'Pra onde a gente vai?', target: 'free' });
-    else return;
-    setCreating(true);
-    document.getElementById('decisoes')?.scrollIntoView();
-  }, [canEdit]); // eslint-disable-line react-hooks/exhaustive-deps
-  const now = Date.now();
-  const polls = b.polls ?? [];
-  const deadline = (p: Poll) => (p.closes_at ? Date.parse(p.closes_at) : Infinity);
-  const open = polls.filter((p) => pollState(b, p.id, now) === 'open').sort((x, y) => deadline(x) - deadline(y));
-  const awaiting = polls.filter((p) => pollState(b, p.id, now) === 'awaiting_decision').sort((x, y) => deadline(x) - deadline(y));
-  const closed = polls.filter((p) => p.status === 'closed').sort((x, y) => (y.decided_at ?? '').localeCompare(x.decided_at ?? ''));
-  return (
-    <section id="decisoes" className={t.decisions} aria-labelledby="decisoes-titulo">
-      <div className={t.head}>
-        <h2 id="decisoes-titulo" className="disp" style={{ margin: 0, fontSize: 30 }}>Decisões</h2>
-        {canEdit ? <button className="btn btn-primary tap" onClick={() => setCreating(true)}><Icon name="plus" size={18} />Nova votação</button> : null}
-      </div>
-      {!open.length && !awaiting.length ? (
-        <p className="muted" style={{ margin: 0 }}>Nada pra decidir agora. Quando tiver dúvida entre opções, abre uma votação.</p>
-      ) : null}
-      {[...open, ...awaiting].map((p) => <PollCard key={p.id} poll={p} />)}
-      {closed.length ? (
-        <details className={t.closed}>
-          <summary>Encerradas ({closed.length})</summary>
-          <div className={t.closedList}>{closed.map((p) => <PollCard key={p.id} poll={p} />)}</div>
-        </details>
-      ) : null}
-      {creating ? <NewPollDialog preset={preset} onClose={() => { setCreating(false); setPreset(null); }} /> : null}
-    </section>
-  );
-}
-
-function PollCard({ poll }: { poll: Poll }) {
-  const { bundle: b, me, role, isOrganizer, source, reload, profileOf, base } = useBundle();
-  const { run, busy } = useAction();
-  const confirm = useConfirm();
-  const cols = CYCLE;
-  const state = pollState(b, poll.id);
-  const options = optionsOf(b, poll.id);
-  const tally = new Map(tallyPoll(b, poll.id).map((r) => [r.optionId, r]));
-  const { voted, total } = votersCount(b, poll.id);
-  const mine = myVotes(b, poll.id, me);
-  const [sel, setSel] = useState<string[]>(mine);
-  const [deciding, setDeciding] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const mineKey = [...mine].sort().join();
-  useEffect(() => setSel(mineKey ? mineKey.split(',') : []), [mineKey]);
-
-  const stop = poll.stop_id ? b.stops.find((s) => s.id === poll.stop_id) ?? null : null;
-  const name = (uid: string | null) => (uid && profileOf(uid)?.display_name) || 'Ex-membro';
-  const creatorIn = b.members.some((m) => m.user_id === poll.created_by);
-  const decider = creatorIn ? name(poll.created_by) : 'O organizador';
-  const mayDecide = canDecide(b, poll, me);
-  const mayManage = poll.status === 'open' && (poll.created_by === me || isOrganizer);
-  const canVote = !!role && state === 'open';
-  const max = Math.max(1, ...options.map((o) => tally.get(o.id)?.votes ?? 0));
-  const winner = poll.decided_option_id;
-  const created = poll.target === 'stay' ? b.stays.find((s) => s.from_poll_id === poll.id) : poll.target === 'activity' ? b.activities.find((a) => a.from_poll_id === poll.id) : undefined;
-  const changed = [...sel].sort().join() !== mineKey;
-  const groupName = `poll-${poll.id}`;
-
-  const vote = (options: string[], success: string) => run(async () => {
-    await source.rpc('cast_vote', { p_poll: poll.id, p_options: options });
-    if (options.length && source.kind === 'supabase') track('poll.voted', {}, b.trip.id);
-    await reload();
-  }, { success });
-  const toggle = (id: string, on: boolean) => setSel(poll.multi ? (on ? [...sel, id] : sel.filter((x) => x !== id)) : on ? [id] : []);
-  const del = async () => {
-    if (!(await confirm({ title: 'Excluir votação?', message: 'A pergunta, as opções e os votos somem para toda a turma.' }))) return;
-    await run(() => source.remove('polls', { id: poll.id }).then(reload), { success: 'Votação excluída.' });
+  const share = async () => {
+    try { await navigator.share({ title: `Trilha: ${b.trip.title}`, url: link! }); } catch { /* cancelado */ }
   };
+  const now = Date.now();
 
   return (
-    <article className={`card ${t.poll}`} aria-labelledby={`q-${poll.id}`}>
-      <div className={`${t.meta} mono`}>
-        <span className="pill" data-tone={poll.target === 'free' ? undefined : 'acc2'}>{TARGET_LABEL[poll.target]}{stop ? ` · ${stop.name.toUpperCase()}` : ''}</span>
-        {poll.status === 'open' && poll.closes_at ? <span>{deadlineLabel(poll.closes_at, b.trip.departure_tz)}</span> : null}
-        {poll.multi ? <span>VÁRIAS OPÇÕES</span> : null}
-        <span>{voted} de {total} votaram</span>
-      </div>
-      <h3 id={`q-${poll.id}`} className={`disp ${t.question}`}>{poll.question}</h3>
-      {poll.detail ? <p style={{ margin: 0, overflowWrap: 'anywhere' }}>{poll.detail}</p> : null}
-      {state === 'awaiting_decision' ? <p className={t.warn}>Prazo encerrado. {decider} decide.</p> : null}
-
-      <ul className={t.options} role={poll.multi ? undefined : 'radiogroup'} aria-labelledby={`q-${poll.id}`}>
-        {options.map((o, i) => {
-          const r = tally.get(o.id);
-          const votes = r?.votes ?? 0;
-          const price = priceLabel(o);
-          return (
-            <li key={o.id} className={t.option} data-win={winner === o.id}>
-              {poll.status === 'open' ? (
-                <Checkbox className={t.pick} type={poll.multi ? 'checkbox' : 'radio'} name={groupName} label={o.label} checked={sel.includes(o.id)} disabled={!canVote || busy} onChange={(on) => toggle(o.id, on)}>
-                  <span className="mono" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
-                </Checkbox>
-              ) : (
-                <div className={t.optRow} style={{ minHeight: 32 }}>
-                  <b style={{ flex: 1, overflowWrap: 'anywhere' }}>{winner === o.id ? '✓ ' : ''}{o.label}</b>
-                  {winner === o.id ? <span className="pill" data-tone="acc">ESCOLHIDA</span> : null}
-                  <span className="mono" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
-                </div>
-              )}
-              {o.detail ? <p className={t.optText}>{o.detail}</p> : null}
-              {price || o.link_url || o.address ? (
-                <div className={t.optRow}>
-                  {price ? <span className="mono">{price}</span> : null}
-                  {o.address ? <span className={t.optText}>{o.address}</span> : null}
-                  {o.link_url ? <a href={o.link_url} target="_blank" rel="noopener noreferrer nofollow">Ver link<span className="sr-only"> de {o.label} (abre em nova aba)</span></a> : null}
-                </div>
-              ) : null}
-              <div className={t.bar} aria-hidden="true"><i data-zero={votes === 0} style={{ width: `${(votes / max) * 100}%`, background: cols[i % 4] }} /></div>
-              {r?.voters.length ? (
-                <div className={t.voters} aria-label={`Votaram: ${r.voters.map(name).join(', ')}`}>
-                  {r.voters.map((uid, j) => <Avatar key={uid} name={name(uid)} color={cols[(j + 1) % 4]} size={24} />)}
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-
-      <div className={t.actions}>
-        {canVote ? (
+    <Sheet open onClose={onClose} title="Convidar">
+      <div className={t.sheetBody}>
+        {source.kind === 'demo' ? (
+          <p className="muted" style={{ margin: 0 }}>Na demonstração não dá pra convidar. Crie uma trilha para chamar a turma.</p>
+        ) : !isOrganizer ? (
+          <p className="muted" style={{ margin: 0 }}>Só quem organiza a trilha cria e revoga convites.</p>
+        ) : (
           <>
-            {mine.length === 0 || changed ? (
-              <button className="btn btn-primary tap" disabled={busy || !sel.length || !changed} onClick={() => void vote(sel, 'Voto registrado.')}>{mine.length ? 'Mudar voto' : 'Votar'}</button>
+            <FieldGrid>
+              <Field label="Papel"><select value={role} onChange={(e) => setRole(e.target.value as 'editor' | 'viewer')}><option value="editor">Pode editar</option><option value="viewer">Só consulta</option></select></Field>
+              <Field label="Validade"><select value={hours} onChange={(e) => setHours(Number(e.target.value))}><option value={24}>1 dia</option><option value={72}>3 dias</option><option value={168}>7 dias</option><option value={720}>30 dias</option></select></Field>
+              <Field label="Usos"><input type="number" min={1} max={100} value={uses} onChange={(e) => setUses(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} /></Field>
+            </FieldGrid>
+            <Button onClick={create} disabled={busy}><Icon name="plus" size={18} />Gerar link de convite</Button>
+            {link ? (
+              <div className="field">
+                <label htmlFor="convite-link">Link (aparece só agora)</label>
+                <input id="convite-link" readOnly value={link} onFocus={(e) => e.target.select()} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <Button variant="secondary" size="sm" onClick={() => void copy()}><Icon name="link" size={16} />Copiar</Button>
+                  {typeof navigator !== 'undefined' && 'share' in navigator ? <Button variant="secondary" size="sm" onClick={() => void share()}>Compartilhar</Button> : null}
+                </div>
+                <span className="hint">Quem abrir precisa entrar na conta. Saber o endereço da trilha não dá acesso: só o convite válido.</span>
+              </div>
             ) : null}
-            {mine.length ? <button className="btn tap" disabled={busy} onClick={() => void vote([], 'Voto retirado.')}>Retirar voto</button> : null}
+            {invites.length ? (
+              <div>
+                <h3 className="h3">Convites</h3>
+                <ul className={t.invites}>
+                  {invites.map((i) => {
+                    const expired = Date.parse(i.expires_at) <= now;
+                    const status = i.revoked_at ? 'REVOGADO' : expired ? 'EXPIRADO' : i.uses >= i.max_uses ? 'ESGOTADO' : 'ATIVO';
+                    return (
+                      <li key={i.id}>
+                        <Badge tone={status === 'ATIVO' ? 'ok' : 'neutral'}>{status}</Badge>
+                        <span style={{ flex: 1, fontSize: 14 }}>{ROLE_LABEL[i.role]} · {i.uses}/{i.max_uses} usos · até {new Date(i.expires_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        {status === 'ATIVO' ? <Button variant="secondary" size="sm" onClick={() => void revoke(i)}>Revogar</Button> : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
           </>
-        ) : null}
-        {poll.status === 'open' && mayDecide ? <button className={`btn tap ${state === 'awaiting_decision' ? 'btn-primary' : ''}`} onClick={() => setDeciding(true)}>Decidir</button> : null}
-        {mayManage ? (
-          <>
-            <button className="btn btn-sm tap" onClick={() => setEditing(true)}><Icon name="edit" size={16} />Editar</button>
-            <button className="btn btn-sm btn-danger tap" disabled={busy} onClick={() => void del()}>Excluir</button>
-          </>
-        ) : null}
+        )}
       </div>
-
-      {poll.status === 'closed' ? (
-        <p className="mono" style={{ margin: 0, fontSize: 12 }}>
-          Decidido por {name(poll.decided_by)} em {poll.decided_at ? dayMonth(poll.decided_at.slice(0, 10)) : ''}
-          {created && stop ? <> · <Link href={`${base}/roteiro/${stop.id}`}>{poll.target === 'stay' ? 'Ver hospedagem no roteiro' : 'Ver no roteiro'}</Link></> : null}
-        </p>
-      ) : null}
-      {deciding ? <DecideDialog poll={poll} onClose={() => setDeciding(false)} /> : null}
-      {editing ? <EditPollDialog poll={poll} onClose={() => setEditing(false)} /> : null}
-    </article>
-  );
-}
-
-function DecideDialog({ poll, onClose }: { poll: Poll; onClose: () => void }) {
-  const { bundle: b, source, reload } = useBundle();
-  const { run, busy } = useAction();
-  const toast = useToast();
-  const options = optionsOf(b, poll.id);
-  const tally = new Map(tallyPoll(b, poll.id).map((r) => [r.optionId, r.votes]));
-  const winners = pollWinners(b, poll.id);
-  const stop = poll.stop_id ? b.stops.find((s) => s.id === poll.stop_id) ?? null : null;
-  const days = stop ? dateRange(stop.arrival_date, stop.departure_date) : [];
-  const [choice, setChoice] = useState(winners[0] ?? options[0]?.id ?? '');
-  const [day, setDay] = useState(days[0] ?? '');
-  const [apply, setApply] = useState(true);
-  const label = (id: string) => options.find((o) => o.id === id)?.label ?? '';
-  const appliable = poll.target !== 'free' && !!stop;
-
-  const save = async () => {
-    const r = await run(async () => {
-      const res = await source.rpc<{ applied: boolean; reason: string | null }>('close_poll', {
-        p_poll: poll.id, p_option: choice, p_day: poll.target === 'activity' && apply ? day || null : null, p_apply: appliable && apply,
-      });
-      await reload();
-      return res;
-    });
-    if (!r) return;
-    if (source.kind === 'supabase') track('poll.closed', { applied: r.applied, tie: winners.length > 1 }, b.trip.id);
-    if (r.reason === 'stay_booked') toast(`Decidido. ${stop?.name ?? 'A parada'} já tem hospedagem reservada, então nada foi trocado.`);
-    else if (r.applied) toast(poll.target === 'stay' ? `Decidido. ${label(choice)} virou a hospedagem de ${stop?.name}.` : `Decidido. ${label(choice)} foi pro roteiro de ${stop?.name}.`);
-    else toast('Decidido.');
-    onClose();
-  };
-
-  return (
-    <Dialog open onClose={onClose} title="Decidir" footer={<>
-      <button className="btn tap" onClick={onClose}>Cancelar</button>
-      <button className="btn btn-primary tap" disabled={busy || !choice} onClick={() => void save()}>{busy ? 'Salvando…' : 'Confirmar decisão'}</button>
-    </>}>
-      <p style={{ margin: 0 }}><b>{poll.question}</b></p>
-      {winners.length > 1 ? <p className={t.warn}>Empate entre {winners.map(label).join(' e ')}. Você desempata.</p> : null}
-      <fieldset style={{ border: 0, margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <legend className="sr-only">Opção escolhida</legend>
-        {options.map((o) => (
-          <Checkbox key={o.id} className={t.pick} type="radio" name={`decide-${poll.id}`} label={o.label} checked={choice === o.id} onChange={(on) => on && setChoice(o.id)}>
-            <span className="mono" style={{ fontSize: 12 }}>{plural(tally.get(o.id) ?? 0, 'voto', 'votos')}</span>
-          </Checkbox>
-        ))}
-      </fieldset>
-      {winners.length && !winners.includes(choice) ? <p className={t.warn} role="status">Essa não foi a mais votada.</p> : null}
-      {appliable ? (
-        <Checkbox className={t.pick} label={poll.target === 'stay' ? `Aplicar no roteiro (vira a hospedagem pendente de ${stop!.name})` : `Aplicar no roteiro (vira atividade em ${stop!.name})`} checked={apply} onChange={setApply} />
-      ) : null}
-      {appliable && apply && poll.target === 'activity' ? (
-        <label className="field">Dia
-          <select value={day} onChange={(e) => setDay(e.target.value)}>{days.map((d) => <option key={d} value={d}>{dayMonth(d)}</option>)}</select>
-        </label>
-      ) : null}
-      {appliable && !apply ? <p className="muted" style={{ margin: 0, fontSize: 13 }}>Só registra a decisão; o roteiro fica como está.</p> : null}
-    </Dialog>
-  );
-}
-
-/** Data e hora (parede, no fuso da partida) ↔ instante ISO. */
-function splitDeadline(iso: string | null, tz: string): { date: string; time: string } {
-  if (!iso) return { date: '', time: '' };
-  const w = instantToWall(tz, Date.parse(iso));
-  return { date: `${w.y}-${pad2(w.mo)}-${pad2(w.d)}`, time: `${pad2(w.h)}:${pad2(w.mi)}` };
-}
-function joinDeadline(date: string, time: string, tz: string): string | null {
-  if (!date) return null;
-  const [y, mo, d] = date.split('-').map(Number);
-  const [h, mi] = (time || '23:59').split(':').map(Number);
-  return new Date(wallToInstant(tz, { y, mo, d, h, mi, s: 0 })).toISOString();
-}
-
-function EditPollDialog({ poll, onClose }: { poll: Poll; onClose: () => void }) {
-  const { bundle: b, source, reload } = useBundle();
-  const { run, busy } = useAction();
-  const tz = b.trip.departure_tz;
-  const [v, setV] = useState({ question: poll.question, detail: poll.detail ?? '', ...splitDeadline(poll.closes_at, tz) });
-  const ok = v.question.trim().length >= 1 && v.question.trim().length <= 140 && v.detail.length <= 300;
-  const patch = () => ({ question: v.question.trim(), detail: v.detail.trim() || null, closes_at: joinDeadline(v.date, v.time, tz) });
-  const save = () => run(async () => {
-    await source.update('polls', poll.id, patch(), poll.version);
-    await reload();
-    onClose();
-  }, { success: 'Votação atualizada.', onConflict: async () => { await source.update('polls', poll.id, patch()); await reload(); onClose(); } });
-  return (
-    <Dialog open onClose={onClose} title="Editar votação" footer={<>
-      <button className="btn tap" onClick={onClose}>Cancelar</button>
-      <button className="btn btn-primary tap" disabled={busy || !ok} onClick={() => void save()}>Salvar</button>
-    </>}>
-      <label className="field">Pergunta<input value={v.question} maxLength={140} onChange={(e) => setV({ ...v, question: e.target.value })} /></label>
-      <label className="field">Detalhe (opcional)<textarea rows={2} value={v.detail} maxLength={300} onChange={(e) => setV({ ...v, detail: e.target.value })} /></label>
-      <DeadlineFields date={v.date} time={v.time} onChange={(d) => setV({ ...v, ...d })} />
-      <p className="muted" style={{ margin: 0, fontSize: 13 }}>Opções não mudam depois de criadas. O prazo não fecha a votação sozinho: depois dele, quem criou ou o organizador decide.</p>
-    </Dialog>
-  );
-}
-
-function DeadlineFields({ date, time, onChange }: { date: string; time: string; onChange: (v: { date: string; time: string }) => void }) {
-  return (
-    <div className="grid2">
-      <label className="field">Prazo para votar (opcional)<input type="date" value={date} onChange={(e) => onChange({ date: e.target.value, time })} /></label>
-      <label className="field">Hora<input type="time" value={time} disabled={!date} onChange={(e) => onChange({ date, time: e.target.value })} /><span className="hint">Sem hora: 23:59.</span></label>
-    </div>
-  );
-}
-
-interface OptDraft { key: string; label: string; detail: string; link_url: string; price: string; currency: string; address: string }
-const emptyOpt = (currency: string): OptDraft => ({ key: crypto.randomUUID(), label: '', detail: '', link_url: '', price: '', currency, address: '' });
-
-/** Mesmos limites dos `check` do banco. Retorna a mensagem do primeiro problema. */
-function optProblem(o: OptDraft, target: PollTarget): string | null {
-  if (!o.label.trim()) return 'Dê um nome à opção.';
-  if (o.label.trim().length > 80) return 'Nome com até 80 caracteres.';
-  if (o.detail.length > 300) return 'Detalhe com até 300 caracteres.';
-  if (o.link_url.trim() && (!/^https?:\/\//.test(o.link_url.trim()) || o.link_url.trim().length > 500)) return 'Use um link http(s).';
-  if (o.price.trim()) {
-    const n = Number(o.price.replace(',', '.'));
-    if (!Number.isFinite(n) || n < 0) return 'Preço inválido.';
-    if (!/^[A-Z]{3}$/.test(o.currency)) return 'Moeda com 3 letras (ex.: BRL).';
-  }
-  if (target === 'stay' && o.address.length > 200) return 'Endereço com até 200 caracteres.';
-  return null;
-}
-
-interface PollPreset { question: string; target: PollTarget; stop_id?: string }
-
-function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset?: PollPreset | null }) {
-  const { bundle: b, source, reload, me } = useBundle();
-  const { run, busy } = useAction();
-  const stops = sortedStops(b);
-  const tz = b.trip.departure_tz;
-  const cur = b.trip.base_currency;
-  const [v, setV] = useState({ question: preset?.question ?? '', detail: '', target: preset?.target ?? ('stay' as PollTarget), stop_id: preset?.stop_id ?? stops[0]?.id ?? '', multi: false, date: '', time: '' });
-  const [opts, setOpts] = useState<OptDraft[]>([emptyOpt(cur), emptyOpt(cur)]);
-  const [tried, setTried] = useState(false);
-  const needsStop = v.target !== 'free';
-  const problems = opts.map((o) => optProblem(o, v.target));
-  const qProblem = !v.question.trim() ? 'Escreva a pergunta.' : v.question.trim().length > 140 ? 'Pergunta com até 140 caracteres.' : null;
-  const stopProblem = needsStop && !v.stop_id ? 'Escolha a parada.' : null;
-  const ok = !qProblem && !stopProblem && v.detail.length <= 300 && opts.length >= 2 && opts.length <= 6 && problems.every((p) => !p);
-  const setOpt = (i: number, patch: Partial<OptDraft>) => setOpts(opts.map((o, j) => (j === i ? { ...o, ...patch } : o)));
-
-  const save = async () => {
-    setTried(true);
-    if (!ok) return;
-    const id = crypto.randomUUID();
-    const done = await run(async () => {
-      await source.insert('polls', {
-        id, trip_id: b.trip.id, question: v.question.trim(), detail: v.detail.trim() || null, target: v.target,
-        stop_id: needsStop ? v.stop_id : null, multi: v.multi, closes_at: joinDeadline(v.date, v.time, tz), created_by: me,
-      }, { returning: false });
-      try {
-        for (const [i, o] of opts.entries()) {
-          const price = o.price.trim() ? Number(o.price.replace(',', '.')).toFixed(2) : null;
-          await source.insert('poll_options', {
-            id: crypto.randomUUID(), poll_id: id, trip_id: b.trip.id, label: o.label.trim(), detail: o.detail.trim() || null,
-            link_url: o.link_url.trim() || null, price, currency: price ? o.currency : null,
-            address: v.target === 'stay' ? o.address.trim() || null : null, position: i, created_by: me,
-          }, { returning: false });
-        }
-      } catch (e) {
-        await source.remove('polls', { id }).catch(() => undefined); // sem enquete órfã
-        throw e;
-      }
-      if (source.kind === 'supabase') track('poll.created', { target: v.target, options: opts.length }, b.trip.id);
-      await reload();
-      return true;
-    }, { success: 'Votação aberta. A turma já pode votar.' });
-    if (done) onClose();
-  };
-
-  return (
-    <Dialog open onClose={onClose} title="Nova votação" footer={<>
-      <button className="btn tap" onClick={onClose}>Cancelar</button>
-      <button className="btn btn-primary tap" disabled={busy} onClick={() => void save()}>{busy ? 'Salvando…' : 'Abrir votação'}</button>
-    </>}>
-      <label className="field">Pergunta<input value={v.question} maxLength={140} onChange={(e) => setV({ ...v, question: e.target.value })} placeholder="Onde a gente dorme em Cusco?" />{tried && qProblem ? <span className="err">{qProblem}</span> : null}</label>
-      <label className="field">Detalhe (opcional)<textarea rows={2} value={v.detail} maxLength={300} onChange={(e) => setV({ ...v, detail: e.target.value })} /></label>
-      <div className="field">
-        <span id="nv-tipo">Tipo</span>
-        <div role="group" aria-labelledby="nv-tipo" className={t.types}>
-          {(['stay', 'activity', 'free'] as PollTarget[]).map((k) => (
-            <button key={k} type="button" className="chip tap" aria-pressed={v.target === k} onClick={() => setV({ ...v, target: k })}>{{ stay: 'Hospedagem', activity: 'Passeio', free: 'Livre' }[k]}</button>
-          ))}
-        </div>
-        <span className="hint">{v.target === 'stay' ? 'A escolhida vira a hospedagem pendente da parada (se ainda não houver reserva).' : v.target === 'activity' ? 'A escolhida vira atividade no roteiro da parada.' : 'Só registra a decisão (ex.: qual cidade, qual data).'}</span>
-      </div>
-      {needsStop ? (
-        <label className="field">Parada
-          <select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}>
-            <option value="">Escolha</option>
-            {stops.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          {tried && stopProblem ? <span className="err">{stopProblem}</span> : null}
-        </label>
-      ) : null}
-      <Checkbox className={t.pick} label="Cada pessoa pode marcar mais de uma" checked={v.multi} onChange={(multi) => setV({ ...v, multi })} />
-      <DeadlineFields date={v.date} time={v.time} onChange={(d) => setV({ ...v, ...d })} />
-
-      <h3 className="h3" style={{ margin: '8px 0 0' }}>Opções ({opts.length} de 6)</h3>
-      {opts.map((o, i) => (
-        <fieldset key={o.key} className={t.optEdit}>
-          <legend className="sr-only">Opção {i + 1}</legend>
-          <div className="grid2">
-            <label className="field">Opção {i + 1}<input value={o.label} maxLength={80} onChange={(e) => setOpt(i, { label: e.target.value })} /></label>
-            <label className="field">Detalhe<input value={o.detail} maxLength={300} onChange={(e) => setOpt(i, { detail: e.target.value })} placeholder="R$ 240 / noite, café incluso" /></label>
-          </div>
-          <div className="grid2">
-            <label className="field">Link<input type="url" value={o.link_url} maxLength={500} placeholder="https://" onChange={(e) => setOpt(i, { link_url: e.target.value })} /></label>
-            <div className="grid2">
-              <label className="field">Preço<input inputMode="decimal" value={o.price} onChange={(e) => setOpt(i, { price: e.target.value })} /></label>
-              <label className="field">Moeda<input value={o.currency} maxLength={3} onChange={(e) => setOpt(i, { currency: e.target.value.toUpperCase() })} /></label>
-            </div>
-          </div>
-          {v.target === 'stay' ? <label className="field">Endereço<input value={o.address} maxLength={200} onChange={(e) => setOpt(i, { address: e.target.value })} /></label> : null}
-          {tried && problems[i] ? <span className="err" role="alert" style={{ fontSize: 13 }}>{problems[i]}</span> : null}
-          {opts.length > 2 ? <button type="button" className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={() => setOpts(opts.filter((_, j) => j !== i))}>Remover opção {i + 1}</button> : null}
-        </fieldset>
-      ))}
-      {opts.length < 6 ? <button type="button" className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={() => setOpts([...opts, emptyOpt(cur)])}><Icon name="plus" size={16} />Adicionar opção</button> : null}
-    </Dialog>
+    </Sheet>
   );
 }

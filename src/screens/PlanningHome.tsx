@@ -63,7 +63,7 @@ export default function PlanningHome() {
             <Button href={base + next.link} iconEnd="arrow">{next.key === 'destination' ? 'Descobrir destino' : next.cta}</Button>
             {canEdit && next.key === 'destination' ? (
               <>
-                <Button variant="secondary" href={`${base}/turma#nova-votacao`}>Já temos opções: votar</Button>
+                <Button variant="secondary" href={`${base}/turma/votos#nova-votacao`}>Já temos opções: votar</Button>
                 <Button variant="ghost" href={`${base}/ajustes`}>Já sei o destino</Button>
               </>
             ) : null}

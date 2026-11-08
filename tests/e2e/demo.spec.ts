@@ -4,7 +4,7 @@ const KEYS = ['andes', 'japao', 'marrocos', 'islandia'] as const;
 // Trilha 2.0: identidade por destino virou uma cor só (lib/identity/accent.ts DICTIONARY_ACCENT).
 const ACCENT: Record<string, string> = { andes: '#C8452C', japao: '#C2272D', marrocos: '#1F5FA8', islandia: '#1F6F8B' };
 // Rotas da Trilha 2.0 (planning §4.3). A Fase 9 reescreve esta suíte com as telas novas.
-const ROUTES = ['', '/roteiro', '/roteiro?vista=mapa', '/dinheiro', '/turma', '/turma/documentos', '/turma/mala', '/turma/diario', '/ajustes'];
+const ROUTES = ['', '/roteiro', '/roteiro?vista=mapa', '/dinheiro', '/turma', '/turma/votos', '/turma/documentos', '/turma/mala', '/turma/diario', '/ajustes'];
 const WIDTHS = [360, 390, 768, 1280, 1440];
 // Mesmo gerador de ids da demo (lib/demo/build.ts), para abrir a página de uma parada direto.
 const demoId = (k: string, kind: string, i: number) => {
@@ -137,7 +137,7 @@ test.describe('acessibilidade e teclado', () => {
   test('filtros com aria-pressed e parâmetro de URL', async ({ page }) => {
     await page.goto('/demo/andes/turma/documentos?tipo=Identidade');
     await expect(page.getByRole('group', { name: 'Filtrar por tipo' }).getByRole('button', { name: /Identidade/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('article.ticket')).toHaveCount(3);
+    await expect(page.locator('article[data-doc]')).toHaveCount(3);
   });
   test('roteiro: link antigo ?parada= abre a página da parada', async ({ page }) => {
     await page.goto(`/demo/andes/roteiro?parada=${CUSCO}`);
@@ -190,7 +190,7 @@ test.describe('votação da turma', () => {
   });
 
   test('votar na enquete da demo só com teclado', async ({ page }) => {
-    await page.goto('/demo/andes/turma');
+    await page.goto('/demo/andes/turma/votos');
     const card = page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' }) });
     await expect(card.getByText('2 de 3 votaram')).toBeVisible();
     await card.getByRole('radio', { name: 'Hostel Pirwa' }).focus();
@@ -207,7 +207,7 @@ test.describe('votação da turma', () => {
   });
 
   test('decidir a hospedagem vira "ESCOLHIDA NA VOTAÇÃO" no roteiro', async ({ page }) => {
-    await page.goto('/demo/andes/turma');
+    await page.goto('/demo/andes/turma/votos');
     const card = page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' }) });
     await card.getByRole('button', { name: 'Decidir' }).click();
     const dlg = page.getByRole('dialog', { name: 'Decidir' });
@@ -226,13 +226,64 @@ test.describe('votação da turma', () => {
     await expect(stay.getByText('Hostel Pirwa', { exact: true })).toBeVisible();
   });
 
-  test('Turma sem rolagem horizontal com encerradas abertas', async ({ page }) => {
+  test('Votos sem rolagem horizontal com encerradas abertas', async ({ page }) => {
+    for (const w of WIDTHS) {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.goto('/demo/andes/turma/votos');
+      await page.getByText(/^Encerradas \(1\)$/).click();
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(over, `votos @${w}`).toBeLessThanOrEqual(0);
+    }
+  });
+});
+
+test.describe('Turma (hub)', () => {
+  test('mostra membros, decidir juntos, matriz de documentos e mala', async ({ page }) => {
+    await page.goto('/demo/andes/turma');
+    await expect(page.getByRole('heading', { name: 'Decidir juntos' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Documentos por pessoa' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Mala da turma' })).toBeVisible();
+    await page.getByRole('link', { name: /^Ver todas/ }).click();
+    await expect(page).toHaveURL(/turma\/votos$/);
+  });
+  test('Turma sem rolagem horizontal', async ({ page }) => {
     for (const w of WIDTHS) {
       await page.setViewportSize({ width: w, height: 900 });
       await page.goto('/demo/andes/turma');
-      await page.getByText(/^Encerradas \(1\)$/).click();
       const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(over, `turma @${w}`).toBeLessThanOrEqual(0);
+    }
+  });
+  test('"quem leva" aparece na mala', async ({ page }) => {
+    await page.goto('/demo/andes/turma/mala');
+    await expect(page.getByLabel('Quem leva').first()).toBeVisible();
+  });
+});
+
+test.describe('Descobrir (Fase 8)', () => {
+  test('questionário em conversa leva ao resultado e permite editar respostas', async ({ page }) => {
+    await page.goto('/demo/andes/descobrir');
+    await expect(page.getByText('Quanto cada pessoa pode gastar?')).toBeVisible();
+    await page.getByLabel(/Teto por pessoa/).fill('2500');
+    await page.getByRole('button', { name: 'Continuar' }).click();
+    await page.getByRole('button', { name: '7 dias' }).click();
+    await page.getByRole('button', { name: 'Continuar' }).click();
+    await page.getByRole('button', { name: 'Continuar' }).click();
+    await page.getByRole('button', { name: 'Natureza' }).click();
+    await page.getByRole('button', { name: 'Continuar' }).click();
+    await page.getByRole('button', { name: 'Ver os lugares' }).click();
+    await expect(page.getByRole('heading', { name: 'Três lugares que cabem na turma' })).toBeVisible();
+    await expect(page.getByText('Na demonstração as sugestões ficam desligadas')).toBeVisible();
+    await page.getByRole('button', { name: /Editar: Até/ }).click();
+    await expect(page.getByLabel(/Teto por pessoa/)).toHaveValue('2500');
+  });
+  test('Descobrir sem rolagem horizontal', async ({ page }) => {
+    for (const w of WIDTHS) {
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.goto('/demo/andes/descobrir');
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(over, `descobrir @${w}`).toBeLessThanOrEqual(0);
     }
   });
 });
@@ -290,7 +341,7 @@ test.describe('Roteiro e Parada (Fase 5)', () => {
     await page.getByRole('button', { name: 'Mandar as 3 para votação' }).click();
     await expect(page.getByText('Votação criada com os preços. A turma vota em Turma › Votos.')).toBeVisible();
     await page.getByRole('navigation', { name: /Abas|Principal/ }).getByRole('link', { name: 'Turma' }).first().click();
-    await page.getByRole('main').getByRole('link', { name: /^Votos/ }).first().click();
+    await page.getByRole('link', { name: /^Ver todas/ }).click();
     await page.waitForURL('**/turma/votos');
     const card = page.locator('article', { has: page.getByRole('heading', { name: 'Qual passeio em Cusco?' }) });
     await expect(card).toBeVisible();
@@ -358,7 +409,7 @@ test.describe('Roteiro e Parada (Fase 5)', () => {
     await dlg.getByRole('button', { name: 'Mandar pra votação' }).click();
     await expect(page.getByText('Foi pra votação de hospedagem. A turma vota em Turma › Votos.')).toBeVisible();
     await page.getByRole('navigation', { name: /Abas|Principal/ }).getByRole('link', { name: 'Turma' }).first().click();
-    await page.getByRole('main').getByRole('link', { name: /^Votos/ }).first().click();
+    await page.getByRole('link', { name: /^Ver todas/ }).click();
     await page.waitForURL('**/turma/votos');
     await expect(page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Cusco?' }) }).getByText('Casa azul em San Blas', { exact: true })).toBeVisible();
   });

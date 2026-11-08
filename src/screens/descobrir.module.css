@@ -1,0 +1,19 @@
+.note { margin: 0 0 16px; padding: 12px 14px; border-radius: 14px; background: var(--sun-soft, #fff3dc); font-size: 14px; }
+.pair { display: flex; flex-direction: column; gap: var(--s3, 12px); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.result { display: flex; flex-direction: column; gap: 16px; }
+.result h2 { margin: 0; font-size: 28px; }
+.answers { display: flex; flex-wrap: wrap; gap: 8px; }
+.answerChip { min-height: 44px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: var(--r-card); background: var(--surface); }
+.card.big { padding-top: 12px; }
+.cardHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.cardHead h3 { margin: 0; font-size: 22px; overflow-wrap: anywhere; }
+.meta { font-size: 13px; color: var(--mute); }
+.costRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.route { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.why { margin: 0; color: var(--mute); overflow-wrap: anywhere; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sunNote { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--sun-soft, #fff3dc); font-size: 13px; }
+.know { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; color: var(--brand); }

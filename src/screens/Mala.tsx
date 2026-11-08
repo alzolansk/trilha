@@ -1,46 +1,40 @@
 'use client';
 import { useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, AiTag, Icon, useReveal } from '../components/ui/primitives';
-import { Checkbox } from '../components/ui/Checkbox';
-import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { AiNote, AiTag } from '../components/ui/primitives';
+import { Avatar, Badge, Button, Card, Checkbox, EmptyState, Field, FieldGrid, IconButton, ScreenHeader } from '../components/ui';
 import { useBundle } from '../data/TripContext';
 import type { PackingItem, Task, TaskStatus } from '../data/types';
 import { callAi } from '../lib/ai/client';
 import { packingProgress } from '../lib/derive';
-import { dayMonth, initials } from '../lib/format';
+import { dayMonth } from '../lib/format';
 import { fgOn } from '../lib/identity/contrast';
-import { CYCLE } from '../lib/identity/accent';
 import { rulePacking, type PackingSuggestion } from '../lib/rules';
 import { todayIn } from '../lib/time';
 import s from './mala.module.css';
 
-/**
- * Mala e pendências (/turma/mala), aguardando o redesign da Fase 7.
- * A Fase 6 moveu todo o dinheiro para as telas próprias e components/money.
- */
+/** Mala e pendências (/turma/mala), com os componentes de ui (Fase 9). O dinheiro vive nas telas próprias. */
 export default function Mala() {
   const { bundle: b, base } = useBundle();
   const pack = packingProgress(b);
   const C = 2 * Math.PI * 48;
-  useReveal([b.packingItems.length]);
 
   return (
     <div className="wrap">
       <ScreenHeader back={`${base}/turma`} title="Mala e pendências" subtitle="O que falta levar e o que falta fazer, com a turma." />
       <section className={s.body}>
         <div className={s.left}>
-          <div className={`${s.ring} rv`}>
+          <Card variant="dark" pad="lg" className={s.ring}>
             <svg aria-hidden="true" className={s.ringSvg} width="120" height="120" viewBox="0 0 120 120">
               <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeOpacity=".18" strokeWidth="14" />
               <circle className={s.v} cx="60" cy="60" r="48" fill="none" stroke="var(--sun)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${((C * pack.pct) / 100).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 60 60)" />
               <text x="60" y="68" textAnchor="middle" fontFamily="var(--font-body)" fontSize="22" fontWeight="700" fill="currentColor">{pack.pct}%</text>
             </svg>
             <div style={{ position: 'relative' }}>
-              <div className={`disp ${s.count}`}>{pack.done} de {pack.total}</div>
-              <div style={{ marginTop: 6, opacity: 0.85 }}>itens na mochila</div>
+              <div className={s.count}>{pack.done} de {pack.total}</div>
+              <div className={s.countSub}>itens na mochila</div>
             </div>
-          </div>
+          </Card>
           <Packing />
           <Tasks />
         </div>
@@ -51,12 +45,13 @@ export default function Mala() {
 
 // ───────────────────── Mala ─────────────────────
 export function Packing() {
-  const { bundle: b, canEdit, source, reload, me } = useBundle();
+  const { bundle: b, canEdit, source, reload, me, profileOf } = useBundle();
   const { run, busy } = useAction();
   const confirm = useConfirm();
   const toast = useToast();
   const [item, setItem] = useState('');
   const [group, setGroup] = useState('');
+  const [who, setWho] = useState('');
   const [sugs, setSugs] = useState<{ list: (PackingSuggestion & { by: 'ai' | 'rules' })[]; model?: string } | null>(null);
   const [asking, setAsking] = useState(false);
   const [editing, setEditing] = useState<PackingItem | null>(null);
@@ -79,7 +74,7 @@ export function Packing() {
     if (!label) return;
     void run(async () => {
       const catId = group || (await ensureCategory('Seus itens'));
-      await source.insert('packing_items', { trip_id: b.trip.id, category_id: catId, label, position: b.packingItems.filter((x) => x.category_id === catId).length });
+      await source.insert('packing_items', { trip_id: b.trip.id, category_id: catId, label, assignee_id: who || null, position: b.packingItems.filter((x) => x.category_id === catId).length });
       setItem('');
       await reload();
     });
@@ -104,51 +99,46 @@ export function Packing() {
 
   return (
     <>
-      <div className="rv">
+      <div>
         {hasAiItems || b.packingItems.some((i) => i.suggested_by === 'rules') ? (
           <AiNote by={hasAiItems ? 'ai' : 'rules'}>Itens com etiqueta {hasAiItems ? 'IA' : 'AUTO'} foram sugeridos a partir das paradas, atividades e transportes da sua trilha. Toque no item pra ver o motivo.</AiNote>
         ) : null}
       </div>
       {!b.packingItems.length ? (
-        <div className="empty rv">
-          <h3 className="disp" style={{ fontSize: 24 }}>Mala vazia</h3>
-          <p style={{ margin: 0 }}>Adicione itens ou peça sugestões com base no roteiro.</p>
-        </div>
+        <EmptyState icon="list" title="Mala vazia" text="Adicione itens ou peça sugestões com base no roteiro." />
       ) : null}
       {canEdit ? (
-        <button className="btn btn-ghost tap rv" onClick={ask} disabled={asking} style={{ alignSelf: 'flex-start' }}>
-          <Icon name="sparkle" size={16} fill="currentColor" />
-          {asking ? 'Pensando…' : 'Pedir sugestões à IA'}
-        </button>
+        <Button variant="ghost" icon="sparkle" onClick={ask} disabled={asking} className={s.askBtn}>{asking ? 'Pensando…' : 'Pedir sugestões à IA'}</Button>
       ) : null}
       {sugs?.list.length ? (
         <div className={s.sugs}>
           {sugs.list.map((sg) => (
             <div key={sg.label} className={s.sug}>
-              <div style={{ flex: 1 }}>
+              <div className={s.sugText}>
                 <b>{sg.label}</b> <AiTag by={sg.by} />
-                <div style={{ fontSize: 13, color: 'var(--mute)' }}>{sg.reason}</div>
+                <div className={s.sugWhy}>{sg.reason}</div>
               </div>
-              <button className="btn btn-sm btn-ink tap" onClick={() => void accept(sg)} disabled={busy}>Adicionar</button>
+              <Button size="sm" variant="dark" onClick={() => void accept(sg)} disabled={busy}>Adicionar</Button>
             </div>
           ))}
-          <button className="btn btn-sm tap" onClick={() => setSugs(null)}>Dispensar sugestões</button>
+          <Button size="sm" variant="secondary" onClick={() => setSugs(null)} className={s.askBtn}>Dispensar sugestões</Button>
         </div>
       ) : null}
       {cats.map((c) => {
         const items = b.packingItems.filter((i) => i.category_id === c.id).sort((a, x) => a.position - x.position);
         return (
-          <fieldset key={c.id} className={`${s.group} rv`}>
+          <fieldset key={c.id} className={s.group}>
             <legend>{c.name}</legend>
             {items.map((it) => (
               <div key={it.id} className={s.itemRow}>
                 <Checkbox strike checked={it.done} disabled={!canEdit || busy} onChange={(v) => void toggle(it, v)} label={it.label}>
                   {it.suggested_by ? <span title={it.suggestion_reason ?? undefined}><AiTag by={it.suggested_by} /></span> : null}
+                  <WhoChip uid={it.assignee_id ?? null} />
                 </Checkbox>
-                {canEdit ? <button className="btn btn-icon btn-sm" style={{ border: 0, background: 'transparent' }} aria-label={`Editar ${it.label}`} onClick={() => setEditing(it)}><Icon name="edit" size={16} /></button> : null}
+                {canEdit ? <IconButton icon="edit" label={`Editar ${it.label}`} variant="ghost" size={40} onClick={() => setEditing(it)} /> : null}
               </div>
             ))}
-            {!items.length ? <p className="muted" style={{ margin: '6px 0' }}>Sem itens.</p> : null}
+            {!items.length ? <p className={s.none}>Sem itens.</p> : null}
             {canEdit ? (
               <button className={s.linkBtn} onClick={async () => {
                 if (await confirm({ title: `Excluir “${c.name}”?`, message: `Os ${items.length} itens desse grupo também saem da mala.` })) await run(() => source.remove('packing_categories', { id: c.id }).then(reload));
@@ -158,19 +148,23 @@ export function Packing() {
         );
       })}
       {canEdit ? (
-        <form className="rv" onSubmit={add} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <label className="field" style={{ flex: '1 1 200px' }}>
-            <span className="sr">Novo item</span>
+        <form onSubmit={add} className={s.addForm}>
+          <Field label={<span className="sr">Novo item</span>} className={s.grow}>
             <input value={item} maxLength={120} onChange={(e) => setItem(e.target.value)} placeholder="Adicionar item à mala" required />
-          </label>
-          <label className="field" style={{ flex: '0 1 170px' }}>
-            <span className="sr">Grupo</span>
+          </Field>
+          <Field label={<span className="sr">Grupo</span>} className={s.sel}>
             <select value={group} onChange={(e) => setGroup(e.target.value)}>
               <option value="">Seus itens</option>
               {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-          </label>
-          <button className="btn btn-ink tap" aria-label="Adicionar item" disabled={busy}><Icon name="plus" size={18} /></button>
+          </Field>
+          <Field label={<span className="sr">Quem leva</span>} className={s.sel}>
+            <select aria-label="Quem leva" value={who} onChange={(e) => setWho(e.target.value)}>
+              <option value="">Todos</option>
+              {b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}
+            </select>
+          </Field>
+          <Button variant="dark" icon="plus" aria-label="Adicionar item" type="submit" disabled={busy} />
         </form>
       ) : null}
       {canEdit ? <NewGroup count={cats.length} /> : null}
@@ -184,12 +178,11 @@ function NewGroup({ count }: { count: number }) {
   const { run } = useAction();
   const [name, setName] = useState('');
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) void run(() => source.insert('packing_categories', { trip_id: b.trip.id, name: name.trim(), position: count }).then(reload).then(() => setName(''))); }} style={{ display: 'flex', gap: 10 }}>
-      <label className="field" style={{ flex: 1 }}>
-        <span className="sr">Novo grupo</span>
+    <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) void run(() => source.insert('packing_categories', { trip_id: b.trip.id, name: name.trim(), position: count }).then(reload).then(() => setName(''))); }} className={s.addForm}>
+      <Field label={<span className="sr">Novo grupo</span>} className={s.grow}>
         <input id="newgroup" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Novo grupo (ex.: Eletrônicos)" />
-      </label>
-      <button className="btn tap">Criar grupo</button>
+      </Field>
+      <Button variant="secondary" type="submit">Criar grupo</Button>
     </form>
   );
 }
@@ -199,16 +192,27 @@ function ItemDialog({ it, onClose }: { it: PackingItem; onClose: () => void }) {
   const { run, busy } = useAction();
   const [label, setLabel] = useState(it.label);
   const [cat, setCat] = useState(it.category_id);
+  const [who, setWho] = useState(it.assignee_id ?? '');
+  const { profileOf } = useBundle();
+  const patch = () => ({ label: label.trim(), category_id: cat, assignee_id: who || null });
   return (
     <Dialog open onClose={onClose} title="Editar item" footer={<>
-      <button className="btn btn-danger tap" onClick={() => void run(() => source.remove('packing_items', { id: it.id }).then(reload).then(onClose), { success: 'Item removido.' })}>Excluir</button>
-      <button className="btn btn-primary tap" disabled={busy || !label.trim()} onClick={() => void run(() => source.update('packing_items', it.id, { label: label.trim(), category_id: cat }, it.version).then(reload).then(onClose), { onConflict: () => source.update('packing_items', it.id, { label: label.trim(), category_id: cat }).then(reload).then(onClose) })}>Salvar</button>
+      <Button variant="secondary" className={s.danger} onClick={() => void run(() => source.remove('packing_items', { id: it.id }).then(reload).then(onClose), { success: 'Item removido.' })}>Excluir</Button>
+      <Button disabled={busy || !label.trim()} onClick={() => void run(() => source.update('packing_items', it.id, patch(), it.version).then(reload).then(onClose), { onConflict: () => source.update('packing_items', it.id, patch()).then(reload).then(onClose) })}>Salvar</Button>
     </>}>
-      <label className="field">Item<input value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} /></label>
-      <label className="field">Grupo<select value={cat} onChange={(e) => setCat(e.target.value)}>{b.packingCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <Field label="Item"><input value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} /></Field>
+      <Field label="Grupo"><select value={cat} onChange={(e) => setCat(e.target.value)}>{b.packingCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+      <Field label="Quem leva"><select value={who} onChange={(e) => setWho(e.target.value)}><option value="">Todos</option>{b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}</select></Field>
       {it.suggestion_reason ? <AiNote by={it.suggested_by ?? 'rules'}>{it.suggestion_reason}</AiNote> : null}
     </Dialog>
   );
+}
+
+/** "Quem leva": chip na cor da pessoa; "todos" quando é item individual. */
+function WhoChip({ uid }: { uid: string | null }) {
+  const { profileOf } = useBundle();
+  const p = uid ? profileOf(uid) : null;
+  return <span className={s.who} data-all={!p} style={p?.color ? { background: p.color, color: fgOn(p.color) } : undefined}>{p ? p.display_name.split(' ')[0] : 'todos'}</span>;
 }
 
 // ───────────────────── Pendências ─────────────────────
@@ -218,40 +222,38 @@ export function Tasks() {
   const { bundle: b, canEdit, source, reload, profileOf } = useBundle();
   const { run } = useAction();
   const [edit, setEdit] = useState<Task | 'new' | null>(null);
-  const cols = CYCLE;
   const today = todayIn(b.trip.departure_tz);
   const tasks = [...b.tasks].filter((t) => !t.dismissed).sort((a, c) => Number(a.status === 'done') - Number(c.status === 'done') || (a.due_date ?? '9').localeCompare(c.due_date ?? '9'));
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 28 }}>
-        <h2 className="disp rv" style={{ margin: 0, fontSize: 30 }}>Pendências</h2>
-        {canEdit ? <button className="btn btn-sm tap" onClick={() => setEdit('new')}><Icon name="plus" size={16} />Pendência</button> : null}
+      <div className={s.taskHead}>
+        <h2 className={s.h2}>Pendências</h2>
+        {canEdit ? <Button size="sm" variant="secondary" icon="plus" onClick={() => setEdit('new')}>Pendência</Button> : null}
       </div>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {tasks.map((t, i) => {
+      <ul className={s.tasks}>
+        {tasks.map((t) => {
           const who = profileOf(t.assignee_id);
           const late = t.status !== 'done' && t.due_date && t.due_date < today;
           return (
-            <li key={t.id} className={`${s.task} rv lift`} data-done={t.status === 'done'}>
-              <span aria-hidden="true" className="bullet" style={{ width: 14, height: 14, background: cols[i % 4] }} />
+            <li key={t.id} className={s.task} data-done={t.status === 'done'}>
               <span className={s.taskText}>
-                <b style={{ display: 'block', fontWeight: 600, textDecoration: t.status === 'done' ? 'line-through' : undefined }}>{t.title}</b>
-                <span style={{ fontSize: 14, color: 'var(--mute)' }}>
+                <b className={s.taskTitle} data-done={t.status === 'done'}>{t.title}</b>
+                <span className={s.taskSub} data-late={!!late}>
                   {[t.detail, who ? `com ${who.display_name}` : null, t.due_date ? `${late ? 'atrasada · ' : 'até '}${dayMonth(t.due_date)}` : null].filter(Boolean).join(' · ')}
                 </span>
               </span>
               {t.source !== 'user' ? <AiTag by={t.source} /> : null}
-              {who ? <span className="av" style={{ background: who.color, color: fgOn(who.color) }} title={who.display_name}>{initials(who.display_name)}</span> : null}
+              {who ? <Avatar name={who.display_name} color={who.color} size={32} /> : null}
               {canEdit ? (
                 <select aria-label={`Estado de ${t.title}`} value={t.status} className={s.status} onChange={(e) => void run(() => source.update('tasks', t.id, { status: e.target.value }).then(reload))}>
                   {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
-              ) : <span className="pill">{STATUS_LABEL[t.status].toUpperCase()}</span>}
-              {canEdit ? <button className="btn btn-icon btn-sm" style={{ border: 0, background: 'transparent' }} aria-label={`Editar ${t.title}`} onClick={() => setEdit(t)}><Icon name="edit" size={16} /></button> : null}
+              ) : <Badge upper>{STATUS_LABEL[t.status]}</Badge>}
+              {canEdit ? <IconButton icon="edit" label={`Editar ${t.title}`} variant="ghost" size={40} onClick={() => setEdit(t)} /> : null}
             </li>
           );
         })}
-        {!tasks.length ? <li className="muted">Nenhuma pendência. As da turma aparecem aqui com responsável e prazo.</li> : null}
+        {!tasks.length ? <li className={s.none}>Nenhuma pendência. As da turma aparecem aqui com responsável e prazo.</li> : null}
       </ul>
       {edit ? <TaskDialog t={edit === 'new' ? null : edit} onClose={() => setEdit(null)} /> : null}
     </>
@@ -272,19 +274,19 @@ function TaskDialog({ t, onClose }: { t: Task | null; onClose: () => void }) {
   }, { success: 'Pendência salva.', onConflict: async () => { if (t) await source.update('tasks', t.id, row()); await reload(); onClose(); } });
   return (
     <Dialog open onClose={onClose} title={t ? 'Editar pendência' : 'Nova pendência'} footer={<>
-      {t ? <button className="btn btn-danger tap" onClick={async () => { if (await confirm({ title: 'Excluir pendência?', message: t.title })) await run(() => source.remove('tasks', { id: t.id }).then(reload).then(onClose)); }}>Excluir</button> : null}
-      <button className="btn tap" onClick={onClose}>Cancelar</button>
-      <button className="btn btn-primary tap" disabled={busy || !v.title.trim()} onClick={save}>Salvar</button>
+      {t ? <Button variant="secondary" className={s.danger} onClick={async () => { if (await confirm({ title: 'Excluir pendência?', message: t.title })) await run(() => source.remove('tasks', { id: t.id }).then(reload).then(onClose)); }}>Excluir</Button> : null}
+      <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+      <Button disabled={busy || !v.title.trim()} onClick={save}>Salvar</Button>
     </>}>
       {t && t.source !== 'user' ? <AiNote by={t.source}>Pendência criada automaticamente. Edite ou exclua à vontade.</AiNote> : null}
-      <label className="field">O que fazer<input value={v.title} maxLength={160} onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
-      <label className="field">Detalhe<input value={v.detail} maxLength={300} onChange={(e) => setV({ ...v, detail: e.target.value })} /></label>
-      <div className="grid2">
-        <label className="field">Responsável<select value={v.assignee_id} onChange={(e) => setV({ ...v, assignee_id: e.target.value })}><option value="">Ninguém</option>{b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}</select></label>
-        <label className="field">Prazo<input type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} /></label>
-        <label className="field">Estado<select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value as TaskStatus })}>{Object.entries(STATUS_LABEL).map(([k, x]) => <option key={k} value={k}>{x}</option>)}</select></label>
-        <label className="field">Área<select value={v.link} onChange={(e) => setV({ ...v, link: e.target.value as Task['link'] })}><option value="roteiro">Roteiro</option><option value="documentos">Documentos</option><option value="mala">Mala e gastos</option><option value="turma">Turma</option></select></label>
-      </div>
+      <Field label="O que fazer"><input value={v.title} maxLength={160} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
+      <Field label="Detalhe"><input value={v.detail} maxLength={300} onChange={(e) => setV({ ...v, detail: e.target.value })} /></Field>
+      <FieldGrid>
+        <Field label="Responsável"><select value={v.assignee_id} onChange={(e) => setV({ ...v, assignee_id: e.target.value })}><option value="">Ninguém</option>{b.members.map((m) => <option key={m.user_id} value={m.user_id}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</option>)}</select></Field>
+        <Field label="Prazo"><input type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} /></Field>
+        <Field label="Estado"><select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value as TaskStatus })}>{Object.entries(STATUS_LABEL).map(([k, x]) => <option key={k} value={k}>{x}</option>)}</select></Field>
+        <Field label="Área"><select value={v.link} onChange={(e) => setV({ ...v, link: e.target.value as Task['link'] })}><option value="roteiro">Roteiro</option><option value="documentos">Documentos</option><option value="mala">Mala e gastos</option><option value="turma">Turma</option></select></Field>
+      </FieldGrid>
     </Dialog>
   );
 }

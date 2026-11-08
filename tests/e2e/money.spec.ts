@@ -64,7 +64,7 @@ test.describe('Dinheiro · Fase 6', () => {
     await expect(page.getByRole('button', { name: /^Hotel/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: /^Solto/ })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('link', { name: 'Turma', exact: true }).click();
-    await page.getByRole('link', { name: /^Votos / }).click();
+    await page.getByRole('link', { name: /^Ver todas/ }).click();
     await expect(page.getByText(/Aprovar orçamento de/).first()).toBeVisible();
   });
 
@@ -109,7 +109,7 @@ test.describe('Dinheiro · Fase 6', () => {
     await expect(page.getByText('Lembretes criados para quem está atrasado.')).toBeVisible();
     await page.getByRole('button', { name: 'Lembrar quem está atrasado' }).click();
     await page.getByRole('link', { name: 'Turma', exact: true }).click();
-    await page.getByRole('link', { name: /Mala/ }).click();
+    await page.getByRole('link', { name: 'Abrir a mala' }).click();
     await expect(page.getByText('Aporte de R$ 3.230 no caixa', { exact: true })).toHaveCount(1);
     await expect(page.getByText('Aporte de R$ 4.250 no caixa', { exact: true })).toHaveCount(1);
     await page.getByRole('link', { name: 'Dinheiro', exact: true }).click();

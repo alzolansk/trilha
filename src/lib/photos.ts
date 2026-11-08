@@ -112,6 +112,15 @@ export function thumbAt(url: string, width: number): string {
   return url.replace(/\/(\d+)px-([^/]+)$/, `/${width}px-$2`);
 }
 
+/** Larguras do srcset (planning §9: 400/800/1200). Se a Wikimedia passar a recusar tamanhos fora dos "degraus" oficiais, é só trocar aqui. */
+export const PHOTO_WIDTHS = [400, 800, 1200] as const;
+
+/** srcset com as variantes do thumb da Wikimedia; null para qualquer outra origem (upload próprio, URL assinada). */
+export function photoSrcSet(url: string, widths: readonly number[] = PHOTO_WIDTHS): string | null {
+  if (!/^https:\/\/upload\.wikimedia\.org\/.+\/\d+px-[^/]+$/.test(url)) return null;
+  return widths.map((w) => `${thumbAt(url, w)} ${w}w`).join(', ');
+}
+
 /** Navegador: pede a foto ao servidor. null quando não há (ou sem login/rede): o Photo mostra o placeholder. */
 export async function fetchPhoto(q: string, lang: WikiLang = 'pt'): Promise<PhotoRef | null> {
   try {

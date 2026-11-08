@@ -1,7 +1,7 @@
 .stack { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.panel { padding: 20px; border-radius: 24px; background: var(--card); min-width: 0; }
+.panel { padding: 20px; border-radius: 24px; background: var(--surface); min-width: 0; }
 .muted { color: var(--mute); font-size: 13px; line-height: 1.5; }
 .note { padding: 14px; border-radius: 14px; background: var(--brand-soft); font-size: 14px; line-height: 1.6; }
 .warning { background: var(--sun-soft, #fff0df); color: var(--warn); }
@@ -10,7 +10,7 @@
 .item > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .item small { display: block; color: var(--mute); font-size: 12px; margin-top: 4px; }
 .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.choice { text-align: left; display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--line); padding: 16px; border-radius: 16px; color: var(--ink); cursor: pointer; }
+.choice { text-align: left; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--line); padding: 16px; border-radius: 16px; color: var(--ink); cursor: pointer; }
 .choice[aria-pressed=true] { background: var(--brand); border-color: var(--brand); color: white; }
 .choice:disabled { cursor: default; }
 .choice small { font-size: 12px; line-height: 1.4; }

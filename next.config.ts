@@ -8,8 +8,8 @@ const securityHeaders = [
 ];
 
 // Trilha 2.0 (planning §4.3): rotas antigas → novas, nas duas árvores (/t/:id e /demo/:key).
-// Query string passa junto (ex.: /documentos?doc=x → /turma/documentos?doc=x). 307 por ora:
-// as rotas ainda podem mudar até a Fase 9.
+// Query string passa junto (ex.: /documentos?doc=x → /turma/documentos?doc=x). 308 (permanente):
+// as rotas ficaram estáveis ao fim da Fase 9.
 const MOVED: [from: string, to: string][] = [
   ['/explorar', '/descobrir'],
   ['/mala', '/turma/mala'],
@@ -24,8 +24,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['web-push'],
   async redirects() {
     return [
-      ...['/t/:id', '/demo/:id'].flatMap((root) => MOVED.map(([from, to]) => ({ source: root + from, destination: root + to, permanent: false }))),
-      { source: '/identidades', destination: '/nova-trilha', permanent: false },
+      ...['/t/:id', '/demo/:id'].flatMap((root) => MOVED.map(([from, to]) => ({ source: root + from, destination: root + to, permanent: true }))),
+      { source: '/identidades', destination: '/nova-trilha', permanent: true },
     ];
   },
   async headers() {

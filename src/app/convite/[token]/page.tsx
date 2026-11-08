@@ -7,6 +7,7 @@ import { humanError } from '../../../data/source';
 import { ROLE_LABEL } from '../../../lib/format';
 import { getSupabase } from '../../../lib/supabase/client';
 import s from '../../entrar/auth.module.css';
+import { Button } from '../../../components/ui';
 
 /**
  * Aceitar convite. O link gerado pelo app é /convite/aceitar#<token> (token no fragmento,
@@ -92,7 +93,7 @@ export default function Convite() {
           <>
             <p style={{ margin: 0, fontSize: 18 }}>Você foi convidado para <b>{info.trip_title}</b> como <b>{ROLE_LABEL[info.role]?.toLowerCase()}</b>.</p>
             <p className="mono" style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>VÁLIDO ATÉ {new Date(info.expires_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
-            <button className="btn btn-primary tap" style={{ justifyContent: 'center' }} onClick={accept} disabled={busy}>{busy ? 'Entrando…' : 'Aceitar e abrir a trilha'}</button>
+            <Button style={{ justifyContent: 'center' }} onClick={accept} disabled={busy}>{busy ? 'Entrando…' : 'Aceitar e abrir a trilha'}</Button>
           </>
         )}
       </div>

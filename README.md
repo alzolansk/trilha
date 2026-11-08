@@ -26,13 +26,13 @@ cp .env.example .env.local   # preencha as variáveis (veja abaixo)
 npm run dev                  # http://localhost:3000
 ```
 
-Sem Supabase configurado, a **demonstração** funciona: `http://localhost:3000/identidades` → "Ver demonstração" (4 trilhas fictícias, nada é salvo).
+Sem Supabase configurado, a **demonstração** funciona: `http://localhost:3000/demo/andes` (4 trilhas fictícias, nada é salvo).
 
 Comandos:
 
 ```bash
 npm run typecheck   # TypeScript
-npm test            # Vitest: cálculos, identidades, regras + RLS num Postgres em WASM (PGlite)
+npm test            # Vitest: cálculos, accent/contraste, regras + RLS num Postgres em WASM (PGlite)
 npm run build       # build de produção
 BASE_URL=http://localhost:3000 npm run test:e2e   # Playwright (usa o Chrome instalado)
 ```
@@ -82,24 +82,28 @@ Rotas internas (`/t/<id>/roteiro`, `/convite/…`) funcionam com navegação dir
 
 ## IA
 
-- Sem nenhuma chave, tudo funciona: identidades do dicionário + gerador por regras, dicas/alertas/sugestões por regras verificáveis (etiqueta **AUTO**). Nada estático é apresentado como IA.
-- Com chaves, cada tarefa tenta provedores numa ordem (Gemini primeiro para identidade e retrospectiva; Groq para dicas/mala/alertas; Gemma via OpenRouter para classificação). Erro 429/5xx põe o provedor em resfriamento. Saídas validadas com Zod; frases como "baixei/reservei" e fatos sensíveis sem fonte são descartados.
+- Sem nenhuma chave, tudo funciona: destinos do dicionário (cor de destaque por destino), dicas/alertas/sugestões por regras verificáveis (etiqueta **AUTO**). Nada estático é apresentado como IA.
+- Com chaves, cada tarefa tenta provedores numa ordem (Gemini primeiro para descoberta de destino e retrospectiva; Groq para dicas/mala/alertas; Gemma via OpenRouter para classificação). Erro 429/5xx põe o provedor em resfriamento. Saídas validadas com Zod; frases como "baixei/reservei" e fatos sensíveis sem fonte são descartados.
 - O texto dos documentos é extraído no navegador (pdf.js / tesseract.js); só um trecho do texto vai para a IA, nunca o arquivo.
 - Cotas gratuitas mudam com frequência; confira em cada painel. `GEMINI_MODEL` deve ser um ID existente na sua conta (`GET https://generativelanguage.googleapis.com/v1beta/models?key=…`).
 
+## Colunas sem uso
+
+`trips.identity` e `trips.identity_version` (migration `spec_v3`) não são mais escritas: o visual é fixo e só a cor de destaque (`trips.accent`) muda por trilha. Ficam no banco para não quebrar cópias antigas; trilhas novas gravam `identity = null`.
+
 ## Offline e privacidade
 
-- Passagens e identidade ficam com "manter offline" ligado por padrão; a preferência é por pessoa (banco) e o estado "baixado neste aparelho" fica no IndexedDB (`trilha-u-<id>`). O selo OFFLINE só aparece com a cópia salva.
+- Passagens ficam com "manter offline" ligado por padrão; a preferência é por pessoa (banco) e o estado "baixado neste aparelho" fica no IndexedDB (`trilha-u-<id>`). O selo OFFLINE só aparece com a cópia salva.
 - Sair da conta apaga todos os dados locais. Remover alguém da trilha não apaga remotamente cópias já baixadas num aparelho desconectado; elas somem quando ele sincronizar.
 - O navegador pode apagar armazenamento sob pressão de espaço; o app pede armazenamento persistente, mas não há garantia.
 
 ## Estrutura
 
 ```
-src/app/          rotas (t/[tripId]/…, demo/[key]/…, nova-trilha, identidades, convite, entrar, conta, api/…)
+src/app/          rotas (t/[tripId]/…, demo/[key]/…, nova-trilha, descobrir, convite, entrar, conta, api/…)
 src/screens/      telas da trilha (Início, Roteiro, Documentos, Mala, Diário, Turma, EditTrip)
-src/components/   shell (header, tabbar, tema), ui, mapa, formulários, cartão de identidade
-src/lib/          identidade (dicionário, validação, gerador, fendas), tempo, dinheiro, regras, IA
+src/components/   shell (header, tabbar, tema), ui, mapa, formulários
+src/lib/          accent e dicionário de destinos, tempo, dinheiro, regras, IA
 src/data/         tipos, fontes de dados (Supabase e demonstração), offline
 supabase/         migrations
 tests/            unit, db (RLS em PGlite), e2e (Playwright)

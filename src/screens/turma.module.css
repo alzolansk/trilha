@@ -11,18 +11,58 @@
 .optText { margin: 0; font-size: 14px; color: var(--mute); overflow-wrap: anywhere; }
 .optRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 14px; }
 .optRow a { overflow-wrap: anywhere; min-height: 44px; display: inline-flex; align-items: center; }
-.bar { position: relative; height: 10px; border-radius: 999px; background: var(--soft, var(--line)); overflow: hidden; }
+.bar { position: relative; height: 10px; border-radius: 999px; background: var(--field); overflow: hidden; }
 .bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; border-right: 2px solid var(--ink); }
 .bar i[data-zero=true] { border-right: 0; }
 .voters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 24px; }
 .voters :global(.av) { width: 24px; height: 24px; font-size: 9px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .closed summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
-.closed summary:focus-visible { outline: 2.5px solid var(--acc); outline-offset: 3px; border-radius: 8px; }
+.closed summary:focus-visible { outline: 2.5px solid var(--brand); outline-offset: 3px; border-radius: 8px; }
 .closedList { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; }
 .optEdit { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); }
 .types { display: flex; flex-wrap: wrap; gap: 6px; }
-.warn { margin: 0; font-size: 14px; border-left: 3px solid var(--acc); padding-left: 10px; }
-.optEdit > :global(.err) { font-weight: 500; color: var(--ink); border-left: 3px solid var(--acc); padding-left: 8px; }
+.warn { margin: 0; font-size: 14px; border-left: 3px solid var(--brand); padding-left: 10px; }
+.optEdit > :global(.err) { font-weight: 500; color: var(--ink); border-left: 3px solid var(--brand); padding-left: 8px; }
 /* Fase 2: atalhos para as subtelas da Turma */
 .hub { display: flex; flex-direction: column; padding: 4px 16px; border-radius: var(--r-card); background: var(--surface); }
+
+/* Fase 7: TurmaHub (Turma.dc.html) */
+.members { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 24px) / 3); gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; margin-bottom: 24px; }
+.member { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border-radius: var(--r-card); background: var(--surface); border: 0; font: inherit; color: inherit; text-align: center; min-height: 44px; scroll-snap-align: start; }
+button.member { cursor: pointer; }
+.mName { font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mPend { font-size: 12px; color: var(--warn, #b45309); font-weight: 600; }
+.mPend[data-ok=true] { color: var(--mute); font-weight: 500; }
+.block { display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; }
+.blockHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.blockHead h2 { margin: 0; font-size: 24px; }
+.seeAll { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; color: var(--brand); }
+.eyebrow { font-size: 12px; letter-spacing: .04em; color: var(--mute); font-weight: 600; }
+.top { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: var(--r-card); background: var(--surface); }
+.top h3 { margin: 0; font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; }
+.topOpts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.topOpt { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; min-height: 56px; border-radius: 18px; background: var(--bg); border: 1.5px solid var(--line); color: inherit; text-decoration: none; }
+.topOpt[data-mine=true] { border-color: var(--brand); }
+.optHead { display: flex; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
+.optBar { height: 8px; border-radius: 999px; background: var(--field, var(--line)); overflow: hidden; }
+.optBar i { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
+.optMeta { font-size: 13px; color: var(--mute); overflow-wrap: anywhere; }
+.tie { margin: 0; font-size: 14px; border-left: 3px solid var(--brand); padding-left: 10px; }
+.matrixLink { display: block; color: inherit; text-decoration: none; border-radius: var(--r-card); background: var(--surface); padding: 14px; }
+.matrix { display: grid; gap: 8px 4px; align-items: center; }
+.mHead { display: flex; justify-content: center; }
+.mLabel { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.cell { text-align: center; font-weight: 700; color: var(--mute); }
+.cell[data-ok=true] { color: var(--ok, #15803d); }
+.note { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--mute); margin: 0; }
+.who { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.whoRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
+.chipWho { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff; background: var(--brand); }
+.chipWho[data-all=true] { background: var(--field, var(--line)); color: var(--ink); }
+.diary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.entry { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--r-card); background: var(--surface); color: inherit; text-decoration: none; min-height: 88px; overflow-wrap: anywhere; }
+.sheetBody { display: flex; flex-direction: column; gap: 14px; }
+.invites { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.invites li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+@media (min-width: 821px) { .members { grid-auto-columns: calc((100% - 24px) / 4); } }

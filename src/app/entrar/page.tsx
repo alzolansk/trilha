@@ -9,6 +9,7 @@ import { humanError } from '../../data/source';
 import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK } from '../../lib/env';
 import { getSupabase } from '../../lib/supabase/client';
 import s from './auth.module.css';
+import { Button, Field } from '../../components/ui';
 
 function safeNext(n: string | null) {
   return n && n.startsWith('/') && !n.startsWith('//') ? n : '/';
@@ -88,16 +89,16 @@ function Entrar() {
           <>
             {AUTH_GOOGLE || AUTH_APPLE ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {AUTH_GOOGLE ? <button className="btn tap" style={{ justifyContent: 'center' }} onClick={() => void oauth('google')}>Continuar com Google</button> : null}
-                {AUTH_APPLE ? <button className="btn tap" style={{ justifyContent: 'center' }} onClick={() => void oauth('apple')}>Continuar com Apple</button> : null}
+                {AUTH_GOOGLE ? <Button variant="secondary" style={{ justifyContent: 'center' }} onClick={() => void oauth('google')}>Continuar com Google</Button> : null}
+                {AUTH_APPLE ? <Button variant="secondary" style={{ justifyContent: 'center' }} onClick={() => void oauth('apple')}>Continuar com Apple</Button> : null}
                 <span className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--mute)' }}>OU COM E-MAIL</span>
               </div>
             ) : null}
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {mode === 'signup' ? <label className="field">Seu nome<input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label> : null}
-              <label className="field">E-mail<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
+              {mode === 'signup' ? <Field label="Seu nome"><input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} autoComplete="name" /></Field> : null}
+              <Field label="E-mail"><input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></Field>
               {mode === 'login' || mode === 'signup' ? (
-                <label className="field">Senha<input type="password" required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
+                <Field label="Senha"><input type="password" required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></Field>
               ) : null}
               {msg ? <div role={msg.kind === 'err' ? 'alert' : 'status'} className={msg.kind === 'err' ? 'errbox' : 'ai'}>{msg.text}</div> : null}
               <button className="btn btn-ink tap" style={{ justifyContent: 'center' }} disabled={busy}>

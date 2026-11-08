@@ -57,12 +57,13 @@ ${q.budgetPerPerson ? `Orçamento por pessoa: ${q.budgetPerPerson} ${cur}. Prefi
 ${q.vibes?.length ? `A turma quer: ${q.vibes.join(', ')}.` : ''}
 ${ask}
 "why" = uma frase do porquê combina com a turma. "lat"/"lng" = coordenadas aproximadas do lugar.
-JSON: {"origin":{"name":"...","lat":0,"lng":0} ou null,"items":[{"name":"...","region":"estado/província","country":"...","lat":0,"lng":0,"why":"...","mode":"bus|car|plane|train|boat","hours":0,"cost_low":0,"cost_high":0}]}`,
+"stops" = de 2 a 6 cidades/paradas reais, em ordem, de um roteiro enxuto nesse destino (a primeira costuma ser o próprio lugar). "photo_query" = nome do lugar + uma palavra-chave para achar uma foto. "tags" = vibes que o lugar atende, só entre: natureza, cidade, praia, cultura, aventura, comida.
+JSON: {"origin":{"name":"...","lat":0,"lng":0} ou null,"items":[{"name":"...","region":"estado/província","country":"...","lat":0,"lng":0,"why":"...","mode":"bus|car|plane|train|boat","hours":0,"cost_low":0,"cost_high":0,"stops":["..."],"photo_query":"...","tags":["..."]}]}`,
         (raw) => {
           const v = exploreDestSchema.safeParse(raw);
           if (!v.success) return null;
           const taken = new Set(stops.map((s) => s.name.toLowerCase()));
-          const items = v.data.items.filter((i) => fair(i.why) && !taken.has(i.name.toLowerCase())).map(range);
+          const items = v.data.items.filter((i) => fair(i.why) && !taken.has(i.name.toLowerCase())).map(range).map((i) => ({ ...i, stops: i.stops.filter((n) => fair(n)).slice(0, 6) }));
           return items.length ? { origin: v.data.origin ?? null, items } : null;
         },
         { maxTokens: 1600, temperature: 0.7 },

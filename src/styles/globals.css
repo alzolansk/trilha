@@ -68,30 +68,6 @@
   --ease: cubic-bezier(.2, .8, .2, 1);
   --ease-spring: cubic-bezier(.3, 1.3, .5, 1);
   --dur: 200ms;
-
-  /* ---- aliases de compatibilidade (telas antigas, removidos quando cada tela for redesenhada) ---- */
-  --font-display: var(--font-title);
-  --font-mono: var(--font-body);
-  --display-weight: 800;
-  --ease-out: var(--ease);
-  --card: var(--surface);
-  --soft: var(--field);
-  --acc: var(--brand);
-  --acc2: var(--sun);
-  --acc3: var(--ok);
-  --deep: var(--ink);
-  --cycle4: var(--ink);
-  --route: var(--brand-on-dark);
-  --on-deep: var(--on-dark);
-  --on-acc: var(--on-brand);
-  --fg-acc: #FFFFFF;
-  --fg-acc2: #0D1017;
-  --fg-acc3: #FFFFFF;
-  --fg-deep: #FFFFFF;
-  --fg-cycle4: #FFFFFF;
-  --r-sm: 12px; --r-md: 16px; --r-lg: var(--r-card); --r-xl: var(--r-card-lg); --r-pill: var(--r-chip);
-  --motif: circle(50%);
-  --motif-solid: circle(50%);
 }
 @media (min-width: 821px) {
   :root {
@@ -138,9 +114,10 @@ img { display: block; }
 .press { transition: transform 160ms var(--ease); }
 .press:active { transform: scale(.98); }
 
-/* ============ compatibilidade: classes das telas antigas, com o visual novo ============
- * Mantidas para "as telas antigas ainda abrem" (Fase 1). Saem quando cada tela for redesenhada
- * com os componentes de src/components/ui/.
+/* ============ compatibilidade: classes legadas ainda em uso ============
+ * Restam só as telas/formulários fora do escopo da Fase 9 (conta, entrar, convite, offline, EditTrip, Votos,
+ * Turma/Descobrir em partes, VaultContext, feedback, ErrorBox, PlaceSearch, money/*Sheet e Converter).
+ * Cada uma sai daqui quando for migrada para src/components/ui/.
  */
 .disp { font-family: var(--font-title); font-weight: 800; letter-spacing: -0.025em; }
 .mono { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
@@ -160,12 +137,9 @@ img { display: block; }
 .btn-primary:hover { background: var(--brand-ink); color: var(--on-brand); }
 .btn-ink { background: var(--ink); color: var(--on-dark); }
 .btn-ink:hover { background: var(--dark-2); color: var(--on-dark); }
-.btn-ghost { background: transparent; color: var(--brand); }
-.btn-ghost:hover { background: var(--brand-soft); color: var(--brand-ink); }
 .btn-danger { background: var(--sun-soft); color: var(--sun-ink); }
 .btn-danger:hover { background: var(--sun-soft); color: var(--warn); }
 .btn-sm { min-height: 40px; padding: 0 14px; font-size: 14px; border-radius: 12px; }
-.btn-icon { width: 44px; min-height: 44px; padding: 0; border-radius: 999px; }
 .chip {
   flex: none; min-height: 44px; padding: 0 16px; border-radius: var(--r-chip); border: 1px solid var(--line);
   background: var(--surface); color: var(--ink); font-weight: 600; font-size: 14px;
@@ -197,20 +171,10 @@ img { display: block; }
 .split { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 24px; align-items: flex-start; }
 .col-side { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; }
 .col-main { flex: 999 1 560px; min-width: 0; }
-.ticket { position: relative; display: flex; flex-direction: column; border-radius: var(--r-card); background: var(--surface); }
-.ticket-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-2); }
-.notch { display: none; }
-.av { width: 36px; height: 36px; flex: none; border-radius: 999px; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
-.bullet { width: 10px; height: 10px; flex: none; border-radius: 999px; display: inline-block; }
 .pill { display: inline-flex; align-items: center; gap: 6px; font: var(--t-micro); padding: 5px 10px; border-radius: 999px; background: var(--field); color: var(--ink-2); white-space: nowrap; }
 .pill[data-tone=acc] { background: var(--brand-soft); color: var(--brand-ink); }
 .pill[data-tone=acc2] { background: var(--sun-soft); color: var(--sun-ink); }
 .pill[data-tone=ink] { background: var(--ink); color: var(--on-dark); }
-.bar { height: 10px; border-radius: 999px; background: var(--field); overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 999px; }
-.view { animation: fadeIn 180ms var(--ease) both; }
-/* reveal antigo: sem animação de entrada no visual novo */
-.rv, .gw, .gy { opacity: 1; transform: none; }
 
 /* checkbox antigo (.check) com o visual do Checkbox novo */
 .check { position: relative; display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }

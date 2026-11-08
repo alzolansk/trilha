@@ -11,6 +11,7 @@ import type { TripStyle } from '../data/types';
 import { ACCENT_CHOICES } from '../lib/identity/accent';
 import { centsToDecimal, toCents } from '../lib/money';
 import { instantToWall, isValidTimeZone, listTimeZones, wallToInstant } from '../lib/time';
+import { Button, Field, FieldGrid } from '../components/ui';
 
 const STYLES: TripStyle[] = ['Mochilão', 'Conforto', 'Aventura', 'Cultural'];
 
@@ -79,22 +80,22 @@ export default function EditTrip() {
       <PageTitle eyebrow={t.title} title="Dados da trilha" sub="Datas, horário e fuso do embarque alimentam o countdown." />
       <section className="split">
         <div className="col-main card" style={{ padding: 26, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <label className="field">Nome da trilha<input value={v.title} maxLength={80} onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
-          <label className="field">Destinos (separados por vírgula)<input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" />{!t.destinations.length ? <span className="hint">Fechou o destino? Escreva aqui e salve.</span> : null}</label>
-          <div className="grid2">
-            <label className="field">Ida<input type="date" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></label>
-            <label className="field">Volta<input type="date" value={v.end} min={v.start} onChange={(e) => setV({ ...v, end: e.target.value })} /></label>
-            <label className="field">Horário do embarque<input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /><span className="hint">Sem horário, o countdown conta até 00:00 do dia da ida.</span></label>
-            <label className="field">Fuso do embarque<input list="tzs" value={v.tz} onChange={(e) => setV({ ...v, tz: e.target.value })} />{!isValidTimeZone(v.tz) ? <span className="err">Fuso desconhecido.</span> : null}</label>
-            <label className="field">Origem (IATA ou cidade)<input value={v.origin} maxLength={60} onChange={(e) => setV({ ...v, origin: e.target.value })} placeholder="GRU" /></label>
-            <label className="field">Seu fuso de casa<input list="tzs" value={v.home} onChange={(e) => setV({ ...v, home: e.target.value })} /></label>
-            <label className="field">Estilo<select value={v.style} onChange={(e) => setV({ ...v, style: e.target.value as TripStyle })}>{STYLES.map((x) => <option key={x}>{x}</option>)}</select></label>
-            <label className="field">Moeda base<input value={v.currency} maxLength={3} onChange={(e) => setV({ ...v, currency: e.target.value.toUpperCase() })} /><span className="hint">Gastos já registrados mantêm a taxa gravada.</span></label>
-            <label className="field">Orçamento total<input inputMode="decimal" value={v.budget} onChange={(e) => setV({ ...v, budget: e.target.value })} /></label>
-            <label className="field">Etiqueta (opcional)<input value={v.tagline} maxLength={40} onChange={(e) => setV({ ...v, tagline: e.target.value })} placeholder="Mochilão de verão" /></label>
-          </div>
+          <Field label="Nome da trilha"><input value={v.title} maxLength={80} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
+          <Field label="Destinos (separados por vírgula)"><input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" />{!t.destinations.length ? <span className="hint">Fechou o destino? Escreva aqui e salve.</span> : null}</Field>
+          <FieldGrid>
+            <Field label="Ida"><input type="date" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></Field>
+            <Field label="Volta"><input type="date" value={v.end} min={v.start} onChange={(e) => setV({ ...v, end: e.target.value })} /></Field>
+            <Field label="Horário do embarque"><input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /><span className="hint">Sem horário, o countdown conta até 00:00 do dia da ida.</span></Field>
+            <Field label="Fuso do embarque"><input list="tzs" value={v.tz} onChange={(e) => setV({ ...v, tz: e.target.value })} />{!isValidTimeZone(v.tz) ? <span className="err">Fuso desconhecido.</span> : null}</Field>
+            <Field label="Origem (IATA ou cidade)"><input value={v.origin} maxLength={60} onChange={(e) => setV({ ...v, origin: e.target.value })} placeholder="GRU" /></Field>
+            <Field label="Seu fuso de casa"><input list="tzs" value={v.home} onChange={(e) => setV({ ...v, home: e.target.value })} /></Field>
+            <Field label="Estilo"><select value={v.style} onChange={(e) => setV({ ...v, style: e.target.value as TripStyle })}>{STYLES.map((x) => <option key={x}>{x}</option>)}</select></Field>
+            <Field label="Moeda base"><input value={v.currency} maxLength={3} onChange={(e) => setV({ ...v, currency: e.target.value.toUpperCase() })} /><span className="hint">Gastos já registrados mantêm a taxa gravada.</span></Field>
+            <Field label="Orçamento total"><input inputMode="decimal" value={v.budget} onChange={(e) => setV({ ...v, budget: e.target.value })} /></Field>
+            <Field label="Etiqueta (opcional)"><input value={v.tagline} maxLength={40} onChange={(e) => setV({ ...v, tagline: e.target.value })} placeholder="Mochilão de verão" /></Field>
+          </FieldGrid>
           <datalist id="tzs">{tzs.map((z) => <option key={z} value={z} />)}</datalist>
-          <button className="btn btn-primary tap" style={{ alignSelf: 'flex-start' }} disabled={!ok || busy} onClick={save}>Salvar</button>
+          <Button style={{ alignSelf: 'flex-start' }} disabled={!ok || busy} onClick={save}>Salvar</Button>
         </div>
         <div className="col-side" style={{ gap: 16 }}>
           <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Aparência</h2>
@@ -125,7 +126,7 @@ export default function EditTrip() {
               </span>
             </div>
           </div>
-          {isOrganizer ? <button className="btn btn-danger tap" style={{ marginTop: 32 }} onClick={del}>Excluir trilha</button> : null}
+          {isOrganizer ? <Button variant="secondary" style={{ color: "var(--warn)", marginTop: 32 }} onClick={del}>Excluir trilha</Button> : null}
         </div>
       </section>
     </div>

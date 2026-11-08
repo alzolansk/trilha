@@ -67,14 +67,14 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
       const mine = myVotes(b, p.id, me).length > 0;
       const st = pollState(b, p.id, now);
       if (st === 'awaiting_decision' && canDecide(b, p, me)) {
-        out.push({ key: `decide-${p.id}`, title: 'Fechar o destino.', detail: `A votação “${p.question}” terminou. Falta decidir.`, link: '/turma#decisoes', cta: 'Decidir' });
+        out.push({ key: `decide-${p.id}`, title: 'Fechar o destino.', detail: `A votação “${p.question}” terminou. Falta decidir.`, link: '/turma/votos', cta: 'Decidir' });
       } else if (!mine && st === 'open') {
-        out.push({ key: `vote-${p.id}`, title: 'Votar no destino.', detail: `${voted} de ${total} já votaram em “${p.question}”. Falta você.`, link: '/turma#decisoes', cta: 'Votar' });
+        out.push({ key: `vote-${p.id}`, title: 'Votar no destino.', detail: `${voted} de ${total} já votaram em “${p.question}”. Falta você.`, link: '/turma/votos', cta: 'Votar' });
       } else {
         out.push({
           key: `wait-${p.id}`, title: 'Fechar o destino.',
           detail: voted < total ? `${voted} de ${total} votaram. Dá pra esperar a turma ou decidir já.` : 'Todo mundo votou. Hora de fechar.',
-          link: '/turma#decisoes', cta: 'Ver votação',
+          link: '/turma/votos', cta: 'Ver votação',
         });
       }
     }
