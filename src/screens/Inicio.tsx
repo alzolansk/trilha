@@ -25,6 +25,7 @@ import { dateSpan } from '../lib/format';
 import { budgetOverview, formatMoney } from '../lib/money';
 import { fetchPhoto } from '../lib/photos';
 import { hasDestination, nextStep, planStage } from '../lib/plan';
+import { parseOnboarding } from '../lib/onboarding';
 import { rankForHome, stopsNeedingSuggestions, type HomeCard, type HomeCardType } from '../lib/suggestions';
 import { countdown, todayIn } from '../lib/time';
 import PlanningHome from './PlanningHome';
@@ -148,6 +149,7 @@ function TripInicio() {
   });
 
   const money = budgetOverview(b);
+  const onboarding = parseOnboarding(trip.onboarding);
   const cur = trip.base_currency;
   const step = planStage(b, now) !== 'viajar' ? nextStep(b, me, now) : null;
   const today = todayIn(trip.departure_tz || 'America/Sao_Paulo', now);
@@ -176,6 +178,13 @@ function TripInicio() {
 
       <div className={s.body}>
         <div className={s.main}>
+          {canEdit && source.kind === 'supabase' && onboarding?.status === 'em_andamento' ? (
+            <Link href={`${base}/montar?passo=${onboarding.step}`} className={s.step} data-testid="continue-onboarding">
+              <span className={s.stepEyebrow}>Continuar montando a viagem · passo {onboarding.step} de 6</span>
+              <span className={s.stepTitle}>A Trilha sugere lugares, rota, passeios e quanto custa</span>
+              <span className={s.stepDetail}>Você ajusta o que quiser. Dá pra parar e voltar depois.</span>
+            </Link>
+          ) : null}
           {todayStop ? (
             <section className={s.section} aria-labelledby="hoje">
               <div className={s.sectionHead}>

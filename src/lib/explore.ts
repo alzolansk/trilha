@@ -14,10 +14,8 @@ export const BUDGET_SPLIT: { name: string; share: number }[] = [
 
 const norm = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
 
-/** Pessoas que dividem a viagem (no mínimo 1). */
-export function headcount(b: Pick<TripBundle, 'members'>): number {
-  return Math.max(1, b.members.length);
-}
+import { headcount } from './people';
+export { headcount };
 
 /** Orçamento total em centavos (o total da trilha, ou a soma do previsto por categoria). */
 export function budgetTotalCents(b: Pick<TripBundle, 'trip' | 'budgetCategories'>): number {

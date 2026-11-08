@@ -6,9 +6,13 @@ export const VIBES: { id: string; label: string }[] = [
   { id: 'natureza', label: 'Natureza' },
   { id: 'cidade', label: 'Cidade' },
   { id: 'praia', label: 'Praia' },
-  { id: 'cultura', label: 'Cultura' },
+  { id: 'cultura', label: 'Cultura e história' },
   { id: 'aventura', label: 'Aventura' },
   { id: 'comida', label: 'Comida' },
+  // Fase 10: gostos do passo 2 do onboarding
+  { id: 'arte', label: 'Arte e museus' },
+  { id: 'noturna', label: 'Vida noturna' },
+  { id: 'compras', label: 'Compras' },
 ];
 
 /** Respostas de uma pessoa (gravadas em `trip_preferences.answers`). Orçamento em unidades inteiras da moeda base. */

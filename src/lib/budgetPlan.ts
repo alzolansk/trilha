@@ -4,6 +4,7 @@
 import type { BudgetFood, BudgetKind, BudgetPace, BudgetPlan, BudgetSnapshot, BudgetStyle, Transport, TripBundle } from '../data/types';
 import { categoryKind, itemCost, toBaseCents, type Rates } from './money';
 import { estimateCents } from './suggestions';
+import { headcount } from './people';
 import { daysBetween } from './time';
 
 /** Estilos de hospedagem do Orçamento (canvas: Hostel / Pousada / Hotel). */
@@ -61,9 +62,34 @@ export interface PlanResult {
   people: number;
   days: number;
   nights: number;
+  /** noites da viagem sem cidade no roteiro (entram pela referência do estilo, como estimativa) */
+  uncoveredNights: number;
+  /** roteiro sem nenhuma parada: o total não é mostrado (planning §10.10) */
+  empty: boolean;
+  /** voo de ida/volta sem trecho no roteiro e ainda sem valor: avisa, mas não bloqueia o fechamento */
+  pendingVirtual: number;
 }
 
-const ppl = (b: Pick<TripBundle, 'members'>) => Math.max(1, b.members.length);
+/** Trecho que ainda não existe no roteiro: voo de ida (origem → 1ª parada) ou de volta (última → origem). */
+export interface VirtualLeg {
+  key: 'ida' | 'volta';
+  title: string;
+}
+
+/** Voo de ida e volta que faltam no roteiro, quando a trilha tem origem (planning §10.10.3). */
+export function virtualLegs(b: Pick<TripBundle, 'trip' | 'stops' | 'transports'>): VirtualLeg[] {
+  const origin = b.trip.origin?.trim();
+  const stops = [...b.stops].sort((x, y) => x.position - y.position);
+  if (!origin || !stops.length) return [];
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  const out: VirtualLeg[] = [];
+  if (!b.transports.some((t) => t.stop_id === first.id && !t.is_return)) out.push({ key: 'ida', title: `Voo ${origin} → ${first.name}` });
+  if (!b.transports.some((t) => t.is_return)) out.push({ key: 'volta', title: `Voo ${last.name} → ${origin}` });
+  return out;
+}
+
+const ppl = (b: Pick<TripBundle, 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }) => headcount(b);
 
 /** Calcula o previsto a partir do roteiro e do plano. `rates` converte preços em outra moeda. */
 export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | 'pace' | 'activities' | 'daily_food_cents' | 'transport_cents' | 'stay_estimates'>, rates: Rates = {}): PlanResult {
@@ -71,6 +97,7 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
   const days = daysBetween(b.trip.start_date, b.trip.end_date) + 1;
   const nights = Math.max(0, days - 1);
   const style = STYLE_FACTOR[plan.style] ?? 1;
+  const empty = b.stops.length === 0;
 
   // Transporte: preço por pessoa de cada trecho.
   // Trecho sem preço usa o valor que a turma aceitou no Orçamento (transport_cents), como estimativa.
@@ -85,6 +112,12 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
       tr += o;
       trEst += o;
     } else trMissing++;
+  }
+  // Voo de ida/volta que ainda não está no roteiro: entra com o valor aceito (estimativa) ou fica pendente.
+  let pendingVirtual = 0;
+  for (const v of virtualLegs(b)) {
+    const o = plan.transport_cents?.[v.key];
+    if (o != null) { tr += o; trEst += o; } else pendingVirtual++;
   }
 
   // Hospedagem: preço por noite da casa ÷ pessoas; parada com noites e sem preço → referência × estilo.
@@ -113,6 +146,16 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
       const v = Math.round(total / people * (flexible ? style : 1));
       st += v; if (stay?.price_is_estimate ?? true) stEst += v;
     }
+  }
+
+  // Noites da viagem sem cidade no roteiro: referência do estilo (ou a média das faixas já estimadas).
+  const covered = b.stops.reduce((a, s) => a + Math.max(0, daysBetween(s.arrival_date, s.departure_date)), 0);
+  const uncoveredNights = Math.max(0, nights - covered);
+  if (uncoveredNights > 0) {
+    const known = Object.values(plan.stay_estimates ?? {}).map((x) => x[plan.style]).filter((x): x is { low: number; high: number } => !!x);
+    const night = known.length ? Math.round(known.reduce((a, r) => a + (r.low + r.high) / 2, 0) / known.length) : nightFor(plan.style);
+    st += night * uncoveredNights;
+    stEst += night * uncoveredNights;
   }
 
   // Passeios: com seleção explícita (Orçamento em conversa), só os escolhidos — atividades do roteiro e
@@ -151,7 +194,7 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
     { kind: 'comida', perPersonCents: food, estimatedCents: plan.daily_food_cents ? 0 : food, missing: 0 },
   ];
   const perPersonCents = lines.reduce((a, l) => a + l.perPersonCents, 0);
-  return { lines, perPersonCents, totalCents: perPersonCents * people, people, days, nights };
+  return { lines, perPersonCents, totalCents: perPersonCents * people, people, days, nights, uncoveredNights, empty, pendingVirtual };
 }
 
 /** Novo previsto (turma toda, em reais com 2 casas) por categoria, casando pelo tipo. */
@@ -168,12 +211,13 @@ export function plannedUpdates(b: Pick<TripBundle, 'budgetCategories'>, r: PlanR
   return out;
 }
 
-/** Foto do roteiro usado no cálculo. */
-export function snapshotOf(b: Pick<TripBundle, 'stops' | 'members'>, now = new Date().toISOString()): BudgetSnapshot {
+/** Foto do roteiro usado no cálculo (com o valor por pessoa de cada categoria, quando há resultado). */
+export function snapshotOf(b: Pick<TripBundle, 'stops' | 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }, now = new Date().toISOString(), result?: PlanResult): BudgetSnapshot {
   return {
     stops: [...b.stops].sort((x, y) => x.position - y.position).map((s) => ({ id: s.id, nights: Math.max(0, daysBetween(s.arrival_date, s.departure_date)) })),
     people: ppl(b),
     at: now,
+    ...(result ? { lines: Object.fromEntries(result.lines.map((l) => [l.kind, l.perPersonCents])) } : {}),
   };
 }
 
@@ -181,10 +225,11 @@ export type PlanChange =
   | { kind: 'stop_added'; stopId: string; name: string }
   | { kind: 'stop_removed'; stopId: string }
   | { kind: 'nights'; stopId: string; name: string; from: number; to: number }
-  | { kind: 'people'; from: number; to: number };
+  | { kind: 'people'; from: number; to: number }
+  | { kind: 'money'; line: PlanLine['kind']; delta: number };
 
 /** O que mudou no roteiro desde o último Orçamento ("o roteiro mudou, quer recalcular?"). */
-export function diffSince(snap: BudgetSnapshot | null | undefined, b: Pick<TripBundle, 'stops' | 'members'>): PlanChange[] {
+export function diffSince(snap: BudgetSnapshot | null | undefined, b: Pick<TripBundle, 'stops' | 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }, current?: PlanResult): PlanChange[] {
   if (!snap) return [];
   const now = snapshotOf(b, snap.at);
   const out: PlanChange[] = [];
@@ -196,13 +241,25 @@ export function diffSince(snap: BudgetSnapshot | null | undefined, b: Pick<TripB
   }
   for (const s of snap.stops) if (!now.stops.some((x) => x.id === s.id)) out.push({ kind: 'stop_removed', stopId: s.id });
   if (snap.people !== now.people) out.push({ kind: 'people', from: snap.people, to: now.people });
+  // Diferença de valor por pessoa em cada categoria (ignora menos de 1 unidade da moeda).
+  if (snap.lines && current) {
+    for (const l of current.lines) {
+      const before = snap.lines[l.kind];
+      if (before == null) continue;
+      const delta = l.perPersonCents - before;
+      if (Math.abs(delta) >= 100) out.push({ kind: 'money', line: l.kind, delta });
+    }
+  }
   return out;
 }
 
 // ───────────── Passos do Orçamento em conversa (planning §5.5) ─────────────
 
 export interface TransportLeg {
+  /** id do trecho, ou 'ida'/'volta' para o voo que ainda não está no roteiro */
   id: string;
+  /** voo de ida/volta calculado pela Trilha, sem trecho gravado */
+  virtual?: boolean;
   title: string;
   /** por pessoa, na base; null = sem preço */
   perPersonCents: number | null;
@@ -217,8 +274,8 @@ const LEG_MODE: Record<string, string> = { plane: 'Voo', bus: 'Ônibus', train: 
 export function legTitle(b: Pick<TripBundle, 'stops' | 'trip'>, t: Transport): string {
   const stops = [...b.stops].sort((x, y) => x.position - y.position);
   const i = stops.findIndex((s) => s.id === t.stop_id);
-  const from = t.origin_name ?? t.origin_code ?? (i > 0 ? stops[i - 1].name : b.trip.origin) ?? null;
-  const to = t.dest_name ?? t.dest_code ?? stops[i]?.name ?? null;
+  const from = t.is_return ? t.origin_name ?? stops[i]?.name ?? null : t.origin_name ?? t.origin_code ?? (i > 0 ? stops[i - 1].name : b.trip.origin) ?? null;
+  const to = t.is_return ? t.dest_name ?? b.trip.origin ?? null : t.dest_name ?? t.dest_code ?? stops[i]?.name ?? null;
   const mode = LEG_MODE[t.mode] ?? 'Trecho';
   return [mode, [from, to].filter(Boolean).join(' → ')].filter(Boolean).join(' ');
 }
@@ -226,8 +283,12 @@ export function legTitle(b: Pick<TripBundle, 'stops' | 'trip'>, t: Transport): s
 /** Passo 1: cada trecho do roteiro com o valor por pessoa (confirmado, estimado ou faltando). */
 export function transportLegs(b: TripBundle, plan: Pick<BudgetPlan, 'transport_cents'> | null | undefined, rates: Rates = {}): TransportLeg[] {
   const order = new Map([...b.stops].sort((x, y) => x.position - y.position).map((s, i) => [s.id, i]));
-  return [...b.transports]
-    .sort((x, y) => (order.get(x.stop_id) ?? 0) - (order.get(y.stop_id) ?? 0) || (x.depart_date ?? '').localeCompare(y.depart_date ?? ''))
+  const virtual = virtualLegs(b).map((v): TransportLeg => {
+    const o = plan?.transport_cents?.[v.key];
+    return { id: v.key, virtual: true, title: v.title, perPersonCents: o ?? null, from: o != null ? 'trilha' : null, isEstimate: o != null };
+  });
+  const real = [...b.transports]
+    .sort((x, y) => Number(!!x.is_return) - Number(!!y.is_return) || (order.get(x.stop_id) ?? 0) - (order.get(y.stop_id) ?? 0) || (x.depart_date ?? '').localeCompare(y.depart_date ?? ''))
     .map((t) => {
       const v = toBaseCents(t.price_cents, t.price_currency, b.trip.base_currency, rates);
       const o = plan?.transport_cents?.[t.id];
@@ -235,6 +296,7 @@ export function transportLegs(b: TripBundle, plan: Pick<BudgetPlan, 'transport_c
       if (o != null) return { id: t.id, title: legTitle(b, t), perPersonCents: o, from: 'trilha' as const, isEstimate: true };
       return { id: t.id, title: legTitle(b, t), perPersonCents: null, from: null, isEstimate: false };
     });
+  return [...virtual.filter((v) => v.id === 'ida'), ...real, ...virtual.filter((v) => v.id === 'volta')];
 }
 
 export interface StayOption {
@@ -305,6 +367,8 @@ export function initialPlan(b: TripBundle, rates: Rates = {}): BudgetPlan {
     // ids que sumiram (atividade apagada, sugestão dispensada) saem da seleção
     activities: saved?.activities ? saved.activities.filter((id) => tours.some((t) => t.id === id)) : tours.filter((t) => t.type === 'activity').map((t) => t.id),
     transport_cents: saved?.transport_cents ?? {},
+    transport_ranges: saved?.transport_ranges ?? null,
+    food_range: saved?.food_range ?? null,
     stay_estimates: saved?.stay_estimates,
     snapshot: saved?.snapshot ?? null,
     updated_at: saved?.updated_at,
@@ -319,12 +383,46 @@ export function capPerPerson(b: Pick<TripBundle, 'trip' | 'members'>): number | 
   return c > 0 ? Math.round(c / ppl(b)) : null;
 }
 
-/** Frase do aviso "Mudou desde a última vez". */
-export function describeChanges(changes: PlanChange[]): string[] {
+const LINE_NAME: Record<PlanLine['kind'], string> = { transporte: 'transporte', hospedagem: 'hospedagem', passeios: 'passeios', comida: 'comida' };
+
+/** Frase do aviso "Mudou desde a última vez". `money` formata centavos (ex.: "R$ 310"). */
+export function describeChanges(changes: PlanChange[], money: (cents: number) => string = (c) => (c / 100).toFixed(0)): string[] {
   return changes.map((c) => {
+    if (c.kind === 'money') return `${c.delta > 0 ? '+' : '-'}${money(Math.abs(c.delta))} em ${LINE_NAME[c.line]} por pessoa`;
     if (c.kind === 'stop_added') return `+1 parada (${c.name})`;
     if (c.kind === 'stop_removed') return '-1 parada';
     if (c.kind === 'nights') return `${c.name}: ${c.from} → ${c.to} noites`;
     return `turma: ${c.from} → ${c.to} pessoas`;
   });
+}
+
+/** Fração de incerteza por tipo quando não há faixa guardada. */
+const SPREAD: Record<PlanLine['kind'], number> = { transporte: 0.25, hospedagem: 0.25, passeios: 0.2, comida: 0.25 };
+
+/**
+ * Faixa do total por pessoa (planning §10.10.4): valores confirmados entram iguais nos três; a parte estimada
+ * varia pela largura das faixas guardadas no plano (trechos, diárias, comida) ou, sem elas, por SPREAD.
+ */
+export function budgetRange(r: PlanResult, plan: Pick<BudgetPlan, 'style' | 'stay_estimates' | 'food_range' | 'transport_ranges'>): { low: number; mid: number; high: number } {
+  const width = (rs: { low: number; high: number }[]) => {
+    const ok = rs.filter((x) => x.high > 0);
+    if (!ok.length) return null;
+    return ok.reduce((a, x) => a + (x.high - x.low) / (x.high + x.low), 0) / ok.length;
+  };
+  const known: Partial<Record<PlanLine['kind'], number | null>> = {
+    transporte: width(Object.values(plan.transport_ranges ?? {})),
+    hospedagem: width(Object.values(plan.stay_estimates ?? {}).map((x) => x[plan.style]).filter((x): x is { low: number; high: number } => !!x)),
+    comida: plan.food_range ? width([plan.food_range]) : null,
+  };
+  let low = 0;
+  let high = 0;
+  for (const l of r.lines) {
+    const k = Math.min(0.6, known[l.kind] ?? SPREAD[l.kind]);
+    const est = Math.min(l.perPersonCents, l.estimatedCents);
+    low += l.perPersonCents - Math.round(est * k);
+    high += l.perPersonCents + Math.round(est * k);
+  }
+  // Faixa é ordem de grandeza: arredonda as pontas para dezenas da moeda (sem centavos).
+  const round = (v: number) => Math.round(v / 1000) * 1000;
+  return { low: Math.max(0, round(low)), mid: r.perPersonCents, high: round(high) };
 }

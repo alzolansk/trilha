@@ -101,7 +101,65 @@ export const exploreActivitySchema = z.object({
     duration: z.string().max(30),
     cost_low: money,
     cost_high: money,
+    // Fase 10 (opcionais: respostas antigas continuam válidas)
+    tags: z.array(z.string().max(20)).max(6).optional(),
+    day_fit: z.enum(['manha', 'tarde', 'noite', 'dia_todo']).nullable().optional(),
+    photo_query: z.string().max(80).nullable().optional(),
+    wish: z.string().max(80).nullable().optional(),
   })).min(1).max(8),
+});
+
+// ───────────── Onboarding roteirizado (planning §10.13) ─────────────
+const lat = z.number().min(-90).max(90);
+const lng = z.number().min(-180).max(180);
+const mode = z.enum(['plane', 'bus', 'train', 'car', 'boat']);
+
+export const explorePlacesSchema = z.object({
+  items: z.array(z.object({
+    name: z.string().min(2).max(80),
+    region: z.string().max(80).nullable().optional(),
+    country: z.string().min(2).max(60),
+    lat, lng,
+    why: z.string().min(8).max(220),
+    nights_min: z.number().int().min(1).max(30),
+    nights_max: z.number().int().min(1).max(30),
+    highlights: z.array(z.string().min(2).max(80)).max(3).default([]),
+    photo_query: z.string().max(80).nullable().optional(),
+    tags: z.array(z.string().max(20)).max(6).default([]),
+  })).min(3).max(12),
+  nearby: z.array(z.object({
+    name: z.string().min(2).max(80),
+    country: z.string().min(2).max(60),
+    lat, lng,
+    why: z.string().min(8).max(220),
+    from: z.string().min(2).max(80),
+    mode,
+    hours: z.number().min(0.2).max(12),
+    kind: z.enum(['bate_volta', 'parada']),
+    cost_low: money,
+    cost_high: money,
+    photo_query: z.string().max(80).nullable().optional(),
+  })).max(10).default([]),
+});
+
+const legSchema = z.object({ from: z.string().min(2).max(80), to: z.string().min(2).max(80), mode, hours: z.number().min(0.1).max(40), cost_low: money, cost_high: money });
+const pair = z.tuple([money, money]);
+export const exploreRouteSchema = z.object({
+  outbound: z.object({ to: z.string().min(2).max(80), mode, hours: z.number().min(0.1).max(48), cost_low: money, cost_high: money }).nullable().optional(),
+  stops: z.array(z.object({
+    name: z.string().min(2).max(80),
+    country: z.string().min(2).max(60),
+    lat, lng,
+    nights: z.number().int().min(1).max(60),
+    why: z.string().max(220).nullable().optional(),
+    day_trips: z.array(z.object({ name: z.string().min(2).max(80), day_offset: z.number().int().min(0).max(60), cost_low: money, cost_high: money })).max(4).default([]),
+    stay_pp_night: z.object({ economico: pair.optional(), equilibrado: pair.optional(), conforto: pair.optional() }).partial().optional(),
+  })).min(1).max(12),
+  legs: z.array(legSchema).max(12).default([]),
+  return: z.object({ from: z.string().min(2).max(80), mode, hours: z.number().min(0.1).max(48), cost_low: money, cost_high: money }).nullable().optional(),
+  food_pp_day: z.array(z.object({ country: z.string().min(2).max(60), low: money, high: money })).max(6).default([]),
+  left_out: z.array(z.object({ name: z.string().min(2).max(80), reason: z.string().min(2).max(160) })).max(12).default([]),
+  wishes: z.array(z.object({ wish: z.string().max(80), stop: z.string().max(80).nullable() })).max(5).default([]),
 });
 
 export const exploreStaySchema = z.object({

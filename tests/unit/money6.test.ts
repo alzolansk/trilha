@@ -12,6 +12,8 @@ describe('Fase 6 · orçamento', () => {
     const before = stayOptions(b);
     expect(before.options[0].perPersonCents).toBeLessThan(before.options[1].perPersonCents);
     expect(before.options[1].perPersonCents).toBeLessThan(before.options[2].perPersonCents);
+    // A demo tem uma noite sem cidade (ônibus noturno); ela entra pela referência do estilo. Aqui ela é coberta.
+    b.stops[2].departure_date = b.stops[3].arrival_date;
     b.stays = b.stops.map((st, i) => ({ ...b.stays[0], id: `stay-${i}`, stop_id: st.id, price_cents: 30000, price_is_estimate: false, price_currency: 'BRL', checkin_date: st.arrival_date, checkout_date: st.departure_date }));
     expect(new Set(stayOptions(b).options.map((o) => o.perPersonCents)).size).toBe(1);
   });

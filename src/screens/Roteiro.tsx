@@ -21,12 +21,12 @@ import { Sheet } from '../components/ui/Sheet';
 import { ScreenSkeleton } from '../components/ui/Skeleton';
 import { acceptSuggestion, voteSuggestions } from '../data/suggestionActions';
 import { useBundle } from '../data/TripContext';
-import type { Activity, Stop, Suggestion, TransportMode, TripBundle } from '../data/types';
+import type { Activity, Stop, Suggestion, Transport, TransportMode, TripBundle } from '../data/types';
 import { sortedStops, stopNights, straightKm } from '../lib/derive';
 import { activityCapForStop } from '../lib/explore';
 import { dateSpan, hhmm } from '../lib/format';
 import { formatMoney } from '../lib/money';
-import { dayPending, focusStopId, legInto, placeDaySuggestions, stopBadge, waitingCount, type Leg } from '../lib/route';
+import { dayPending, focusStopId, legInto, placeDaySuggestions, returnLeg, stopBadge, waitingCount, type Leg } from '../lib/route';
 import { isRestDay, stopSlots, type DaySlot } from '../lib/suggestions';
 import { daysBetween, todayIn } from '../lib/time';
 import s from './roteiro.module.css';
@@ -38,6 +38,7 @@ const MODE_ICON: Record<TransportMode, IconName> = { plane: 'plane', train: 'tra
 type Open =
   | { kind: 'add' }
   | { kind: 'transport'; stop: Stop }
+  | { kind: 'return'; stop: Stop; t: Transport }
   | { kind: 'act'; stop: Stop; act: Activity | null; day?: string }
   | { kind: 'menu'; stop: Stop }
   | { kind: 'edit'; stop: Stop }
@@ -179,6 +180,10 @@ function RouteList() {
                   </div>
                 );
               })}
+              {(() => {
+                const ret = returnLeg(b, stops);
+                return ret?.transport ? <div className={s.block}><LegLine leg={ret} onEdit={canEdit ? () => setOpen({ kind: 'return', stop: stops[stops.length - 1], t: ret.transport! }) : undefined} /></div> : null;
+              })()}
             </div>
             {wide ? (
               <aside className={s.aside} aria-label="Mapa da trilha">
@@ -191,7 +196,8 @@ function RouteList() {
       )}
 
       <AddStopSheet open={open?.kind === 'add'} onClose={() => setOpen(null)} stops={stops} onCreated={(id) => setFocus(id)} />
-      {open?.kind === 'transport' ? <TransportSheet stop={open.stop} t={b.transports.find((t) => t.stop_id === open.stop.id) ?? null} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'transport' ? <TransportSheet stop={open.stop} t={b.transports.find((t) => t.stop_id === open.stop.id && !t.is_return) ?? null} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'return' ? <TransportSheet stop={open.stop} t={open.t} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'act' ? <ActivitySheet stop={open.stop} act={open.act} day={open.day} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'edit' ? <EditStopSheet stop={open.stop} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'choose' ? <ChooseDaySheet suggestion={open.sg} stop={open.stop} initial={open.day} onClose={() => setOpen(null)} /> : null}

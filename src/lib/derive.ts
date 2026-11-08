@@ -43,7 +43,7 @@ export function stopCode(s: Stop): string {
 }
 
 export function arrivalOf(b: TripBundle, stopId: string): Transport | null {
-  return b.transports.find((t) => t.stop_id === stopId) ?? null;
+  return b.transports.find((t) => t.stop_id === stopId && !t.is_return) ?? null;
 }
 export function stayOf(b: TripBundle, stopId: string): Stay | null {
   return b.stays.find((s) => s.stop_id === stopId) ?? null;

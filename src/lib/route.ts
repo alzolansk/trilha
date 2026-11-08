@@ -60,7 +60,7 @@ export interface Leg {
 /** Linha de transporte que chega na parada `i` (ida a partir da origem quando i = 0). null = nada a mostrar. */
 export function legInto(b: TripBundle, stops: Stop[], i: number): Leg | null {
   const stop = stops[i];
-  const t = b.transports.find((x) => x.stop_id === stop.id) ?? null;
+  const t = b.transports.find((x) => x.stop_id === stop.id && !x.is_return) ?? null;
   if (!t && i === 0) return null;
   const mode = t?.mode ?? stop.arrival_mode ?? 'other';
   const prev = stops[i - 1];
@@ -74,6 +74,25 @@ export function legInto(b: TripBundle, stops: Stop[], i: number): Leg | null {
     currency: t?.price_currency ?? b.trip.base_currency,
     estimate: !!t?.price_is_estimate,
     notBooked: !!t && BOOKABLE.includes(mode) && !isBooked(b, t),
+  };
+}
+
+/** Trecho de volta para casa (Fase 10): última linha do Roteiro, depois da última parada. */
+export function returnLeg(b: TripBundle, stops: Stop[]): Leg | null {
+  const t = b.transports.find((x) => x.is_return) ?? null;
+  if (!t) return null;
+  const last = stops[stops.length - 1];
+  const from = t.origin_name ?? last?.name ?? null;
+  const to = t.dest_name ?? b.trip.origin ?? 'casa';
+  const min = transportMinutes(t) ?? t.duration_min;
+  return {
+    transport: t, mode: t.mode,
+    title: `${NOUN[t.mode]}${from ? ` ${from}` : ''} → ${to}`,
+    duration: min ? durationLabel(min) : null,
+    priceCents: t.price_cents ?? null,
+    currency: t.price_currency ?? b.trip.base_currency,
+    estimate: !!t.price_is_estimate,
+    notBooked: BOOKABLE.includes(t.mode) && !isBooked(b, t),
   };
 }
 

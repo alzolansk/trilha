@@ -164,7 +164,7 @@ function StopPage({ stop, index, stops }: { stop: Stop; index: number; stops: St
 
       {open?.kind === 'edit' ? <EditStopSheet stop={stop} onClose={() => setOpen(null)} onDeleted={() => router.replace(`${base}/roteiro`)} /> : null}
       {open?.kind === 'stay' ? <StaySheet stop={stop} stay={stay} onClose={() => setOpen(null)} /> : null}
-      {open?.kind === 'transport' ? <TransportSheet stop={stop} t={b.transports.find((t) => t.stop_id === stop.id) ?? null} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'transport' ? <TransportSheet stop={stop} t={b.transports.find((t) => t.stop_id === stop.id && !t.is_return) ?? null} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'choose' ? <ChooseDaySheet suggestion={open.sg} stop={stop} initial={open.day} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'option' ? <StayOptionSheet stop={stop} link={open.link} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'filters' ? <FiltersSheet b={b} f={filters} onClose={() => setOpen(null)} /> : null}

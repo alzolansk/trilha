@@ -1,5 +1,6 @@
 // Dinheiro em centavos inteiros (bigint-safe até ~90 trilhões) para evitar erros de ponto flutuante.
 import type { BudgetCategory, BudgetKind, Member, TripBundle } from '../data/types';
+import { headcount } from './people';
 
 export function toCents(value: string | number): number {
   if (typeof value === 'number') return Math.round(value * 100);
@@ -207,7 +208,7 @@ export function toBaseCents(cents: number | null | undefined, currency: string |
   return r && r > 0 ? Math.round(cents * r) : null;
 }
 
-const people = (b: Pick<TripBundle, 'members'>) => Math.max(1, b.members.length);
+const people = (b: Pick<TripBundle, 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }) => headcount(b);
 const plannedOf = (b: Pick<TripBundle, 'trip' | 'budgetCategories'>) => {
   const cats = b.budgetCategories.reduce((a, c) => a + Math.max(0, toCents(String(c.planned))), 0);
   if (cats > 0) return cats;

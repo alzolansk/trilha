@@ -61,6 +61,130 @@ export interface Trip extends Versioned {
   accent?: string | null;
   /** respostas do Orçamento em conversa (lib/budgetPlan.ts) */
   budget_plan?: BudgetPlan | null;
+  // Migration 20261108000010 (Fase 10).
+  /** pessoas na viagem, contando quem ainda não está no app (null = usa os membros) */
+  party_size?: number | null;
+  /** rascunho do onboarding roteirizado (lib/onboarding.ts) */
+  onboarding?: OnboardingState | null;
+}
+
+/** Marcação do passo 3 do onboarding. */
+export type PlaceMark = 'must' | 'maybe' | 'skip';
+/** Lugar sugerido no passo 3 (valores em centavos da moeda base). */
+export interface PlaceIdea {
+  name: string;
+  region?: string | null;
+  country: string;
+  lat?: number | null;
+  lng?: number | null;
+  why: string;
+  nights_min: number;
+  nights_max: number;
+  highlights?: string[];
+  photo_query?: string | null;
+  tags?: string[];
+  /** adicionado à mão pela pessoa */
+  added?: boolean;
+  /** veio do Descobrir */
+  from_discover?: boolean;
+}
+/** "Perto daqui": cidade próxima de um dos lugares (inclusive em país vizinho). */
+export interface NearbyIdea {
+  name: string;
+  country: string;
+  lat?: number | null;
+  lng?: number | null;
+  why: string;
+  /** de onde se chega */
+  from: string;
+  mode: TransportMode;
+  hours: number;
+  kind: 'bate_volta' | 'parada';
+  /** custo extra por pessoa (ida e volta), centavos */
+  cost_low: number;
+  cost_high: number;
+  photo_query?: string | null;
+}
+export interface RouteLeg {
+  from: string;
+  to: string;
+  mode: TransportMode;
+  hours: number | null;
+  /** por pessoa, centavos; null = a recalcular */
+  cost_low: number | null;
+  cost_high: number | null;
+}
+export interface RouteDayTrip {
+  name: string;
+  /** dia dentro da parada (0 = dia da chegada) */
+  day_offset: number;
+  cost_low: number;
+  cost_high: number;
+}
+export interface RouteStop {
+  name: string;
+  country: string;
+  lat?: number | null;
+  lng?: number | null;
+  nights: number;
+  why?: string | null;
+  day_trips: RouteDayTrip[];
+  /** diária por pessoa, por estilo (centavos) */
+  stay_pp_night?: Partial<Record<BudgetStyle, { low: number; high: number }>>;
+}
+export interface RouteProposal {
+  outbound: RouteLeg | null;
+  stops: RouteStop[];
+  /** legs[i] liga stops[i] a stops[i + 1] */
+  legs: RouteLeg[];
+  return: RouteLeg | null;
+  food_pp_day: { country: string; low: number; high: number }[];
+  left_out: { name: string; reason: string }[];
+  wishes: { wish: string; stop: string | null }[];
+  generated_at: string;
+}
+/** Passeio sugerido no passo 5 (centavos da moeda base). */
+export interface TourIdea {
+  id: string;
+  title: string;
+  why?: string | null;
+  duration?: string | null;
+  cost_low: number;
+  cost_high: number;
+  tags?: string[];
+  day_fit?: DayFit | null;
+  photo_query?: string | null;
+  /** desejo do passo 3 que este passeio atende */
+  wish?: string | null;
+}
+export interface OnboardingPrefs {
+  vibes: string[];
+  pace: BudgetPace;
+  stay: BudgetStyle;
+  /** teto por pessoa, em unidades da moeda base */
+  budget?: number | null;
+}
+export type OnboardingStep = 2 | 3 | 4 | 5 | 6;
+export interface OnboardingState {
+  status: 'em_andamento' | 'concluido' | 'manual' | 'pulado';
+  step: OnboardingStep;
+  flexible_dates?: boolean;
+  prefs?: OnboardingPrefs | null;
+  places?: { items: PlaceIdea[]; nearby: NearbyIdea[]; fetched_at: string } | null;
+  /** chave = nome normalizado (placeKey) */
+  marks?: Record<string, PlaceMark>;
+  wishes?: string[];
+  route?: RouteProposal | null;
+  route_calls?: number;
+  /** passeios sugeridos por parada (id da parada) */
+  tours?: Record<string, TourIdea[]>;
+  /** ids de TourIdea escolhidos */
+  tour_pick?: string[];
+  stale?: ('places' | 'route' | 'tours')[];
+  /** cidades do destino escolhido no Descobrir (entram no passo 3) */
+  discover_stops?: string[];
+  /** passeios do passo 5 já gravados no roteiro (evita gravar duas vezes) */
+  tours_applied?: boolean;
 }
 
 /** Foto escolhida: Wikimedia (com crédito) ou upload próprio (`path` no bucket covers). */
@@ -87,8 +211,13 @@ export interface BudgetPlan {
   daily_food_cents?: number | null;
   /** ritmo de comida escolhido (Econômico / Médio / Solto) */
   food?: BudgetFood | null;
-  /** valor por pessoa de trechos sem preço no roteiro (estimativa da Trilha), por id do transporte */
+  /** valor por pessoa de trechos sem preço no roteiro (estimativa da Trilha), por id do transporte.
+   *  As chaves 'ida' e 'volta' guardam o voo virtual quando o roteiro ainda não tem esse trecho. */
   transport_cents?: Record<string, number> | null;
+  /** faixa da diária de comida por pessoa (centavos), ponderada pelas noites em cada país */
+  food_range?: { low: number; high: number } | null;
+  /** faixas dos trechos (centavos por pessoa), por id do transporte ou 'ida'/'volta' */
+  transport_ranges?: Record<string, { low: number; high: number }> | null;
   /** Faixa da diária por pessoa, por parada e estilo; mediana das regiões sugeridas. */
   stay_estimates?: Record<string, Partial<Record<BudgetStyle, { low: number; high: number }>>>;
   /** foto do roteiro usada no cálculo, para avisar o que mudou depois (diffSince) */
@@ -99,6 +228,8 @@ export interface BudgetSnapshot {
   stops: { id: string; nights: number }[];
   people: number;
   at: string;
+  /** total por pessoa de cada categoria no fechamento (centavos), para o aviso com valores */
+  lines?: Partial<Record<'transporte' | 'hospedagem' | 'passeios' | 'comida', number>>;
 }
 
 export interface Member {
@@ -167,6 +298,8 @@ export interface Transport extends Versioned {
   price_cents?: number | null;
   price_currency?: string | null;
   price_is_estimate?: boolean;
+  /** trecho de volta para casa, ligado à última parada (migration 00010) */
+  is_return?: boolean;
 }
 
 export interface Stay extends Versioned {

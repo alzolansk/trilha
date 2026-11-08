@@ -27,7 +27,7 @@ const TABS: { path: string; label: string; icon: IconName; match: string[] }[] =
 ];
 
 /** Subtelas com CTA fixa no rodapé escondem a TabBar (planning §4.1). */
-const HIDE_TABBAR = ['/dinheiro/orcamento'];
+const HIDE_TABBAR = ['/dinheiro/orcamento', '/montar'];
 
 function activeTab(rel: string): number {
   for (let i = TABS.length - 1; i > 0; i--) if (TABS[i].match.some((m) => rel === m || rel.startsWith(`${m}/`))) return i;

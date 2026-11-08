@@ -140,6 +140,41 @@ export function createDemoSource(key: DemoKey): TripSource {
         }
         stores.set(key, bb); emit('trips'); return undefined as never;
       }
+      if (fn === 'apply_onboarding_route') {
+        // Mesmas regras de supabase/migrations/…0010_onboarding.sql
+        const bb = structuredClone(b());
+        if (bb.trip.id !== args.p_trip || bb.trip.version !== args.p_version) throw fail('A viagem mudou em outra tela. Recarregue para continuar.', 'P0001');
+        const r = args.p_route as { stops?: Record<string, unknown>[]; legs?: Record<string, unknown>[]; suggestions?: Record<string, unknown>[]; budget_plan?: unknown; onboarding?: unknown };
+        if (!Array.isArray(r?.stops) || !r.stops.length) throw fail('Roteiro inválido', '22023');
+        if (bb.stops.length) {
+          if (!args.p_replace) throw fail('Já existe um roteiro nesta trilha.', 'P0002');
+          if (bb.expenses.some((e) => e.activity_id || e.stay_id || e.transport_id)) throw fail('O roteiro atual tem gastos ligados a trechos, hospedagens ou passeios. Ajuste pelo Roteiro.', 'P0001');
+          for (const d of bb.documents) d.stop_id = null;
+          for (const j of bb.journalEntries) j.stop_id = null;
+          for (const p of bb.polls) (p as { stop_id?: string | null }).stop_id = null;
+          const gone = new Set(bb.stops.map((x) => x.id));
+          bb.stops = []; bb.transports = []; bb.stays = [];
+          bb.activities = bb.activities.filter((x) => !gone.has(x.stop_id));
+          bb.suggestions = bb.suggestions.filter((x) => !x.stop_id || !gone.has(x.stop_id));
+        }
+        const ids: string[] = [];
+        const base = { version: 1, created_at: stamp(), updated_at: stamp() };
+        r.stops.forEach((x, i) => {
+          const id = (x.id as string) || crypto.randomUUID();
+          ids.push(id);
+          bb.stops.push({ tz: null, altitude_m: null, color: null, notes: null, code: null, meta: null, tip: null, area: null, photo: null, ...base, id, trip_id: bb.trip.id, position: i, name: String(x.name).slice(0, 80), country: (x.country as string) || null, lat: (x.lat as number) ?? null, lng: (x.lng as number) ?? null, arrival_date: x.arrival_date as string, departure_date: x.departure_date as string, arrival_mode: (x.arrival_mode as never) ?? null } as unknown as TripBundle['stops'][number]);
+        });
+        for (const l of r.legs ?? []) {
+          bb.transports.push({ origin_code: null, dest_code: null, depart_time: null, depart_tz: null, arrive_date: null, arrive_time: null, arrive_tz: null, booking_ref: null, seat: null, notes: null, document_id: null, ...base, id: crypto.randomUUID(), trip_id: bb.trip.id, stop_id: ids[l.stop_index as number], mode: (l.mode as never) ?? 'other', origin_name: (l.origin_name as string) ?? null, dest_name: (l.dest_name as string) ?? null, depart_date: (l.depart_date as string) ?? null, duration_min: (l.duration_min as number) ?? null, price_cents: (l.price_cents as number) ?? null, price_currency: l.price_cents == null ? null : bb.trip.base_currency, price_is_estimate: true, is_return: !!l.is_return } as unknown as TripBundle['transports'][number]);
+        }
+        for (const sg of r.suggestions ?? []) {
+          bb.suggestions.push({ ...DEFAULTS.suggestions, ...base, id: crypto.randomUUID(), trip_id: bb.trip.id, stop_id: ids[sg.stop_index as number], kind: 'activity', day: (sg.day as number) ?? null, payload: sg.payload as never, status: (sg.status as never) ?? 'new', source: 'ai' } as unknown as TripBundle['suggestions'][number]);
+        }
+        if (r.budget_plan) bb.trip.budget_plan = r.budget_plan as never;
+        if (r.onboarding) bb.trip.onboarding = r.onboarding as never;
+        bb.trip.version++;
+        stores.set(key, bb); emit('stops'); return undefined as never;
+      }
       if (fn === 'save_expense') {
         const e = args.p_expense as Record<string, unknown>;
         const shares = args.p_shares as { user_id: string; share_cents: number }[];

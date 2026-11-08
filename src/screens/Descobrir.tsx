@@ -21,6 +21,7 @@ import { destinationPollId, fitOf, hoursLabel, perPersonCents, rangeLabel } from
 import { MODE_LABEL, dayMonth } from '../lib/format';
 import { toCents } from '../lib/money';
 import { hasDestination } from '../lib/plan';
+import { parseOnboarding } from '../lib/onboarding';
 import { daysBetween } from '../lib/time';
 import s from './descobrir.module.css';
 import { Field } from '../components/ui';
@@ -119,6 +120,17 @@ export default function Descobrir() {
   const build = (x: Place) =>
     run(async () => {
       const list = x.stops.length >= 1 ? x.stops : [x.name];
+      // Conta real: o destino escolhido segue para o onboarding roteirizado (planning §10.3), que monta a rota.
+      if (!demo) {
+        const prev = parseOnboarding(b.trip.onboarding);
+        await source.update('trips', b.trip.id, {
+          destinations: [x.name.slice(0, 80)],
+          onboarding: { ...(prev ?? {}), status: 'em_andamento', step: 2, places: null, route: null, marks: {}, discover_stops: list.map((n) => n.slice(0, 80)).slice(0, 6) },
+        });
+        await reload();
+        router.push(`${base}/montar?passo=2`);
+        return;
+      }
       const plan = planStops(list, b.trip.start_date, b.trip.end_date);
       await source.update('trips', b.trip.id, { destinations: [x.name.slice(0, 80)] });
       for (const [i, st] of plan.entries()) {

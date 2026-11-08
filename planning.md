@@ -48,7 +48,8 @@ Este plano implementa esse design **no app Next.js atual**:
 | 6 — Dinheiro | ✅ implementada e validada localmente (ressalvas abaixo; validação remota pendente) | branch `docs/planning-redesign` |
 | 7 — Turma | ✅ implementada e validada localmente (ressalvas abaixo; validação remota pendente) | branch `docs/planning-redesign` |
 | 8 — Descobrir e nova trilha | ✅ implementada e validada localmente (ressalvas abaixo; validação com IA/Supabase pendente) | branch `docs/planning-redesign` |
-| 9 | ⏳ não iniciada | — |
+| 9 — Polimento, PWA, acessibilidade e testes | ✅ parcialmente concluída (Lighthouse e aparelho real pendentes; ressalvas abaixo) | branch `docs/planning-redesign` |
+| 10 — Onboarding roteirizado | ✅ implementada e validada localmente (ressalvas abaixo; IA real e Supabase remoto pendentes) | branch `docs/planning-redesign` |
 
 **Verificação da Fase 8 (08/11/2026):** `npx tsc --noEmit` ok; `npm test` com **208/208** (entraram 5 em `tests/unit/discover.test.ts`; saíram os testes de gerador/validação/fendas de identidade); `npm run build` ok; `npx playwright test` **46/46** (entraram 2 do Descobrir). Uma execução completa teve 1 falha intermitente em `money.spec.ts:4` (`pool-balance`, tela que a Fase 8 não toca); o arquivo passou 6/6 isolado e a suíte voltou a passar. **Nenhuma migration nova**: `trip_preferences` já vem da `00008`. Comparação visual com `Descobrir.dc.html`/PDF **não feita**.
 
@@ -152,6 +153,23 @@ Este plano implementa esse design **no app Next.js atual**:
 - **Testes e2e.** Saíram os 2 da história de scroll. Entraram: hero e números do Dinheiro, 3 visíveis + "ver todas", "Pôr no dia 6" cria a atividade e o cartão some (conferido na Parada Cusco do Roteiro), dispensar, e reduced motion. O teste de lembrete de voto agora vai para `/turma/votos`.
 
 ---
+
+### Ressalvas e decisões da Fase 10
+
+- **Verificação (08/11/2026):** `npx tsc --noEmit` ok; `npx vitest run` com **238/238** (entraram `tests/unit/onboarding.test.ts`, 21 testes, e `tests/db/onboarding.test.ts`, 9 testes); `npm run build` ok; `npx playwright test` **51/51** contra o build de produção (entrou `tests/e2e/onboarding.spec.ts`, 4 cenários). Capturas dos passos 3 a 6 em 390 px conferidas.
+- **Aplicar `supabase/migrations/20261108000010_onboarding.sql` no Supabase, depois da `00009`.** Esta execução **não aplicou nada no remoto**. Sem ela, `/nova-trilha` falha ao criar a trilha (colunas `party_size` e `onboarding`) e o passo 4 falha (RPC ausente).
+- **Não validado com IA real nem com Supabase real.** Os prompts `places`/`route` e as extensões de `activities`/`estimate` foram testados só com respostas simuladas (e2e) e pelos schemas. Conferir a qualidade das sugestões e o tempo de resposta (o pedido `route` usa ~2.400 tokens e pode repetir uma vez) com o provedor configurado.
+- **Mudanças em relação à §10:**
+  - **Substituir roteiro** só é bloqueado por **gasto ligado** a trecho, hospedagem ou passeio. Documentos, diário e votações só perdem o vínculo com a parada (o banco já faz `on delete set null`).
+  - **Bate-voltas da rota** viram passeios do passo 5, já marcados (`dayTripTours`), e não sugestões aceitas no passo 4. Assim viram atividades com dia e custo, como os outros passeios. A RPC aceita `suggestions`, mas o app manda lista vazia.
+  - **Trecho que muda de par ao reordenar** fica "preço a calcular no Orçamento". Não há botão "Atualizar preços dos trechos" no passo 4: o "Estimar com a Trilha" do Orçamento resolve depois.
+  - **Rótulo "Indispensável"** no lugar de "Não pode faltar" no seletor do passo 3 (o texto longo quebrava em três linhas no celular).
+  - **Ids das paradas** são gerados no cliente e mandados à RPC, para gravar `budget_plan.stay_estimates` por parada na mesma transação.
+  - **Teto e pessoas:** o passo 2 grava `trips.budget_total = teto × headcount`. Ajustes ganhou "Pessoas na viagem"; a Turma mostra "N pessoas na viagem · M no app" quando há diferença.
+  - **Descobrir:** em conta real, "Montar esta trilha" grava o destino e `onboarding.discover_stops` e segue para o passo 2 (as cidades entram no prompt de lugares). Na demo continua criando as paradas na hora, como antes.
+  - **Demo:** `/demo/[key]/montar` existe e funciona em memória (a RPC foi espelhada em `demoSource`), mas não há link para ela na demo e a IA não responde lá (cai em "A Trilha não conseguiu sugerir agora"). Existe para os testes e2e com a IA simulada.
+- **Efeito nos números da demo:** a Andes tem 1 noite sem cidade (ônibus noturno 22→23/01). Pela regra nova ela entra em hospedagem pela referência do estilo, e o Orçamento da Andes mostra o voo de volta "Uyuni → GRU" pendente (não bloqueia fechar). O total por pessoa do Orçamento da Andes subiu um pouco; os R$ 6.470 do Dinheiro (planejado gravado) não mudam.
+- **Não feito:** teste e2e de "recarregar no passo 4 não chama a IA de novo" (a demo guarda tudo em memória e perde o estado ao recarregar; em conta real o rascunho fica em `trips.onboarding`). `lib/identity/dictionary` continua em uso pelo `TripContext` (accent de trilhas antigas) e pela demo; `/nova-trilha` não usa mais.
 
 ### Ressalvas e decisões da Fase 9
 
@@ -843,16 +861,326 @@ Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/
   - `ORS_API_KEY` em `.env.example`, que não é usada;
   - nota no README sobre as colunas de identidade sem uso.
 
+### Fase 10 — Onboarding roteirizado · ✅ implementada e validada localmente (ver ressalvas no topo)
+
+- Especificação completa na **§10**. Esboço aprovado: https://claude.ai/artifact/2M7hXXkoteBPkG1ntmEqr2 (cópia local em `ref/jornada-nova-trilha.html`).
+- Ordem sugerida de trabalho, cada item fechando com typecheck e testes:
+  1. migration `20261108000010_onboarding.sql` + tipos + pipeline de dados (§10.11);
+  2. `headcount` único com `trips.party_size` (§10.9);
+  3. correções do Orçamento: noites pela viagem, voo, roteiro vazio, faixa (§10.10);
+  4. `lib/onboarding.ts` puro e testado (§10.12);
+  5. `explore kind:'places'` e `kind:'route'` + ajustes em `activities` (§10.13);
+  6. telas `/nova-trilha` (passo 1) e `/t/[id]/montar` (passos 2 a 6) (§10.3 a §10.8);
+  7. limpeza do que sobrou da identidade no onboarding (§10.14);
+  8. testes e2e com a IA simulada (§10.16).
+- **Aceite:** criar "Itália, 15 dias, 2 pessoas, saindo de São Paulo" termina na Início com 4 a 6 paradas, trechos com preço estimado (incluindo ida e volta), passeios no roteiro e um orçamento por pessoa com hospedagem de 14 noites, voo, trens, passeios e comida. Nenhuma linha de 14 noites ou de voo aparece como R$ 0.
+
 ---
 
-## 10. Verificação ponta a ponta
+## 10. Onboarding roteirizado (Fase 10)
+
+### 10.0 Por que
+
+O teste real com "Itália, 10 dias" mostrou o Orçamento dizendo **≈ R$ 700 por pessoa**: transporte R$ 0, hospedagem "São 0 noites" e R$ 0, passeios R$ 0, comida R$ 700. As causas, no código atual:
+
+- `/nova-trilha` cria a trilha **sem nenhuma parada** (só `destinations: ['Itália']`).
+- `budgetFromPlan` conta as noites **pelas paradas** (`for (const s of b.stops)`), então sem parada há 0 noites.
+- Transporte e passeios só existem se alguém cadastrar à mão; não existe linha de voo de ida e volta.
+- Comida é a única linha que usa as datas da trilha: 10 dias × `DEFAULTS.foodPerDay` (R$ 70) = R$ 700.
+- A trilha é dividida por `members.length`, que é 1 enquanto ninguém aceitou convite.
+
+O problema de fundo é a trilha nascer sem roteiro, e o usuário ter de inventar tudo. A Fase 10 faz a Trilha **propor** a viagem inteira no onboarding (lugares, rota, trechos, passeios e custo) e deixa a pessoa ajustar. Junto, corrige o Orçamento para nunca mais mostrar um total baixo que parece certo.
+
+### 10.1 Decisões tomadas (comentários no esboço, 08/11/2026)
+
+1. **Quem cria decide sozinho.** O onboarding não tem votação. Mas a pessoa informa **quantas pessoas vão**, sem precisar convidar ninguém: vira `trips.party_size` e passa a ser o divisor de todas as contas por pessoa (§10.9).
+2. **"Perto daqui" aparece sempre.** Além de países vizinhos, a Trilha sugere **cidades próximas que a pessoa provavelmente não sabe que estão perto** (ex.: Siena e Lucca a partir de Florença, Nice a partir de Gênova, Lugano a partir de Milão). Cada uma diz de onde e em quanto tempo se chega.
+3. **Voo internacional: estimativa da IA basta.** Sem API de passagens. Sempre faixa com selo ESTIMATIVA.
+4. **Sem IA: vai direto para o roteiro manual.** Nenhuma rota "de referência" curada. A tela explica que as sugestões estão indisponíveis e leva ao Roteiro.
+5. **Escopo:** este módulo é a **Fase 10**. A antiga seção "10. Verificação ponta a ponta" passa a ser a **§11**.
+
+Continuam valendo as regras de honestidade da IA (decisão 3 do topo): preço sempre como faixa com ESTIMATIVA, sem nome de hotel, sem dizer que reservou ou verificou.
+
+### 10.2 Fluxo, rotas e estado
+
+```
+/nova-trilha                      passo 1  pra onde, quando, quantos  → cria a trilha
+/t/[id]/montar?passo=2            passo 2  do que vocês gostam
+/t/[id]/montar?passo=3            passo 3  o que não pode faltar (+ perto daqui)
+/t/[id]/montar?passo=4            passo 4  roteiro sugerido
+/t/[id]/montar?passo=5            passo 5  passeios por cidade
+/t/[id]/montar?passo=6            passo 6  quanto custa → concluir
+```
+
+- **A trilha é criada no fim do passo 1.** As rotas de IA (`loadTripForUser`, `consumeQuota`) e o RLS exigem uma trilha existente; a Fase 8 já esbarrou nisso. Criar cedo também faz o progresso sobreviver a recarregar a página ou trocar de aparelho.
+- **`trips.onboarding jsonb`** guarda o rascunho (§10.11): passo atual, marcações do passo 3, desejos, a rota proposta, a seleção de passeios e o `status` (`'em_andamento' | 'concluido' | 'manual' | 'pulado'`). Nada vira parada, trecho ou atividade antes do passo 4 ser aceito.
+- **`/t/[id]/montar`** é uma tela nova, `screens/Montar.tsx`, dentro do `TripShell`, com a TabBar escondida (entra em `HIDE_TABBAR`). Usa `StepChat` como `/nova-trilha` e o Descobrir: uma pergunta por vez, respostas anteriores viram `ReplyBubble` editável no topo. Cabeçalho com "Passo N de 6", barra de progresso e "Montar depois".
+- **Só editor** abre `/montar`. Leitor é redirecionado para a Início.
+- **Retomar:** com `onboarding.status = 'em_andamento'`, a Início mostra no topo um cartão "Continuar montando a viagem · passo N de 6". `/nova-trilha` não reabre: o passo 1 é editado em Ajustes, como hoje.
+- **"Montar depois"** (em qualquer passo) grava `status: 'pulado'` e vai para a Início. A trilha fica como as de hoje, e o Orçamento cai no estado "roteiro vazio" (§10.10).
+- **Voltar um passo** nunca apaga o que veio depois; só marca como "desatualizado". Ex.: mudar o ritmo no passo 2 depois de ter a rota mostra no passo 4 a faixa "Você mudou o ritmo. Refazer a rota?" com "Refazer" e "Manter".
+- **Demo:** `/demo/[key]/montar` não existe (a IA fica desligada na demo). O fluxo é coberto pelos e2e com a IA simulada (§10.16).
+
+### 10.3 Passo 1 — Pra onde, quando e quantos (`/nova-trilha`)
+
+Reescrita da tela atual numa pergunta só, com os campos juntos:
+
+| Campo | Regra |
+|---|---|
+| Destino | Texto livre, 2–80 caracteres: país, região ou cidade. Vários destinos separados por vírgula viram vários itens em `destinations`. |
+| Ida e volta | Obrigatórias, volta ≥ ida. Mostrar abaixo "15 dias · 14 noites". |
+| Sem data certa | Chip que troca as datas por **mês + número de dias** (3 a 60). Grava `start_date` = dia 1 do mês e `end_date` = início + dias − 1, e `onboarding.flexible_dates = true`. A Início mostra "datas aproximadas" até alguém editar em Ajustes. |
+| Saindo de | Texto, opcional, mas com aviso: "Sem isso a Trilha não estima o voo". Vai para `trips.origin`. |
+| Pessoas | Contador de 1 a 50, começa em 2. Vai para `trips.party_size`. Ajuda abaixo: "Contando com você. Dá pra convidar depois, mas não precisa." |
+| Horário do embarque | Sai daqui (vai para Ajustes). |
+| Estilo (`TripStyle`) | Sai daqui. Passa a ser derivado do passo 2 (hospedagem). |
+
+- **"Ainda não sei o destino"** segue o fluxo atual da Fase 8: pede nome, cria a trilha e abre o Descobrir. **Muda o fim do Descobrir:** "Montar esta trilha" grava o destino escolhido e leva para `/montar?passo=2` (e não mais direto para a Início). O Descobrir deixa de criar paradas sozinho com `planStops`; quem cria a rota passa a ser o passo 4. As cidades do `stops[]` do destino escolhido entram pré-marcadas como "talvez" no passo 3.
+- **CTA:** "Continuar". Cria a trilha (mesmo insert de hoje, mais `party_size`, `onboarding: { status: 'em_andamento', step: 2 }`, `identity: null`, `accent: null`) e vai para `/t/[id]/montar?passo=2`.
+- **Sai da tela:** chips de destinos do dicionário, `matchDictionary`, a cor de destaque acompanhando o destino e o parâmetro `?identidade=` (§10.14).
+
+### 10.4 Passo 2 — Do que vocês gostam
+
+Três perguntas na mesma tela, todas com uma opção pré-escolhida para dar pra seguir com um toque:
+
+1. **Gostos** (multi, até 6): Natureza, Cidade, Praia, Cultura e história, Arte e museus, Comida, Aventura, Vida noturna, Compras. Amplia `VIBES` de `lib/discover.ts` (hoje são 6; entram `arte`, `noturna`, `compras`; `cultura` passa a se chamar "Cultura e história"). `personFit` continua funcionando, porque compara ids.
+2. **Ritmo** (um): "Calmo · poucas cidades" → `leve`; "Equilibrado" → `moderado` (padrão); "Ver tudo" → `intenso`. Mesmo `BudgetPace` do Orçamento.
+3. **Onde dormir** (um): Hostel → `economico`; "Pousada / Airbnb" → `equilibrado` (padrão); Hotel → `conforto`. Mesmo `BudgetStyle`. Também define `trips.style` (`economico` → Mochilão, `equilibrado` → Cultural, `conforto` → Conforto), só para manter o campo coerente.
+4. **Teto por pessoa** (opcional): `MoneyInput` na moeda base. Grava `trips.budget_total = teto × party_size`, o que o Orçamento já usa para "Sobram / Passou".
+
+Gravação: `trip_preferences` (linha de quem cria, `answers` com `vibes`, `pace`, `stay`, `budget`, `people`, `origin`) e `trips.budget_plan` já iniciado com `{ style, pace }`. Assim o Orçamento abre preenchido mais tarde.
+
+### 10.5 Passo 3 — O que não pode faltar
+
+Tela principal da proposta. Ao entrar, chama `explore kind:'places'` (§10.13) uma vez e guarda o resultado em `onboarding.places`. Recarregar não chama de novo.
+
+**Lista "Lugares para vocês"** (8 a 10 cartões, ordenados pela IA):
+- foto (primeiros 3 cartões com `Photo` grande; demais em `row` com miniatura), nome, região, "costuma pedir 2 a 3 noites", uma linha do porquê;
+- controle de 3 estados: **Não pode faltar** / **Talvez** (padrão) / **Pular** (`Segmented` compacto);
+- tocar no cartão abre um Sheet com mais detalhes: 3 destaques, melhor época se a IA souber, como se chega.
+
+**Seção "Perto daqui"** (decisão 2; aparece sempre, 4 a 8 itens):
+- cidades próximas dos lugares da lista, inclusive em países vizinhos, que a pessoa pode não conhecer;
+- cada item diz **de onde e em quanto tempo**: "Siena · 1h15 de ônibus de Florença", "Nice, França · 2h de trem de Gênova";
+- custo extra por pessoa (transporte ida e volta) como faixa ESTIMATIVA;
+- tipo: `bate_volta` (cabe num dia, sem dormir) ou `parada` (pede pelo menos 1 noite);
+- mesmo controle de 3 estados, mas o padrão é **Pular**, para não inflar a rota sem a pessoa pedir.
+
+**"Algo que vocês querem fazer?"**: campo livre com chips (até 5 desejos de 80 caracteres): "aula de massa", "ver a Última Ceia". Vai para `onboarding.wishes`. O passo 4 tenta encaixar cada um.
+
+**"Adicionar um lugar"**: campo com `PlaceSearch` para incluir um lugar que não apareceu. Entra como "Não pode faltar".
+
+**CTA:** "Montar o roteiro". Se nada foi marcado como "Não pode faltar", o botão vira "Deixar a Trilha escolher" (a rota usa os "talvez" mais bem ranqueados). Antes de seguir, se a soma das noites mínimas dos "não pode faltar" passar das noites da viagem, aviso: "Esses lugares pedem pelo menos 17 noites e a viagem tem 14. A Trilha vai encurtar ou deixar algum de fora."
+
+**Falha da IA** (503 sem provedor, 502, cota acabou): decisão 4. Tela com "As sugestões estão indisponíveis agora." + "Montar o roteiro eu mesmo" (grava `status: 'manual'`, vai ao Roteiro) + "Tentar de novo" (só para 502).
+
+### 10.6 Passo 4 — Roteiro sugerido
+
+Ao entrar, chama `explore kind:'route'` (§10.13) com as marcações, os desejos, o ritmo e a origem. Guarda a proposta em `onboarding.route`.
+
+**Tela:**
+- balão: "Montei 14 noites com os seus indispensáveis. Mexa no que quiser.";
+- linha do tempo vertical: **ida** (origem → primeira cidade), paradas, trechos entre elas e **volta** (última cidade → origem). Entrar por uma cidade e sair por outra (open-jaw) é normal e esperado;
+- cada parada: nome, país, datas calculadas ("02 a 06/05"), contador **− N noites +**, ↑ ↓ para reordenar (mesmo padrão do "Mover para cima/baixo" do Roteiro, sem arrastar), "Tirar" e a lista de bate-voltas encaixados ("Bate-volta: Siena, dia 7");
+- cada trecho: modo, duração e faixa por pessoa com ESTIMATIVA;
+- **"Ficou de fora"**: lugares marcados que não couberam, com o motivo da IA ("Costa Amalfitana: precisaria de 3 noites a mais"). Tocar em "Incluir" pede a rota de novo forçando o lugar;
+- **"Seus pedidos"**: onde cada desejo foi encaixado ("Aula de massa → Florença") ou "Não achei onde encaixar";
+- atalhos que refazem a rota: **Mais calmo**, **Mais lugares**, e um chip "Incluir X" para cada item de "Perto daqui" que ficou como Pular.
+
+**Regras de ajuste** (funções puras em `lib/onboarding.ts`, §10.12):
+- as noites somam sempre as noites da viagem. "+" numa parada tira uma noite da parada vizinha com mais noites; "−" dá a noite à vizinha com menos. Mínimo de 1 noite por parada (bate-volta não tem noite);
+- reordenar refaz as datas, mas não os trechos: os trechos afetados viram "trecho a recalcular" (sem preço) e o botão "Atualizar preços dos trechos" chama `estimate kind:'transport'` com trechos virtuais (§10.13);
+- tirar um lugar marcado como "Não pode faltar" pede confirmação;
+- cada regeneração gasta uma chamada de IA. Limite de **6 rotas por trilha** no onboarding (`onboarding.route_calls`); depois disso os atalhos somem e só o ajuste manual continua.
+
+**CTA "Gostei, ver passeios"** aplica a rota de forma atômica pela RPC nova `apply_onboarding_route` (§10.11):
+- cria as paradas (`position`, `name`, `country`, `lat`, `lng`, `arrival_date`, `departure_date`, `arrival_mode`);
+- cria um trecho por parada com `origin_name` = parada anterior (ou `trips.origin` na primeira), `dest_name`, `mode`, `depart_date`, `duration_min`, `price_cents` = média da faixa, `price_is_estimate = true`;
+- cria o **trecho de volta** ligado à última parada, com `is_return = true`, `dest_name = trips.origin`, `depart_date = end_date`;
+- grava os bate-voltas como `suggestions` `kind:'activity'`, `status:'accepted'`, com o dia escolhido;
+- grava `budget_plan.stay_estimates` e `budget_plan.daily_food_cents` com o que a rota trouxe (§10.13), para o passo 6 não precisar de outra chamada.
+
+Se a trilha já tiver paradas (alguém criou pelo Roteiro em outra aba), a RPC recusa, e a tela mostra "Já existe um roteiro nesta trilha. Substituir?" com confirmação explícita. Substituir apaga só paradas sem gastos ligados e sem documentos; se houver, a RPC recusa com mensagem humana.
+
+### 10.7 Passo 5 — Passeios por cidade
+
+- Ao entrar, chama `explore kind:'activities'` para cada parada (no máximo 3 em paralelo; a cota é consumida por chamada). Mostra cada cidade assim que a resposta dela chega; as outras ficam em skeleton.
+- Cada cidade: cabeçalho "Roma · 4 noites" e lista com caixinha, nome, duração e faixa por pessoa com ESTIMATIVA. Desejos encaixados nesta cidade aparecem com o selo **"seu pedido"** e vêm marcados.
+- **Pré-seleção** pelo ritmo: `round(dias livres na parada × PACE_PER_DAY[pace])`, escolhendo os que mais combinam com os gostos (`tags` da resposta × `vibes`), excluindo o dia de chegada acima de 2.500 m (`isRestDay`).
+- Rodapé fixo: "11 passeios · ≈ R$ 1.650 por pessoa".
+- **CTA "Ver quanto custa":**
+  - marcados viram `activities` com dia escolhido por `placeDaySuggestions`/`bestDayFor`, `cost_cents` = média da faixa, `cost_is_estimate = true`, `suggested_by: 'ai'`;
+  - desmarcados viram `suggestions` `kind:'activity'`, `status:'new'`, para aparecerem depois na Parada e na Início;
+  - `budget_plan.activities` recebe os ids dos marcados.
+- Falha da IA numa cidade: a cidade mostra "Sem sugestões agora" e o resto segue. Falha em todas: "Pular passeios" leva ao passo 6 com passeios estimados pelo ritmo (regra atual de `budgetFromPlan` sem seleção).
+
+### 10.8 Passo 6 — Quanto custa
+
+- Mesmo cartão escuro do Orçamento (§5.5), já com as correções da §10.10, calculado sobre o bundle recém-gravado:
+  - por pessoa: valor do meio e a faixa ("entre R$ 14 e 19 mil");
+  - linhas: **Voo ida e volta**, **Trens/ônibus · N trechos**, **Hospedagem · 14 noites** (com estilo), **Passeios · N**, **Comida · 15 dias × R$ X**;
+  - total da viagem para `headcount` pessoas;
+  - com teto: "Cabe no teto, com folga de R$ 1.900" ou "Passa R$ 2.300 do teto" com 2 sugestões de corte calculadas localmente (trocar o estilo de hospedagem por um mais barato; tirar os 2 passeios mais caros), cada uma com o valor que economiza.
+- **CTA "Concluir"**:
+  - chama `close_budget` (já existe) com o plano e as categorias. Com 1 membro no app, sem votação (`p_question null`); com mais membros (caso raro: alguém entrou durante o onboarding), cria a votação de aprovação como hoje;
+  - grava `onboarding.status = 'concluido'`;
+  - vai para a Início, que mostra a viagem já montada.
+- **Secundário "Chamar a turma"**: abre o `InviteSheet` da Turma e depois conclui igual. Não cria votação de lugares (decisão 1).
+
+### 10.9 Pessoas na viagem: `trips.party_size`
+
+- Coluna `trips.party_size smallint null check (party_size between 1 and 50)`. `null` em trilhas antigas significa "use os membros".
+- **Uma função só:** `headcount(b) = Math.max(b.members.length, b.trip.party_size ?? 1)` em `lib/explore.ts` (já existe com outra regra). Substituir as cópias locais: `ppl` em `lib/budgetPlan.ts`, `people` em `lib/money.ts` e a contagem de `trip_members` em `api/ai/explore` (que passa a usar `headcount(bundle)`).
+- **Efeitos:** por pessoa do Orçamento e da Início, cota de cada um no caixa (planejado ÷ headcount), `staySearchLinks` (adultos), prompts de IA (`Pessoas: N`), `diffSince` (tamanho da turma).
+- **Não muda:** rateio de gastos e acerto de contas continuam só entre membros no app. Votações contam membros.
+- **Onde editar:** Ajustes ("Pessoas na viagem"). Na Turma, o topo passa a dizer "4 pessoas na viagem · 1 no app · Convidar". Se mais membros entrarem do que o `party_size`, vale o maior (pela função) e Ajustes mostra o número atualizado.
+
+### 10.10 Correções no "Quanto custa essa trilha?" (`lib/budgetPlan.ts` e `Orcamento.tsx`)
+
+Valem para qualquer trilha, com ou sem onboarding:
+
+1. **Noites pela viagem.** `nights = daysBetween(start, end)` da trilha. Noites cobertas por paradas seguem a regra atual; **noites sem parada** entram como `nightFor(style) × noites descobertas`, marcadas como estimativa, e o passo de hospedagem diz "São 14 noites, 3 delas ainda sem cidade no roteiro".
+2. **Roteiro vazio.** Sem nenhuma parada, o Orçamento **não mostra total**. Mostra `EmptyState`: "A Trilha ainda não sabe por onde vocês vão." com **"Montar o roteiro com a Trilha"** (vai para `/montar?passo=3`, reabrindo o onboarding) e **"Adicionar paradas eu mesmo"** (Roteiro). A Início também troca o número do Dinheiro por "monte o roteiro" nesse caso.
+3. **Voo de ida e volta.** Se `trips.origin` existe e falta trecho de ida (ou de volta), a linha de transporte inclui um **trecho virtual** "São Paulo → Roma" (e "Veneza → São Paulo") estimado por `estimate kind:'transport'`, que passa a aceitar trechos sem id (§10.13). O valor aceito vai para `budget_plan.transport_cents` com as chaves `'ida'`/`'volta'`. Sem origem: linha "Voo · informe de onde saem" que abre Ajustes.
+4. **Faixa mínima e máxima.** `budgetRange(b, plan, rates)` devolve `{ low, mid, high }` usando os extremos de cada faixa guardada (`stay_estimates`, faixas de transporte e passeios, `foodLevels`). O cartão mostra o `mid` e a faixa abaixo. Valores confirmados entram iguais nos três.
+5. **Comida por país.** Em viagem com vários países, `estimate kind:'daily'` é chamado por país e ponderado pelas noites de cada um (fecha a ressalva da Fase 6).
+6. **Aviso de mudança com valores.** `diffSince` passa a citar diferenças de preço: "+1 noite em Roma, +R$ 310 em hospedagem" (fecha outra ressalva da Fase 6).
+7. **Trecho de volta.** `legInto` (`lib/route.ts`) ignora trechos com `is_return`; o Roteiro mostra a volta como última linha depois da última parada ("Voo Veneza → São Paulo"). `budgetFromPlan` já soma todos os trechos, então a volta entra no total.
+
+### 10.11 Dados: migration `20261108000010_onboarding.sql`
+
+Aditiva, no padrão das anteriores.
+
+| Mudança | Detalhe |
+|---|---|
+| `trips.party_size smallint null` | `check (party_size between 1 and 50)`. Sem backfill. |
+| `trips.onboarding jsonb null` | Rascunho do onboarding (formato abaixo). Só editor escreve (política atual de `trips`). |
+| `transports.is_return boolean not null default false` | Trecho de volta para casa, ligado à última parada. No máximo um por trilha (índice único parcial `where is_return`). |
+| RPC `apply_onboarding_route(p_trip uuid, p_version int, p_route jsonb, p_replace boolean default false)` | `security invoker`, exige `can_edit_trip`. Numa transação: confere versão; recusa se já houver paradas e `p_replace` for falso; com `p_replace`, recusa se alguma parada tiver gasto ligado ou documento; insere paradas, trechos (com o de volta), sugestões de bate-volta, e atualiza `budget_plan` e `onboarding`. Mensagens humanas nos erros. |
+
+Formato de `trips.onboarding` (tipado em `types.ts` como `OnboardingState`; ler sempre com um `parseOnboarding` que tolera lixo, como `parseAnswers`):
+
+```ts
+interface OnboardingState {
+  status: 'em_andamento' | 'concluido' | 'manual' | 'pulado';
+  step: 2 | 3 | 4 | 5 | 6;
+  flexible_dates?: boolean;
+  places?: { items: PlaceIdea[]; nearby: NearbyIdea[]; fetched_at: string };
+  marks?: Record<string, 'must' | 'maybe' | 'skip'>; // chave = nome normalizado
+  wishes?: string[];
+  route?: RouteProposal;        // última proposta (antes de aplicar)
+  route_calls?: number;         // limite 6
+  stale?: ('places' | 'route' | 'tours')[]; // passos desatualizados por edição anterior
+}
+```
+
+**Pipeline:** `types.ts` (campos opcionais, como na Fase 3), `upgradeBundle` em `offline.ts`, `DEFAULTS` em `demoSource.ts` e `lib/demo/build.ts` (demos com `party_size` igual ao número de membros e `onboarding: null`), `supabaseSource` sem mudança de tabela. Testes de banco em `tests/db/onboarding.test.ts`.
+
+### 10.12 Lógica pura: `src/lib/onboarding.ts`
+
+Testável, sem rede, sem React:
+
+- `parseOnboarding(raw): OnboardingState | null`
+- `nightsOf(trip)`: noites da viagem.
+- `defaultMarks(places, nearby, preset?)`: "talvez" para lugares, "pular" para perto daqui, "não pode faltar" para os adicionados à mão e "talvez" para as cidades vindas do Descobrir.
+- `minNightsOfMust(places, marks)`: para o aviso do passo 3.
+- `fitNights(stops, total)`: corrige a soma das noites que a IA devolver (tira das maiores, dá às menores, nunca abaixo de 1); remove paradas do fim se houver mais paradas que noites, levando-as para "ficou de fora".
+- `adjustNights(route, index, delta)`: regra do +/−.
+- `moveStop(route, from, to)`: reordena e marca trechos afetados como `stale`.
+- `datesFor(route, start)`: datas de chegada e saída de cada parada, contíguas.
+- `routeToRows(route, trip)`: payload da RPC (paradas, trechos com ida e volta, bate-voltas com o dia).
+- `preselectTours(stop, items, vibes, pace)`: pré-seleção do passo 5.
+- `tourDay(...)`: reaproveita `placeDaySuggestions`/`bestDayFor`.
+- `cutSuggestions(result, cap)`: as 2 sugestões de corte do passo 6.
+
+### 10.13 IA: novos pedidos e ajustes
+
+Todos em `api/ai/explore` (mesma cota, mesma autenticação, só editor), com schemas novos em `lib/ai/prompts.ts`, `EXPLORE_RULES` e o filtro `fair` (sem "reservei", "verifiquei", nome de hotel).
+
+**`kind:'places'`** `{ tripId }` (lê destino, datas, `party_size`, origem e preferências da própria trilha):
+```json
+{ "items": [{ "name": "", "region": "", "country": "", "lat": 0, "lng": 0, "why": "",
+              "nights_min": 1, "nights_max": 3, "highlights": ["", "", ""], "photo_query": "", "tags": [""] }],
+  "nearby": [{ "name": "", "country": "", "lat": 0, "lng": 0, "why": "", "from": "Florença",
+               "mode": "bus|train|car|boat|plane", "hours": 0, "kind": "bate_volta|parada",
+               "cost_low": 0, "cost_high": 0, "photo_query": "" }] }
+```
+- 8 a 10 `items` do destino e **4 a 8 `nearby`**, sempre (decisão 2): o prompt pede explicitamente "cidades próximas que viajantes costumam não saber que ficam perto, inclusive em países vizinhos, a até ~3h de algum dos lugares".
+- O servidor descarta `nearby` com `hours > 4` e duplicados entre listas; calcula a distância em linha reta (`haversineKm`) a partir do `from` para conferir que é perto (> 300 km cai fora).
+
+**`kind:'route'`** `{ tripId, must: string[], maybe: string[], skip: string[], wishes: string[], variant?: 'calmo' | 'mais_lugares', force?: string[] }`:
+```json
+{ "outbound": { "to": "", "mode": "plane", "hours": 0, "cost_low": 0, "cost_high": 0 },
+  "stops": [{ "name": "", "country": "", "lat": 0, "lng": 0, "nights": 1, "why": "",
+              "day_trips": [{ "name": "", "day_offset": 1, "cost_low": 0, "cost_high": 0 }],
+              "stay_pp_night": { "economico": [0, 0], "equilibrado": [0, 0], "conforto": [0, 0] } }],
+  "legs": [{ "from": "", "to": "", "mode": "train", "hours": 0, "cost_low": 0, "cost_high": 0 }],
+  "return": { "from": "", "mode": "plane", "hours": 0, "cost_low": 0, "cost_high": 0 },
+  "food_pp_day": [{ "country": "", "low": 0, "high": 0 }],
+  "left_out": [{ "name": "", "reason": "" }],
+  "wishes": [{ "wish": "", "stop": "" }] }
+```
+- O prompt diz: total de noites exato, todos os `must` incluídos ou explicados em `left_out`, entrada e saída podem ser cidades diferentes, ordem geográfica que evita voltar caminho, ritmo (`leve` ≈ 3+ noites por parada, `intenso` ≈ 2), sem nomes de hotel, preços por pessoa em faixa na moeda base.
+- O servidor valida com zod, aplica `fitNights`, confere que `legs` liga as paradas em ordem (refaz `from`/`to` pelos nomes se vier fora) e, se faltar algum `must` sem explicação, pede **uma** nova tentativa; persistindo, devolve mesmo assim com o lugar em `left_out` ("A Trilha não conseguiu encaixar").
+- `maxTokens` ~2.400, `temperature` 0,5.
+
+**`kind:'activities'`** (existe): ganha `vibes`, `wishes` e `pace` opcionais no input, e `tags`, `day_fit`, `photo_query` e `wish` (qual desejo atende, se algum) na saída. Respostas sem esses campos continuam válidas.
+
+**`estimate kind:'transport'`** (existe): aceita também `virtual: [{ key: 'ida' | 'volta', from, to }]` para os trechos que não existem no banco (§10.10.3).
+
+**Testes:** schemas com respostas de exemplo em `tests/unit/onboardingAi.test.ts` (resposta boa, noites somando errado, `must` faltando, `nearby` longe demais, texto com "reservei").
+
+### 10.14 O que sai (resto da identidade visual)
+
+- `/nova-trilha`: `DEST`, chips de `DICTIONARY_ORDER`, `matchDictionary`, `applyAccent` pelo destino, gravação de `accent` pelo dicionário e o parâmetro `?identidade=`.
+- Links que ainda mandam `?identidade=` (procurar em `src/` e nos e2e) passam a abrir `/nova-trilha` limpo.
+- Depois disso, conferir quem ainda usa `lib/identity/dictionary(.data)`. Se só a demo usar, mover os dados necessários para `lib/demo/` e apagar o dicionário. `accent.ts` e `contrast` ficam (cor da trilha em Ajustes).
+- `trips.identity` e `identity_version` continuam no banco, sem uso (já documentado no README).
+
+### 10.15 Estados obrigatórios (além da §6.8)
+
+| Estado | Comportamento |
+|---|---|
+| Carregando IA | Skeleton do passo + balão da Trilha com o que está fazendo ("Procurando lugares que combinam com vocês…", "Montando a rota…"). Sem spinner solto. |
+| IA indisponível (503) | Decisão 4: mensagem + "Montar o roteiro eu mesmo". |
+| IA falhou (502) ou cota | "Tentar de novo" + "Montar o roteiro eu mesmo". A cota acabada diz quando volta. |
+| Offline | `ensureOnline` antes de cada chamada; o passo mostra a faixa de offline e mantém o que já carregou. |
+| Leitor | `/montar` redireciona para a Início. |
+| Recarregar no meio | Volta ao passo salvo, com os dados do `onboarding`, sem chamar a IA de novo. |
+| Duas abas | A RPC confere a versão; a outra aba recebe "A viagem mudou em outra tela" e recarrega. |
+
+### 10.16 Testes
+
+- **Unitários:** `lib/onboarding.ts` (todas as funções da §10.12, incluindo open-jaw, trecho de volta, 1 noite mínima, mais paradas que noites); `budgetPlan` (noites pela viagem, roteiro vazio, voo virtual, `budgetRange`, comida ponderada por país, `party_size` como divisor); `headcount`; schemas da §10.13.
+- **Banco (PGlite):** `party_size` fora de 1–50 recusado; `is_return` único por trilha; `apply_onboarding_route` atômica (falha no meio desfaz tudo), recusa com paradas existentes, recusa substituir parada com gasto ligado, só editor; RLS de `onboarding`.
+- **E2E (Playwright, IA simulada com `page.route` em `/api/ai/explore` e `/api/ai/estimate`, contra um Supabase de teste ou o caminho já usado pelos testes de conta real; se não houver, cobrir pela demo com uma trilha local):**
+  1. fluxo completo "Itália, 15 dias, 2 pessoas, São Paulo" até a Início com paradas, trechos (com volta) e passeios;
+  2. o passo 6 mostra hospedagem de 14 noites, voo e total por pessoa dividido por 2;
+  3. IA 503 no passo 3 leva ao Roteiro manual;
+  4. recarregar no passo 4 volta ao passo 4 sem nova chamada à IA (contar requisições);
+  5. "+" e "−" de noites mantêm a soma;
+  6. Orçamento de trilha sem paradas mostra o estado vazio e não um total;
+  7. sem rolagem horizontal de 360 a 1440 px em `/nova-trilha` e `/montar`.
+
+### 10.17 Fora do escopo
+
+- Busca de preço real de passagens (decisão 3).
+- Votação de lugares no onboarding (decisão 1). A turma pode votar depois, pelos fluxos existentes.
+- Rota de referência sem IA (decisão 4).
+- Arrastar para reordenar (continua ↑ ↓).
+- Mapa no passo 4: a linha do tempo basta nesta fase. O mapa do Roteiro já mostra a rota depois de aplicada (agora com coordenadas vindas da IA, o que também fecha a ressalva da Fase 8 sobre paradas sem coordenadas).
+
+---
+
+## 11. Verificação ponta a ponta
 
 1. `npm run typecheck && npm test`: unitários e banco (pglite) verdes, incluindo RLS das tabelas novas.
 2. `npm run build && npm run test:e2e`: Playwright na demo.
 3. Manualmente, em `npm run dev`:
    - `/demo/andes` no navegador com emulação de iPhone (390×844) e em 1280 px, comparando cada tela lado a lado com o artboard do canvas;
    - instalar como PWA no celular (Android/iOS): sem barra do navegador, TabBar respeitando a área segura, Sheet com Voltar;
-   - fluxo real com Supabase: criar trilha por "Ainda não sei" → Descobrir → Montar → Orçamento → aporte → gasto ligado → conferir em outro aparelho (realtime);
+   - fluxo real com Supabase: criar trilha por "Ainda não sei" → Descobrir → Montar esta trilha → passos 2 a 6 do onboarding → Orçamento → aporte → gasto ligado → conferir em outro aparelho (realtime);
+   - onboarding com destino e IA real (Fase 10): "Itália, 15 dias, 2 pessoas, São Paulo" → conferir lugares e "Perto daqui", rota com ida e volta, passeios e orçamento de 14 noites; repetir com a IA desligada e conferir que cai no Roteiro manual;
    - modo avião: ler a Início, o Roteiro e os documentos offline; as ações de escrita mostram o aviso.
 4. Conferir a honestidade: toda estimativa com o selo ESTIMATIVA; nenhum nome de hotel vindo da IA; foto sempre com crédito; nada de "verificado"/"reservado" dito pela IA.
 
@@ -865,3 +1193,4 @@ Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/
 - `src/lib/money.ts`, `explore.ts` (`staySearchLinks`, `fitOf`, `nightlyCap`), `plan.ts`, `polls.ts`, `rules.ts`, `lib/ai/prompts.ts`
 - Novos: `supabase/migrations/20261108000008_redesign.sql`, `src/app/api/photos`, `src/app/api/ai/suggest`, `src/app/api/ai/estimate`, `src/lib/suggestions.ts`, `budgetPlan.ts`, `photos.ts`
 - `tests/e2e/demo.spec.ts`, `tests/unit/*`, `tests/db/*`
+- Fase 10: `src/app/nova-trilha/page.tsx`, novo `src/screens/Montar.tsx` + `src/app/t/[tripId]/montar/page.tsx`, novo `src/lib/onboarding.ts`, `src/lib/budgetPlan.ts`, `src/lib/explore.ts` (`headcount`), `src/lib/money.ts`, `src/lib/route.ts` (`legInto`), `src/lib/discover.ts` (`VIBES`), `src/screens/Descobrir.tsx`, `src/screens/Orcamento.tsx`, `src/screens/Inicio.tsx`, `src/screens/EditTrip.tsx`, `src/app/api/ai/explore/route.ts`, `src/app/api/ai/estimate/route.ts`, `src/lib/ai/prompts.ts`, nova `supabase/migrations/20261108000010_onboarding.sql`

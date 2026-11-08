@@ -32,6 +32,7 @@ export default function EditTrip() {
     title: t.title, tagline: t.tagline ?? '', destinations: t.destinations.join(', '), start: t.start_date, end: t.end_date,
     time: localDeparture(t.departure_at, t.departure_tz), tz: t.departure_tz, home: t.home_tz, origin: t.origin ?? '', style: t.style,
     currency: t.base_currency, budget: t.budget_total != null ? String(t.budget_total) : '',
+    party: t.party_size ?? Math.max(1, b.members.length),
   });
   const tzs = useMemo(() => listTimeZones(), []);
   const ok = v.title.trim() && v.end >= v.start && isValidTimeZone(v.tz) && isValidTimeZone(v.home) && /^[A-Z]{3}$/.test(v.currency);
@@ -55,6 +56,10 @@ export default function EditTrip() {
         title: v.title.trim(), tagline: v.tagline.trim() || null, destinations: v.destinations.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20),
         start_date: v.start, end_date: v.end, departure_at: departure, departure_tz: v.tz, home_tz: v.home, origin: v.origin.trim().toUpperCase() || null,
         style: v.style, base_currency: v.currency, budget_total: budget == null ? null : centsToDecimal(budget),
+        // Pessoas na viagem (planning §10.9): divisor de tudo que é "por pessoa".
+        party_size: Math.min(50, Math.max(1, Math.round(v.party) || 1)),
+        // Datas editadas deixam de ser "aproximadas".
+        ...(t.onboarding?.flexible_dates && (v.start !== t.start_date || v.end !== t.end_date) ? { onboarding: { ...t.onboarding, flexible_dates: false } } : {}),
       };
       await source.update('trips', t.id, patch, t.version);
       await reload();
@@ -91,6 +96,7 @@ export default function EditTrip() {
             <Field label="Seu fuso de casa"><input list="tzs" value={v.home} onChange={(e) => setV({ ...v, home: e.target.value })} /></Field>
             <Field label="Estilo"><select value={v.style} onChange={(e) => setV({ ...v, style: e.target.value as TripStyle })}>{STYLES.map((x) => <option key={x}>{x}</option>)}</select></Field>
             <Field label="Moeda base"><input value={v.currency} maxLength={3} onChange={(e) => setV({ ...v, currency: e.target.value.toUpperCase() })} /><span className="hint">Gastos já registrados mantêm a taxa gravada.</span></Field>
+            <Field label="Pessoas na viagem" hint={`Contando quem ainda não está no app. ${b.members.length} no app agora.`}><input type="number" inputMode="numeric" min={1} max={50} value={v.party} onChange={(e) => setV({ ...v, party: Number(e.target.value) })} /></Field>
             <Field label="Orçamento total"><input inputMode="decimal" value={v.budget} onChange={(e) => setV({ ...v, budget: e.target.value })} /></Field>
             <Field label="Etiqueta (opcional)"><input value={v.tagline} maxLength={40} onChange={(e) => setV({ ...v, tagline: e.target.value })} placeholder="Mochilão de verão" /></Field>
           </FieldGrid>

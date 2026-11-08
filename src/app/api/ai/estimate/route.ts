@@ -7,7 +7,11 @@ import { consumeQuota, handle, HttpError, loadTripForUser, readJson, requireUser
 // Estimativas para o Orçamento (planning §8.3). Só devolve FAIXAS; nada é gravado aqui:
 // a turma confirma no Orçamento e só então o valor vai para o item.
 const input = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('transport'), tripId: z.string().uuid() }),
+  z.object({
+    kind: z.literal('transport'), tripId: z.string().uuid(),
+    // Voo que ainda não está no roteiro (planning §10.10.3): "ida" e "volta".
+    virtual: z.array(z.object({ key: z.enum(['ida', 'volta']), title: z.string().max(120) })).max(2).optional(),
+  }),
   z.object({ kind: z.literal('daily'), tripId: z.string().uuid(), country: z.string().min(2).max(60), pace: z.enum(['leve', 'moderado', 'intenso']) }),
 ]);
 
@@ -49,6 +53,14 @@ JSON: {"cost_low":0,"cost_high":0}`,
         const from = t.origin_name ?? t.origin_code ?? (i > 0 ? stops[i - 1].name : bundle.trip.origin) ?? 'origem';
         return { id: t.id, from, to: t.dest_name ?? stops[i]?.name ?? 'destino', mode: t.mode, date: t.depart_date };
       });
+    const origin = bundle.trip.origin?.trim();
+    if (origin && stops.length) {
+      for (const v of q.virtual ?? []) {
+        legs.push(v.key === 'ida'
+          ? { id: 'ida', from: origin, to: stops[0].name, mode: 'plane', date: bundle.trip.start_date }
+          : { id: 'volta', from: stops[stops.length - 1].name, to: origin, mode: 'plane', date: bundle.trip.end_date });
+      }
+    }
     if (!legs.length) return NextResponse.json({ data: { items: [], currency: cur }, by: 'rules' });
     await consumeQuota(sb);
     const res = await runWithFallback(

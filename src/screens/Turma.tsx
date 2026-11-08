@@ -1,6 +1,7 @@
 'use client';
 // TurmaHub (planning §5.7 · Turma.dc.html): membros, decidir juntos, documentos, mala da turma e diário.
 // Votos, Documentos, Mala e Diário vivem nas subtelas /turma/*.
+import { headcount } from '../lib/people';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useAction, useConfirm, useToast } from '../components/ui/feedback';
@@ -65,7 +66,7 @@ export default function Turma() {
 
   return (
     <div className="wrap">
-      <ScreenHeader title="Turma" subtitle="Quem viaja junto e o que falta decidir." action={canEdit ? <Button size="sm" onClick={() => setInviting(true)}><Icon name="plus" size={16} />Convidar</Button> : null} />
+      <ScreenHeader title="Turma" subtitle={headcount(b) > b.members.length ? `${headcount(b)} pessoas na viagem · ${b.members.length} no app` : 'Quem viaja junto e o que falta decidir.'} action={canEdit ? <Button size="sm" onClick={() => setInviting(true)}><Icon name="plus" size={16} />Convidar</Button> : null} />
 
       <section aria-label="Membros" className={t.members}>
         {b.members.map((m) => {
@@ -270,7 +271,7 @@ function MemberSheet({ uid, onClose }: { uid: string; onClose: () => void }) {
   );
 }
 
-function InviteSheet({ onClose }: { onClose: () => void }) {
+export function InviteSheet({ onClose }: { onClose: () => void }) {
   const { bundle: b, isOrganizer, source } = useBundle();
   const { run, busy } = useAction();
   const toast = useToast();

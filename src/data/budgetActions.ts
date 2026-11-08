@@ -19,9 +19,13 @@ export async function closeBudget(source: TripSource, b: TripBundle, plan: Budge
   }
   const extra = b.budgetCategories.filter((c) => categoryKind(c) === 'outro').reduce((sum, c) => sum + toCents(c.planned), 0);
   const args: BudgetWrite = {
-    p_trip: b.trip.id, p_version: b.trip.version, p_plan: { ...plan, snapshot: snapshotOf(b), updated_at: new Date().toISOString() },
+    p_trip: b.trip.id, p_version: b.trip.version, p_plan: { ...plan, snapshot: snapshotOf(b, undefined, result), updated_at: new Date().toISOString() },
     p_categories: categories,
-    p_transports: Object.entries(typed).map(([id, value]) => ({ id, version: b.transports.find((t) => t.id === id)!.version, cents: value.trim() ? toCents(value) : null })),
+    // Só trechos gravados; o voo virtual (ida/volta) fica em plan.transport_cents.
+    p_transports: Object.entries(typed).flatMap(([id, value]) => {
+      const t = b.transports.find((x) => x.id === id);
+      return t ? [{ id, version: t.version, cents: value.trim() ? toCents(value) : null }] : [];
+    }),
     p_question: b.members.length > 1 ? `Aprovar orçamento de ${formatMoney(Math.round((result.totalCents + extra) / result.people), b.trip.base_currency, { compact: true })} por pessoa?` : null,
   };
   await source.rpc('close_budget', { ...args });
