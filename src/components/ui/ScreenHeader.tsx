@@ -8,7 +8,7 @@ import s from './ScreenHeader.module.css';
  * Cabeçalho de tela: título grande, subtítulo e ação à direita (planning §3.3).
  * `back` (href) mostra o botão voltar redondo — usado nas subtelas.
  */
-export function ScreenHeader({ title, subtitle, eyebrow, action, back, backLabel = 'Voltar', children }: {
+export function ScreenHeader({ title, subtitle, eyebrow, action, back, backLabel = 'Voltar', children, inlineAction = false }: {
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   eyebrow?: React.ReactNode;
@@ -17,6 +17,8 @@ export function ScreenHeader({ title, subtitle, eyebrow, action, back, backLabel
   back?: string | true;
   backLabel?: string;
   children?: React.ReactNode;
+  /** Ação curta ao lado do título, com subtítulo ocupando a linha inteira. */
+  inlineAction?: boolean;
 }) {
   const router = useRouter();
   return (
@@ -31,7 +33,7 @@ export function ScreenHeader({ title, subtitle, eyebrow, action, back, backLabel
           {action ? <div className={s.action}>{action}</div> : null}
         </div>
       ) : null}
-      <div className={s.main}>
+      <div className={`${s.main} ${inlineAction && !back ? s.inlineAction : ''}`}>
         <div className={s.titles}>
           {eyebrow ? <div className={s.eyebrow}>{eyebrow}</div> : null}
           <h1 className={back ? s.subTitle : s.title}>{title}</h1>

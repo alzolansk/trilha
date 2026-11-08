@@ -10,4 +10,10 @@
 .subTitle { margin: 0; font: var(--t-title); letter-spacing: -0.03em; }
 .sub { margin: 6px 0 0; font-size: 15px; line-height: 1.45; color: var(--mute); max-width: 620px; }
 .action { display: flex; align-items: center; gap: var(--s2); flex: none; }
+.inlineAction { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; }
+.inlineAction .titles { display: contents; }
+.inlineAction .title { grid-column: 1; grid-row: 1; }
+.inlineAction .action { grid-column: 2; grid-row: 1; }
+.inlineAction .sub { grid-column: 1 / -1; grid-row: 2; margin: 0; }
+.inlineAction .eyebrow { grid-column: 1 / -1; }
 @media (min-width: 821px) { .head { padding-top: var(--s8); } }

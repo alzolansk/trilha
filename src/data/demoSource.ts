@@ -4,6 +4,7 @@
 import { buildDemoBundle, DEMO_USER, type DemoKey } from '../lib/demo/build';
 import { ConflictError, type TripSource } from './source';
 import { BUNDLE_KEYS, type TableName, type TripBundle } from './types';
+import type { BudgetWrite } from './budgetActions';
 
 const stores = new Map<string, TripBundle>();
 
@@ -116,6 +117,29 @@ export function createDemoSource(key: DemoKey): TripSource {
       emit(table);
     },
     async rpc(fn, args) {
+      if (fn === 'close_budget') {
+        const p = args as unknown as BudgetWrite;
+        const bb = structuredClone(b());
+        if (bb.trip.id !== p.p_trip || bb.trip.version !== p.p_version) throw new ConflictError('A trilha mudou. Reabra o orçamento.');
+        for (const t of p.p_transports) {
+          const row = bb.transports.find((x) => x.id === t.id);
+          if (!row || row.version !== t.version) throw new ConflictError('Um trecho mudou. Reabra o orçamento.');
+          Object.assign(row, { price_cents: t.cents, price_currency: bb.trip.base_currency, price_is_estimate: false, version: row.version + 1 });
+        }
+        for (const c of p.p_categories) {
+          const row = bb.budgetCategories.find((x) => x.id === c.id);
+          if (c.version != null && (!row || row.version !== c.version)) throw new ConflictError('Uma categoria mudou. Reabra o orçamento.');
+          if (row) Object.assign(row, { planned: c.planned, kind: c.kind, version: row.version + 1 });
+          else bb.budgetCategories.push({ ...c, trip_id: bb.trip.id, version: 1, created_at: stamp(), updated_at: stamp() } as TripBundle['budgetCategories'][number]);
+        }
+        bb.trip.budget_plan = p.p_plan; bb.trip.version++;
+        if (p.p_question && !bb.polls.some((x) => x.question === p.p_question && x.status === 'open' && x.target === 'free')) {
+          const id = crypto.randomUUID();
+          bb.polls.push({ ...DEFAULTS.polls, id, trip_id: bb.trip.id, question: p.p_question, created_at: stamp(), updated_at: stamp(), version: 1 } as TripBundle['polls'][number]);
+          for (const [position, label] of ['Sim', 'Ajustar'].entries()) bb.pollOptions.push({ id: crypto.randomUUID(), trip_id: bb.trip.id, poll_id: id, label, position, detail: null, link_url: null, price: null, currency: null, address: null, created_by: DEMO_USER, created_at: stamp() });
+        }
+        stores.set(key, bb); emit('trips'); return undefined as never;
+      }
       if (fn === 'save_expense') {
         const e = args.p_expense as Record<string, unknown>;
         const shares = args.p_shares as { user_id: string; share_cents: number }[];
@@ -138,6 +162,8 @@ export function createDemoSource(key: DemoKey): TripSource {
           bb.expenses.unshift({ ...(e as unknown as import('./types').Expense), id: eid, trip_id: bb.trip.id, version: 1, created_at: stamp(), updated_at: stamp(), created_by: DEMO_USER });
         }
         for (const s of shares) bb.expenseShares.push({ expense_id: eid, trip_id: bb.trip.id, ...s });
+        const stay = bb.stays.find((s) => s.id === e.stay_id && s.status === 'pending');
+        if (stay) { stay.status = 'booked'; stay.version++; }
         emit('expenses');
         return eid as never;
       }

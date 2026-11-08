@@ -89,6 +89,8 @@ export interface BudgetPlan {
   food?: BudgetFood | null;
   /** valor por pessoa de trechos sem preço no roteiro (estimativa da Trilha), por id do transporte */
   transport_cents?: Record<string, number> | null;
+  /** Faixa da diária por pessoa, por parada e estilo; mediana das regiões sugeridas. */
+  stay_estimates?: Record<string, Partial<Record<BudgetStyle, { low: number; high: number }>>>;
   /** foto do roteiro usada no cálculo, para avisar o que mudou depois (diffSince) */
   snapshot?: BudgetSnapshot | null;
   updated_at?: string;

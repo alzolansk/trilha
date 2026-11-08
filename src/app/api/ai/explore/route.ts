@@ -16,7 +16,7 @@ const input = z.discriminatedUnion('kind', [
     vibes: z.array(z.string().max(20)).max(6).optional(),
   }),
   z.object({ kind: z.literal('activities'), tripId: z.string().uuid(), stopId: z.string().uuid(), capPerPerson: reais }),
-  z.object({ kind: z.literal('stays'), tripId: z.string().uuid(), stopId: z.string().uuid(), nightlyCap: reais }),
+  z.object({ kind: z.literal('stays'), tripId: z.string().uuid(), stopId: z.string().uuid(), nightlyCap: reais, budgetStyle: z.enum(['economico', 'equilibrado', 'conforto']).optional() }),
 ]);
 
 const fair = (s: string) => !claimsAction(s);
@@ -106,6 +106,7 @@ JSON: {"items":[{"title":"...","why":"...","duration":"...","cost_low":0,"cost_h
       EXPLORE_RULES,
       `${ctx}
 Parada: ${stop.name}${stop.country ? `, ${stop.country}` : ''}, ${nights} noite(s).
+${q.budgetStyle ? `Estilo para as faixas de diária: ${{ economico: 'Hostel, quarto da turma', equilibrado: 'Pousada simples, quarto da turma', conforto: 'Hotel, mais conforto' }[q.budgetStyle]}. Não cite estabelecimentos.` : ''}
 Plano na parada: ${JSON.stringify((bundle.activities ?? []).filter((a) => a.stop_id === stop.id).map((a) => a.title))}.
 ${q.nightlyCap ? `Teto da diária para o grupo todo: ${q.nightlyCap} ${cur}.` : ''}
 Sugira até 4 bairros ou regiões pra se hospedar, explicando pra quem cada um combina (perto do quê, como é à noite, se precisa de transporte). "price_low"/"price_high" = faixa aproximada da diária de um quarto/casa para ${people} pessoa(s), em ${cur}.

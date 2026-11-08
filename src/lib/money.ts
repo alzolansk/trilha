@@ -482,7 +482,11 @@ export function filterMovements(list: Movement[], f: MovementFilter): Movement[]
 /** CSV do extrato (separador ";" e vírgula decimal, como o Excel em pt-BR abre). */
 export function movementsCsv(list: Movement[], opts: { base: string; nameOf: (uid: string) => string; categoryOf: (id: string | null | undefined) => string; stopOf: (id: string | null | undefined) => string }): string {
   const dec = (c: number) => (c / 100).toFixed(2).replace('.', ',');
-  const esc = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  // Texto da turma pode começar com fórmula; exportar como texto no Excel.
+  const esc = (raw: string) => {
+    const v = /^[\s]*[=+@-]/.test(raw) ? `'${raw}` : raw;
+    return /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  };
   const KIND: Record<MovementKind, string> = { expense: 'Gasto', deposit: 'Aporte', refund: 'Devolução', settlement: 'Pagamento' };
   const rows = [['Data', 'Tipo', 'Descrição', 'Quem', 'Para', 'Categoria', 'Parada', 'Valor original', 'Moeda original', `Valor (${opts.base})`]];
   for (const m of list) {

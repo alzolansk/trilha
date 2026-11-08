@@ -19,6 +19,9 @@ export interface SheetProps {
 }
 
 let seq = 0;
+// Trocar diretamente de Sheet (escolha → gasto) reutiliza a entrada de histórico.
+// Sem isso o back() assíncrono do anterior pode fechar o novo formulário.
+let closing: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
 
 /**
  * `<dialog>` que vira bottom sheet no celular (≤ 820 px) e modal de 560 px no desktop (planning §3.3).
@@ -48,6 +51,8 @@ export function Sheet({ open, onClose, title, children, footer, labelledBy, desc
     navigating.current = false;
     let pushed = false;
     let poppedByUser = false;
+    const replaceClosing = closing && window.history.state?.__sheet === closing.key;
+    if (closing) { clearTimeout(closing.timer); closing = null; }
     const onPop = () => {
       if (window.history.state?.__sheet === key) return; // voltou de um sheet aninhado para este
       poppedByUser = true;
@@ -56,7 +61,8 @@ export function Sheet({ open, onClose, title, children, footer, labelledBy, desc
     // Adiado um tick: no StrictMode o efeito monta, desmonta e monta de novo na mesma hora;
     // assim só uma entrada é empurrada.
     const t = setTimeout(() => {
-      window.history.pushState({ ...(window.history.state ?? {}), __sheet: key }, '');
+      if (replaceClosing) window.history.replaceState({ ...(window.history.state ?? {}), __sheet: key }, '');
+      else window.history.pushState({ ...(window.history.state ?? {}), __sheet: key }, '');
       pushed = true;
       window.addEventListener('popstate', onPop);
     }, 0);
@@ -67,9 +73,11 @@ export function Sheet({ open, onClose, title, children, footer, labelledBy, desc
       // Adiado um tick e conferido de novo: se a ação navegou (link ou router.push imediato),
       // a entrada já não é a nossa e fica como está (Voltar depois só repete a tela anterior).
       if (!pushed || poppedByUser || navigating.current) return;
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        closing = null;
         if (!navigating.current && window.history.state?.__sheet === key) window.history.back();
       }, 0);
+      closing = { key, timer };
     };
   }, [open, closeOnBack]);
 

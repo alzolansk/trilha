@@ -1,6 +1,7 @@
 'use client';
 // Sheets do Roteiro e da Parada (planning §6.5). Todos usam `useAction` (toast e conflito de versão)
 // e gravam pelo TripSource, como o resto do app.
+import { PayItem } from '../money/ExpenseSheet';
 import { useMemo, useState } from 'react';
 import { PlaceSearch, type Place } from '../forms/PlaceSearch';
 import { useDraft } from '../forms/useDraft';
@@ -242,6 +243,7 @@ export function TransportSheet({ stop, t, onClose }: { stop: Stop; t: Transport 
   return (
     <Sheet open onClose={onClose} title={`Como chego em ${stop.name}`} size="lg" footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !okTz} onDelete={t ? () => void del() : undefined} />}>
       <div className={s.form}>
+        {t ? <PayItem type="transport" id={t.id} /> : null}
         <Field label="Meio de transporte"><select value={v.mode} onChange={(e) => setV({ ...v, mode: e.target.value as TransportMode })}>{MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></Field>
         <PriceField
           label="Valor por pessoa" text={v.price} currency={v.currency} currencies={tripCurrencies(b)} onText={(x) => setV({ ...v, price: x })} onCurrency={(c) => setV({ ...v, currency: c })}
@@ -306,6 +308,7 @@ export function StaySheet({ stop, stay, onClose }: { stop: Stop; stay: Stay | nu
   return (
     <Sheet open onClose={onClose} title={`Onde dormir em ${stop.name}`} size="lg" footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !v.name.trim() || !linkOk} onDelete={stay ? () => void del() : undefined} />}>
       <div className={s.form}>
+        {stay ? <PayItem type="stay" id={stay.id} /> : null}
         <Field label="Nome"><input value={v.name} maxLength={120} required onChange={(e) => setV({ ...v, name: e.target.value })} /></Field>
         <PriceField
           label="Valor por noite (quarto ou casa)" text={v.price} currency={v.currency} currencies={tripCurrencies(b)} onText={(x) => setV({ ...v, price: x })} onCurrency={(c) => setV({ ...v, currency: c })}
@@ -359,6 +362,7 @@ export function ActivitySheet({ stop, act, day, onClose }: { stop: Stop; act: Ac
   return (
     <Sheet open onClose={onClose} title={act ? 'Atividade' : 'Nova atividade'} footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !v.title.trim()} onDelete={act ? () => void del() : undefined} deleteLabel="Remover" />}>
       <div className={s.form}>
+        {act ? <PayItem type="activity" id={act.id} /> : null}
         <Field label="O que fazer"><input value={v.title} maxLength={160} required onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
         <FieldGrid>
           <Field label="Dia"><select value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })}>{days.map((d) => <option key={d} value={d}>{dayWeekU(d)}</option>)}</select></Field>

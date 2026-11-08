@@ -244,7 +244,7 @@ function TripInicio() {
                   </div>
                   <span className={`${s.moneyPct} num`}>{money.pooledPct ?? 0}%</span>
                 </div>
-                <Progress value={Math.min(100, money.pooledPct ?? 0)} color="var(--sun)" track="var(--dark-2)" label={`${money.pooledPct ?? 0}% do planejado já está no caixa`} />
+                <Progress value={(money.pooledPct ?? 0) / 100} color="var(--sun)" track="var(--dark-2)" label={`${money.pooledPct ?? 0}% do planejado já está no caixa`} />
               </>
             ) : (
               <>

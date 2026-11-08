@@ -66,7 +66,7 @@ export interface PlanResult {
 const ppl = (b: Pick<TripBundle, 'members'>) => Math.max(1, b.members.length);
 
 /** Calcula o previsto a partir do roteiro e do plano. `rates` converte preços em outra moeda. */
-export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | 'pace' | 'activities' | 'daily_food_cents' | 'transport_cents'>, rates: Rates = {}): PlanResult {
+export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | 'pace' | 'activities' | 'daily_food_cents' | 'transport_cents' | 'stay_estimates'>, rates: Rates = {}): PlanResult {
   const people = ppl(b);
   const days = daysBetween(b.trip.start_date, b.trip.end_date) + 1;
   const nights = Math.max(0, days - 1);
@@ -80,7 +80,7 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
   for (const t of b.transports) {
     const v = toBaseCents(t.price_cents, t.price_currency, b.trip.base_currency, rates);
     const o = plan.transport_cents?.[t.id];
-    if (v != null) tr += v;
+    if (v != null) { tr += v; if (t.price_is_estimate ?? true) trEst += v; }
     else if (o != null) {
       tr += o;
       trEst += o;
@@ -96,12 +96,23 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
     if (!n) continue;
     const stay = b.stays.find((x) => x.stop_id === s.id);
     const total = stay ? itemCost(b, 'stay', stay.id, rates) : null;
+    const range = plan.stay_estimates?.[s.id]?.[plan.style];
+    if (range && stay?.status !== 'booked' && stay?.price_is_estimate !== false) {
+      const v = Math.round((range.low + range.high) / 2) * n;
+      st += v; stEst += v; continue;
+    }
     if (total == null) {
       stMissing++;
       const v = nightFor(plan.style) * n;
       st += v;
       stEst += v;
-    } else st += Math.round(total / people);
+    } else {
+      // Preço confirmado ou reserva feita não muda com o estilo. Uma referência de
+      // hospedagem ainda pendente acompanha a escolha, sem alterar o item no roteiro.
+      const flexible = stay?.status !== 'booked' && (stay?.price_is_estimate ?? true);
+      const v = Math.round(total / people * (flexible ? style : 1));
+      st += v; if (stay?.price_is_estimate ?? true) stEst += v;
+    }
   }
 
   // Passeios: com seleção explícita (Orçamento em conversa), só os escolhidos — atividades do roteiro e
@@ -131,7 +142,7 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
   }
 
   // Comida: diária confirmada (ou referência) × estilo × dias.
-  const food = Math.round((plan.daily_food_cents ?? DEFAULTS.foodPerDay) * (plan.daily_food_cents ? 1 : style)) * days;
+  const food = Math.round((plan.daily_food_cents ?? DEFAULTS.foodPerDay) * (plan.daily_food_cents != null ? 1 : style)) * days;
 
   const lines: PlanLine[] = [
     { kind: 'transporte', perPersonCents: tr, estimatedCents: trEst, missing: trMissing },
@@ -238,15 +249,15 @@ export interface StayOption {
 }
 
 /** Passo 2: as 3 opções de estilo, já com o total por pessoa (estadias com preço entram com o valor real). */
-export function stayOptions(b: TripBundle, rates: Rates = {}): { options: StayOption[]; nights: number; fixed: number } {
+export function stayOptions(b: TripBundle, rates: Rates = {}, plan?: Pick<BudgetPlan, 'stay_estimates'>): { options: StayOption[]; nights: number; fixed: number } {
   const options = STYLES.map((st) => {
-    const r = budgetFromPlan(b, { style: st.key, pace: 'moderado', activities: [], daily_food_cents: 0 }, rates);
+    const r = budgetFromPlan(b, { ...plan, style: st.key, pace: 'moderado', activities: [], daily_food_cents: 0 }, rates);
     return { ...st, nightCents: nightFor(st.key), perPersonCents: r.lines.find((l) => l.kind === 'hospedagem')!.perPersonCents };
   });
   const nights = b.stops.reduce((a, s) => a + Math.max(0, daysBetween(s.arrival_date, s.departure_date)), 0);
   const fixed = b.stops.filter((s) => {
     const stay = b.stays.find((x) => x.stop_id === s.id);
-    return stay && itemCost(b, 'stay', stay.id, rates) != null;
+    return stay && (stay.status === 'booked' || stay.price_is_estimate === false) && itemCost(b, 'stay', stay.id, rates) != null;
   }).length;
   return { options, nights, fixed };
 }
@@ -294,6 +305,7 @@ export function initialPlan(b: TripBundle, rates: Rates = {}): BudgetPlan {
     // ids que sumiram (atividade apagada, sugestão dispensada) saem da seleção
     activities: saved?.activities ? saved.activities.filter((id) => tours.some((t) => t.id === id)) : tours.filter((t) => t.type === 'activity').map((t) => t.id),
     transport_cents: saved?.transport_cents ?? {},
+    stay_estimates: saved?.stay_estimates,
     snapshot: saved?.snapshot ?? null,
     updated_at: saved?.updated_at,
   };

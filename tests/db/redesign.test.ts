@@ -113,6 +113,27 @@ describe('colunas novas', () => {
 });
 
 describe('save_expense com vínculo', () => {
+  it('fechar orçamento é atômico, mantém teto e cria Sim/Ajustar; viewer é bloqueado', async () => {
+    const call = `select public.close_budget($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6)`;
+    const [trip] = await db.as<{ version: number; budget_total: string | null }>(ANA, `select version, budget_total from public.trips where id = $1`, [TRIP]);
+    const [cat] = await db.as<{ id: string; version: number; planned: string }>(ANA, `select id, version, planned from public.budget_categories where id = $1`, [hosp]);
+    const categories = JSON.stringify([{ ...cat, kind: 'hospedagem', planned: '1234.56' }]);
+    const params = [TRIP, trip.version, JSON.stringify({ style: 'equilibrado', pace: 'leve' }), categories, '[]', 'Aprovar orçamento de R$ 500 por pessoa?'];
+    expect((await failure(db.as(LEO, call, params))).code).toBe('42501');
+    // Categoria atualiza primeiro; a pergunta longa falha no fim e precisa desfazer tudo.
+    expect(await failure(db.as(ANA, call, [...params.slice(0, 5), 'x'.repeat(300)]))).toBeTruthy();
+    expect(await db.as(ANA, `select planned from public.budget_categories where id = $1`, [hosp])).toEqual([{ planned: cat.planned }]);
+    await db.as(ANA, call, params);
+    expect(await db.as(ANA, `select planned from public.budget_categories where id = $1`, [hosp])).toEqual([{ planned: '1234.56' }]);
+    expect(await db.as(ANA, `select budget_total from public.trips where id = $1`, [TRIP])).toEqual([{ budget_total: trip.budget_total }]);
+    expect(await db.as(LEO, `select o.label from public.poll_options o join public.polls p on p.id = o.poll_id where p.question = $1 order by o.position`, [params[5]])).toEqual([{ label: 'Sim' }, { label: 'Ajustar' }]);
+    expect((await failure(db.as(ANA, call, params))).message).toContain('trilha mudou');
+  });
+  it('pagar estadia pendente confirma a reserva na mesma transação', async () => {
+    await db.as(ANA, `update public.stays set status = 'pending' where id = $1`, [pousada]);
+    await db.as(ANA, `select public.save_expense($1::jsonb, $2::jsonb)`, [JSON.stringify(expense({ stay_id: pousada, paid_from_pool: true })), shares]);
+    expect(await db.as(LEO, `select status from public.stays where id = $1`, [pousada])).toEqual([{ status: 'booked' }]);
+  });
   it('grava o vínculo com a atividade e a categoria', async () => {
     const [{ id }] = await db.as<{ id: string }>(BIA, `select public.save_expense($1::jsonb, $2::jsonb) as id`, [JSON.stringify(expense({ activity_id: passeio, paid_from_pool: true })), shares]);
     const [row] = await db.as<{ activity_id: string; stay_id: string | null }>(LEO, `select activity_id, stay_id from public.expenses where id = $1`, [id]);

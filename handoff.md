@@ -1,3 +1,20 @@
+# Handoff — Fase 6 implementada e validada localmente
+
+Atualizado em 08/11/2026 · branch `docs/planning-redesign`.
+
+A continuação abaixo foi executada: as quatro telas financeiras foram reescritas, os Sheets e atalhos do roteiro implementados, e a lógica nova ganhou testes. `planning.md` contém o status atual e todas as ressalvas. As notas antigas abaixo são histórico, não uma lista de tarefas ainda pendentes.
+
+- Checks: typecheck/build ok; 211 testes unitários/banco; suíte E2E completa com 41/41, seguida dos 6/6 financeiros atualizados (42 cenários na base atual).
+- Aplicar `20261108000009_money.sql` após `00008` no Supabase antes de usar com dados reais. Não aplicada remotamente nesta execução.
+- `close_budget` é atômico; `budget_total` não é sobrescrito. Estimativas de hospedagem por estilo ficam no JSON `stay_estimates`; preços de hospedagens reservadas/confirmadas são preservados.
+- RLS de aportes/devoluções alinhado com os papéis. Gasto ligado à estadia pendente confirma a reserva na mesma transação.
+- Pendências de validação externa: realtime com duas contas/aparelhos, IA/FX reais, cron/push e PWA Android/iOS. Ver as decisões e limites em “Ressalvas e decisões da Fase 6” no planning.
+- Não iniciar Fases 7–9 sem nova solicitação. Arquivos locais `.claude/`, `.mcp.json` e referências não rastreadas foram preservados e não fazem parte do commit.
+
+---
+
+## Histórico do ponto de partida (antes desta continuação)
+
 # Handoff — Fase 6 (Dinheiro) · parcial
 
 Data: 08/11/2026 · branch `docs/planning-redesign`

@@ -3,6 +3,7 @@ import webpush from 'web-push';
 import { pollPushes } from '@/lib/polls';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { daysBetween, todayIn } from '@/lib/time';
+import { taskDueForPush } from '@/lib/taskReminders';
 
 // Rotina diária (Vercel Cron, 1x/dia no plano Hobby): lembretes por push conforme preferências.
 // Usa a secret key do Supabase SOMENTE aqui, no servidor, para ler assinaturas de todos.
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   const tripIds = Array.from(new Set((members ?? []).map((m) => m.trip_id)));
   const wantsPolls = prefs.some((p) => p.poll_reminders !== false);
   const [{ data: tasks }, { data: stops }, { data: polls }] = await Promise.all([
-    admin.from('tasks').select('trip_id,title,assignee_id,due_date,status,dismissed').in('trip_id', tripIds).neq('status', 'done'),
+    admin.from('tasks').select('trip_id,title,assignee_id,due_date,status,dismissed,alert_key').in('trip_id', tripIds).neq('status', 'done'),
     admin.from('stops').select('trip_id,name,arrival_date,lat,lng').in('trip_id', tripIds),
     wantsPolls
       ? admin.from('polls').select('id,trip_id,question,closes_at,status,created_by').in('trip_id', tripIds).eq('status', 'open').not('closes_at', 'is', null)
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
         msgs.push({ title: t.title, body: d === 0 ? 'É hoje. Boa viagem!' : `Faltam ${d} ${d === 1 ? 'dia' : 'dias'}.`, url: `/t/${t.id}`, tag: `dep-${t.id}` });
       }
       if (p.task_reminders) {
-        const due = (tasks ?? []).filter((x) => x.trip_id === t.id && !x.dismissed && x.due_date && (x.assignee_id === p.user_id || !x.assignee_id) && daysBetween(today, x.due_date) >= 0 && daysBetween(today, x.due_date) <= 1);
+        const due = (tasks ?? []).filter((x) => x.trip_id === t.id && taskDueForPush(x, p.user_id, today));
         if (due.length) msgs.push({ title: `${t.title}: pendências`, body: due.map((x) => x.title).slice(0, 3).join(' · '), url: `/t/${t.id}/turma/mala`, tag: `tasks-${t.id}` });
       }
       if (p.poll_reminders !== false) {

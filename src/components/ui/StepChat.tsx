@@ -13,7 +13,7 @@ export function TrilhaBubble({ children, step }: { children: React.ReactNode; st
       <LogoMark size={30} />
       <div className={s.bubbleT}>
         {step ? <span className={s.step}>{step}</span> : null}
-        {children}
+        <div>{children}</div>
       </div>
     </div>
   );

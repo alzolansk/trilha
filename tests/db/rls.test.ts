@@ -305,8 +305,15 @@ describe('gastos', () => {
 });
 
 describe('caixa da turma', () => {
-  it('editor lança aporte de membro; leitor só consulta; fora da viagem não', async () => {
-    await db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 50000)`, [trip, ANA]);
+  it('só organizador devolve e lança por outros; editor não apaga movimento alheio', async () => {
+    await rejects(db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents, kind) values ($1, $2, 100, 'refund')`, [trip, BIA]), /row-level security/);
+    const [row] = await db.as<{ id: string }>(ANA, `insert into public.pool_contributions (trip_id, user_id, amount_cents, kind) values ($1, $2, 100, 'refund') returning id`, [trip, BIA]);
+    expect(await db.as(BIA, `delete from public.pool_contributions where id = $1 returning id`, [row.id])).toHaveLength(0);
+    expect(await db.as(ANA, `delete from public.pool_contributions where id = $1 returning id`, [row.id])).toHaveLength(1);
+  });
+  it('editor lança só o próprio aporte; leitor só consulta; fora da viagem não', async () => {
+    await rejects(db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 50000)`, [trip, ANA]), /row-level security/);
+    await db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 50000)`, [trip, BIA]);
     expect(await db.as(LEO, `select amount_cents from public.pool_contributions`)).toHaveLength(1);
     await rejects(db.as(LEO, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 100)`, [trip, LEO]), /row-level security/);
     await rejects(db.as(BIA, `insert into public.pool_contributions (trip_id, user_id, amount_cents) values ($1, $2, 100)`, [trip, ZE]), /não participa/);
