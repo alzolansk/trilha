@@ -3,6 +3,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { AiNote, Icon } from '../components/ui/primitives';
+import { AI_STEPS, AiThinking } from '../components/ui/Loader';
 import { documentReaders, grantKey } from '../data/docKeys';
 import { useBundle } from '../data/TripContext';
 import { MissingKeyError, useVault, VaultLockedError } from '../data/VaultContext';
@@ -426,7 +427,7 @@ function UploadReview({ queue, stops, patch, save, remove }: { queue: Pending[];
             <span className={s.mono}>{formatBytes(it.file.size)}</span>
           </div>
           {it.status === 'reading' ? (
-            <div aria-live="polite" className={s.mono}>LENDO O ARQUIVO… {it.progress ? `${Math.round(it.progress * 100)}%` : ''}<div style={{ marginTop: 6 }}><Progress value={Math.max(0.08, it.progress)} height={8} label="Lendo o arquivo" /></div></div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}><AiThinking steps={AI_STEPS.classify} title={it.progress ? `Lendo · ${Math.round(it.progress * 100)}%` : 'Lendo o arquivo'} lines={0} compact /><Progress value={Math.max(0.08, it.progress)} height={8} label="Lendo o arquivo" /></div>
           ) : (
             <>
               {it.by !== 'user' ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}><Badge tone={it.by === 'ai' ? 'brand' : 'neutral'}>{it.by === 'ai' ? 'IA' : 'AUTO'}</Badge>Sugestão{it.reason ? `: ${it.reason}` : ''}. Corrija se precisar.</div> : <div style={{ fontSize: 13, color: 'var(--mute)' }}>Sem sinais claros no texto: escolha a categoria e a parada.</div>}

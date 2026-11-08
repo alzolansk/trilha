@@ -1,4 +1,5 @@
 'use client';
+import { Busy, PageLoader } from '../../components/ui/Loader';
 // Nova trilha, passo 1 do onboarding roteirizado (planning §10.3): pra onde, quando e quantos.
 // Cria a trilha e segue para /t/[id]/montar (passos 2 a 6). Sem destino: nome e datas, e segue para o Descobrir.
 import Link from 'next/link';
@@ -60,7 +61,7 @@ function NovaTrilha() {
       router.replace(planning ? `/t/${id}/descobrir` : `/t/${id}/montar?passo=2`);
     });
 
-  if (!ready || !user) return <div className="wrap" style={{ paddingTop: 120 }}><div className="skel" style={{ height: 300 }} /></div>;
+  if (!ready || !user) return <PageLoader messages={['Preparando uma trilha nova', 'Abrindo o mapa']} />;
   return (
     <div className="wrap" style={{ display: 'flex', flexDirection: 'column', gap: 28, paddingTop: 28, maxWidth: 720 }}>
       <header><Link href="/" aria-label="Trilha, início"><Logo /></Link></header>
@@ -103,7 +104,7 @@ function NovaTrilha() {
                 <small className="muted">Contando com você. Dá pra convidar depois, mas não precisa.</small>
               </div>
             </FieldGrid>
-            <Button disabled={!ok || busy} onClick={create}>{busy ? 'Criando…' : planning ? 'Criar e descobrir destinos' : 'Continuar'}</Button>
+            <Button disabled={!ok || busy} onClick={create}>{busy ? <Busy>Criando</Busy> : planning ? 'Criar e descobrir destinos' : 'Continuar'}</Button>
             {planning ? null : <Button variant="secondary" onClick={() => setMode('plan')}>Ainda não sei o destino</Button>}
             <Link href="/demo/andes" style={{ fontSize: 14, fontWeight: 600 }}>Ver a demonstração →</Link>
           </ChatOptions>

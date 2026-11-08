@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { Avatar, Icon } from '../components/ui/primitives';
+import { Busy } from '../components/ui/Loader';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Checkbox } from '../components/ui/Checkbox';
 import { useBundle } from '../data/TripContext';
@@ -238,7 +239,7 @@ function DecideDialog({ poll, onClose }: { poll: Poll; onClose: () => void }) {
   return (
     <Dialog open onClose={onClose} title="Decidir" footer={<>
       <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-      <Button disabled={busy || !choice} onClick={() => void save()}>{busy ? 'Salvando…' : 'Confirmar decisão'}</Button>
+      <Button disabled={busy || !choice} onClick={() => void save()}>{busy ? <Busy>Salvando</Busy> : 'Confirmar decisão'}</Button>
     </>}>
       <p style={{ margin: 0 }}><b>{poll.question}</b></p>
       {winners.length > 1 ? <p className={t.warn}>Empate entre {winners.map(label).join(' e ')}. Você desempata.</p> : null}
@@ -379,7 +380,7 @@ function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset
   return (
     <Dialog open onClose={onClose} title="Nova votação" footer={<>
       <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-      <Button disabled={busy} onClick={() => void save()}>{busy ? 'Salvando…' : 'Abrir votação'}</Button>
+      <Button disabled={busy} onClick={() => void save()}>{busy ? <Busy>Abrindo</Busy> : 'Abrir votação'}</Button>
     </>}>
       <Field label="Pergunta"><input value={v.question} maxLength={140} onChange={(e) => setV({ ...v, question: e.target.value })} placeholder="Onde a gente dorme em Cusco?" />{tried && qProblem ? <span className="err">{qProblem}</span> : null}</Field>
       <Field label="Detalhe (opcional)"><textarea rows={2} value={v.detail} maxLength={300} onChange={(e) => setV({ ...v, detail: e.target.value })} /></Field>

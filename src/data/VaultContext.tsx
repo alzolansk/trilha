@@ -4,6 +4,7 @@
 // CryptoKey não exportável neste aparelho até a pessoa trancar ou sair da conta.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, useConfirm, useToast } from '../components/ui/feedback';
+import { Busy } from '../components/ui/Loader';
 import { changePassphrase, createVault, unlockVault, unwrapDocumentKey, WrongPassphraseError, type VaultRecord } from '../lib/crypto/e2e';
 import { getSupabase } from '../lib/supabase/client';
 import { useAuth } from './AuthContext';
@@ -279,7 +280,7 @@ function VaultDialog({ mode, record, onClose, onSetup, onUnlock, onChange, onRes
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           {mode === 'unlock' && record ? <button type="button" className="btn btn-sm tap" onClick={forgot} disabled={busy}>Esqueci a frase</button> : <span />}
           <button type="submit" className="btn btn-primary tap" disabled={invalid || busy}>
-            {busy ? 'Calculando chave…' : mode === 'setup' ? 'Criar cofre' : mode === 'unlock' ? 'Desbloquear' : 'Trocar frase'}
+            {busy ? <Busy>Calculando chave</Busy> : mode === 'setup' ? 'Criar cofre' : mode === 'unlock' ? 'Desbloquear' : 'Trocar frase'}
           </button>
         </div>
       </form>

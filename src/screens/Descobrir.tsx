@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Chip } from '../components/ui/Chip';
 import { Photo, type PhotoData } from '../components/ui/Photo';
 import { Icon } from '../components/ui/primitives';
+import { AI_STEPS, AiThinking } from '../components/ui/Loader';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { ChatOptions, ReplyBubble, StepChat, TrilhaBubble } from '../components/ui/StepChat';
 import { useBundle } from '../data/TripContext';
@@ -230,7 +231,7 @@ export default function Descobrir() {
           </div>
           <h2 id="d-res" className="disp">Três lugares que cabem na turma</h2>
           {demo ? <p className="muted" style={{ margin: 0 }}>Na demonstração as sugestões ficam desligadas: elas usam a IA da sua conta.</p> : null}
-          {loading ? <p className="muted" role="status" style={{ margin: 0 }}>Procurando lugares…</p> : null}
+          {loading ? <AiThinking steps={AI_STEPS.explore} title="A IA está procurando destinos" lines={4} /> : null}
           {error ? (
             <div className="errbox" role="alert">{error}<div style={{ marginTop: 8 }}><Button size="sm" onClick={() => void finish()}>Tentar de novo</Button></div></div>
           ) : null}

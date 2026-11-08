@@ -10,6 +10,7 @@ import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorBox } from '../../../components/ui/ErrorBox';
 import { ListRow } from '../../../components/ui/ListRow';
 import { Logo } from '../../../components/ui/Logo';
+import { AI_STEPS, AiBusy, AiThinking, Busy, LoadingDots, PageLoader, TrailBar, TrailMark } from '../../../components/ui/Loader';
 import { MoneyInput } from '../../../components/ui/MoneyInput';
 import { Photo } from '../../../components/ui/Photo';
 import { PhotoCard } from '../../../components/ui/PhotoCard';
@@ -231,6 +232,16 @@ export function UiGallery() {
             <div className="stack"><Skeleton h={160} /><Skeleton h={56} /><Skeleton h={56} /></div>
             <div className="stack"><ErrorBox message="Não deu para carregar. Confira a conexão." onRetry={() => undefined} /><div className="banner-offline" style={{ position: 'static', borderRadius: 14 }}>Sem internet. Dá pra consultar tudo; para salvar, precisa de conexão.</div></div>
           </div>
+        </Section>
+
+        <Section title="Carregando e IA trabalhando">
+          <div className={s.grid3}>
+            <Card><div style={{ display: 'flex', gap: 16, alignItems: 'center' }}><TrailMark size={56} /><TrailMark size={40} tone="plain" /><LoadingDots label="Carregando" /></div></Card>
+            <Card><div className="stack"><TrailBar /><Button disabled><Busy>Salvando</Busy></Button><Button variant="secondary" disabled><AiBusy steps={['Pensando', 'Montando']} /></Button></div></Card>
+            <Card><AiThinking steps={AI_STEPS.tips} title="A IA está pensando numa dica" lines={2} compact /></Card>
+          </div>
+          <AiThinking steps={AI_STEPS.route} title="A IA está montando a rota" lines={4} />
+          <Card><PageLoader /></Card>
         </Section>
 
         <Section title="Cabeçalho de subtela">

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Icon } from '../../components/ui/primitives';
 import { Logo } from '../../components/ui/Logo';
+import { Busy } from '../../components/ui/Loader';
 import { useAuth } from '../../data/AuthContext';
 import { humanError } from '../../data/source';
 import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK } from '../../lib/env';
@@ -102,7 +103,7 @@ function Entrar() {
               ) : null}
               {msg ? <div role={msg.kind === 'err' ? 'alert' : 'status'} className={msg.kind === 'err' ? 'errbox' : 'ai'}>{msg.text}</div> : null}
               <button className="btn btn-ink tap" style={{ justifyContent: 'center' }} disabled={busy}>
-                {busy ? 'Aguarde…' : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : mode === 'magic' ? 'Enviar link de acesso' : 'Enviar link'}
+                {busy ? <Busy>Aguarde</Busy> : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : mode === 'magic' ? 'Enviar link de acesso' : 'Enviar link'}
                 <Icon name="arrow" size={18} />
               </button>
             </form>

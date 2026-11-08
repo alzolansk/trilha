@@ -14,6 +14,7 @@ import { formatMoneyTyping, parseMoneyInput } from '../components/ui/MoneyInput'
 import { Photo, type PhotoData } from '../components/ui/Photo';
 import { PhotoCard } from '../components/ui/PhotoCard';
 import { AiNote, Icon } from '../components/ui/primitives';
+import { AiBusy } from '../components/ui/Loader';
 import { Sheet } from '../components/ui/Sheet';
 import { useAuth } from '../data/AuthContext';
 import { acceptSuggestion, voteSuggestions } from '../data/suggestionActions';
@@ -134,7 +135,7 @@ function StopPage({ stop, index, stops }: { stop: Stop; index: number; stops: St
               ) : null}
               {!chosen && !others.length ? (
                 <EmptyState compact icon="pin" title="Sem bairro ainda" text={resolve ? 'A Trilha sugere bairros com prós e contras. Ou escolha um em Editar parada.' : 'Quem organiza escolhe o bairro. A busca de hospedagem usa a cidade enquanto isso.'}
-                  action={resolve ? <Button size="sm" variant="secondary" icon="sparkle" onClick={() => void askSuggestions()} disabled={asking}>{asking ? 'Pedindo…' : 'Sugerir bairros'}</Button> : undefined} />
+                  action={resolve ? <Button size="sm" variant="secondary" icon={asking ? undefined : 'sparkle'} onClick={() => void askSuggestions()} disabled={asking}>{asking ? <AiBusy steps={['Pedindo', 'Pensando', 'Montando']} /> : 'Sugerir bairros'}</Button> : undefined} />
               ) : null}
             </div>
             <StayCard b={b} stop={stop} area={chosen?.title ?? null} canEdit={canEdit} onEditStay={() => setOpen({ kind: 'stay' })} onFilters={() => setOpen({ kind: 'filters' })} onPaste={(link) => setOpen({ kind: 'option', link })} filters={filters} />
@@ -153,9 +154,9 @@ function StopPage({ stop, index, stops }: { stop: Stop; index: number; stops: St
             </div>
           ) : (
             <EmptyState compact icon="sparkle" title="Nenhum passeio ainda" text={resolve ? 'A Trilha sugere passeios que cabem nos dias livres e no teto da turma.' : 'Quando a turma ou a Trilha sugerirem passeios, aparecem aqui.'}
-              action={resolve ? <Button size="sm" variant="secondary" icon="sparkle" onClick={() => void askSuggestions()} disabled={asking}>{asking ? 'Pedindo…' : 'Sugerir passeios'}</Button> : undefined} />
+              action={resolve ? <Button size="sm" variant="secondary" icon={asking ? undefined : 'sparkle'} onClick={() => void askSuggestions()} disabled={asking}>{asking ? <AiBusy steps={['Pedindo', 'Pensando', 'Montando']} /> : 'Sugerir passeios'}</Button> : undefined} />
           )}
-          {tours.length && resolve ? <Button size="sm" variant="ghost" icon="sparkle" onClick={() => void askSuggestions()} disabled={asking} className={s.more}>{asking ? 'Pedindo…' : 'Pedir mais sugestões'}</Button> : null}
+          {tours.length && resolve ? <Button size="sm" variant="ghost" icon={asking ? undefined : 'sparkle'} onClick={() => void askSuggestions()} disabled={asking} className={s.more}>{asking ? <AiBusy steps={['Pedindo', 'Pensando', 'Montando']} /> : 'Pedir mais sugestões'}</Button> : null}
           {tours.some((t) => t.estimate) ? <p className={s.honest}><EstimateBadge /> Valores por pessoa a partir de conhecimento geral, não de preços ao vivo. Confira antes de reservar.</p> : null}
         </section>
 

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { AiNote, Icon } from '../components/ui/primitives';
+import { AI_STEPS, AiBusy, AiThinking, Busy } from '../components/ui/Loader';
 import { useBundle } from '../data/TripContext';
 import type { InspirationValue, JournalEntry, JournalPhoto, Stop, TripBundle } from '../data/types';
 import { callAi } from '../lib/ai/client';
@@ -97,10 +98,11 @@ export default function Diario() {
           <h2 className={s.bannerTitle}>{t[2]}</h2>
           <p>{t[3]}</p>
         </div>
-        {canEdit ? <Button variant="primary" icon="sparkle" onClick={cta} disabled={genBusy}>{genBusy ? 'Gerando…' : tab === 'depois' && b.retro ? 'Gerar de novo' : t[4]}</Button> : null}
+        {canEdit ? <Button variant="primary" icon={genBusy ? undefined : 'sparkle'} onClick={cta} disabled={genBusy}>{genBusy ? <AiBusy steps={['Gerando', 'Escrevendo']} /> : tab === 'depois' && b.retro ? 'Gerar de novo' : t[4]}</Button> : null}
       </Card>
 
-      {tab === 'depois' ? <Retro /> : null}
+      {tab === 'depois' && genBusy ? <AiThinking steps={AI_STEPS.retro} title="A IA está escrevendo a retrospectiva" lines={4} /> : null}
+      {tab === 'depois' && !genBusy ? <Retro /> : null}
 
       {stops.length ? (
         <section aria-label="Paradas" className={s.grid}>
@@ -306,7 +308,7 @@ function PromoteDialog({ entry, onClose }: { entry: JournalEntry; onClose: () =>
   return (
     <Dialog open onClose={onClose} title="Levar pro roteiro" footer={<>
       <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-      <Button disabled={busy || !v.day} onClick={() => void save()}>{busy ? 'Salvando…' : 'Levar pro roteiro'}</Button>
+      <Button disabled={busy || !v.day} onClick={() => void save()}>{busy ? <Busy>Salvando</Busy> : 'Levar pro roteiro'}</Button>
     </>}>
       <p style={{ margin: 0 }}><b>{entryTitle(entry)}</b> vira uma atividade no plano da parada. Dá pra editar ou excluir depois no Roteiro.</p>
       <Field label="Parada">
@@ -384,7 +386,7 @@ function EntryDialog({ entry, stopId, kind, phase, onClose, me }: { entry: Journ
     <Dialog open onClose={onClose} title={entry ? 'Editar' : kind === 'inspiracao' ? 'Nova inspiração' : 'Novo registro'} footer={<>
       {entry ? <Button variant="secondary" className={s.danger} onClick={del}>Excluir</Button> : null}
       <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-      <Button disabled={busy || !linkOk || !(v.body.trim() || v.title.trim() || v.link_url.trim() || files.length)} onClick={save}>{busy ? 'Salvando…' : 'Salvar'}</Button>
+      <Button disabled={busy || !linkOk || !(v.body.trim() || v.title.trim() || v.link_url.trim() || files.length)} onClick={save}>{busy ? <Busy>Salvando</Busy> : 'Salvar'}</Button>
     </>}>
       <FieldGrid>
         <Field label="Parada"><select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}><option value="">Sem parada</option>{stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>

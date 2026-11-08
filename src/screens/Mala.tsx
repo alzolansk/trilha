@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { AiNote, AiTag } from '../components/ui/primitives';
+import { AI_STEPS, AiBusy, AiThinking } from '../components/ui/Loader';
 import { Avatar, Badge, Button, Card, Checkbox, EmptyState, Field, FieldGrid, IconButton, ScreenHeader } from '../components/ui';
 import { useBundle } from '../data/TripContext';
 import type { PackingItem, Task, TaskStatus } from '../data/types';
@@ -108,8 +109,9 @@ export function Packing() {
         <EmptyState icon="list" title="Mala vazia" text="Adicione itens ou peça sugestões com base no roteiro." />
       ) : null}
       {canEdit ? (
-        <Button variant="ghost" icon="sparkle" onClick={ask} disabled={asking} className={s.askBtn}>{asking ? 'Pensando…' : 'Pedir sugestões à IA'}</Button>
+        <Button variant="ghost" icon={asking ? undefined : 'sparkle'} onClick={ask} disabled={asking} className={s.askBtn}>{asking ? <AiBusy steps={['Pensando', 'Montando']} /> : 'Pedir sugestões à IA'}</Button>
       ) : null}
+      {asking ? <AiThinking steps={AI_STEPS.packing} title="A IA está montando a mala" lines={4} /> : null}
       {sugs?.list.length ? (
         <div className={s.sugs}>
           {sugs.list.map((sg) => (

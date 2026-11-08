@@ -7,6 +7,7 @@ import { currencyForCountry } from '../../lib/currency';
 import { todayIn } from '../../lib/time';
 import { categoryKind, centsToDecimal, convertCents, customSplit, expenseImpact, formatMoney, itemLabel, paymentPreset, poolSummary, POOL, splitEqual, toCents, unpaidItems, type ItemType } from '../../lib/money';
 import { Button } from '../ui/Button';
+import { Busy } from '../ui/Loader';
 import { Chip } from '../ui/Chip';
 import { Checkbox } from '../ui/Checkbox';
 import { MoneyInput } from '../ui/MoneyInput';
@@ -65,7 +66,7 @@ export function ExpenseSheet({ expense: e, preset, onClose }: { expense?: Expens
   return <Sheet open title={e ? 'Editar gasto' : 'Lançar gasto'} onClose={onClose} footer={<>
     {e && canEdit ? <Button variant="ghost" disabled={busy || !online} onClick={async () => { if (await confirm({ title: 'Excluir gasto?', message: `${e.description} sai das contas e perde o vínculo de pagamento.` })) await run(() => source.remove('expenses', { id: e.id }).then(reload).then(onClose)); }}>Excluir</Button> : null}
     {link ? <Button variant="secondary" disabled={!valid || busy} onClick={() => void save(false)}>Salvar sem ligar</Button> : null}
-    <Button disabled={!valid || busy} onClick={() => void save(true)}>{busy ? 'Salvando…' : link ? 'Salvar e marcar como pago' : 'Salvar gasto'}</Button>
+    <Button disabled={!valid || busy} onClick={() => void save(true)}>{busy ? <Busy>Salvando</Busy> : link ? 'Salvar e marcar como pago' : 'Salvar gasto'}</Button>
   </>}><div className={s.form}>
     {!online ? <p>Precisa de internet para salvar.</p> : null}
     <MoneyInput autoFocus label="Valor do gasto" value={amount} onChange={setAmount} currency={v.currency} />

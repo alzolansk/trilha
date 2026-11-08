@@ -7,6 +7,7 @@ import { PlaceSearch, type Place } from '../forms/PlaceSearch';
 import { useDraft } from '../forms/useDraft';
 import { EstimateBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { Busy } from '../ui/Loader';
 import { useAction, useConfirm } from '../ui/feedback';
 import { Field, FieldGrid } from '../ui/Field';
 import { formatMoneyTyping, parseMoneyInput } from '../ui/MoneyInput';
@@ -52,7 +53,7 @@ function PriceField({ label, text, currency, currencies, onText, onCurrency, hin
   );
 }
 
-function Footer({ onClose, onSave, saveLabel = 'Salvar', disabled, onDelete, deleteLabel = 'Excluir' }: { onClose: () => void; onSave: () => void; saveLabel?: string; disabled?: boolean; onDelete?: () => void; deleteLabel?: string }) {
+function Footer({ onClose, onSave, saveLabel = 'Salvar', disabled, onDelete, deleteLabel = 'Excluir' }: { onClose: () => void; onSave: () => void; saveLabel?: React.ReactNode; disabled?: boolean; onDelete?: () => void; deleteLabel?: string }) {
   return (
     <>
       {onDelete ? <Button variant="ghost" className={s.danger} onClick={onDelete}>{deleteLabel}</Button> : null}
@@ -97,7 +98,7 @@ export function AddStopSheet({ open, onClose, stops, onCreated }: { open: boolea
     }, { success: `${v.name.trim()} entrou no roteiro.` });
 
   return (
-    <Sheet open={open} onClose={onClose} title="Adicionar parada" description="Cidade e datas. O resto dá pra completar depois." footer={<Footer onClose={onClose} onSave={() => void save()} saveLabel={busy ? 'Salvando…' : 'Salvar parada'} disabled={busy || !valid} />}>
+    <Sheet open={open} onClose={onClose} title="Adicionar parada" description="Cidade e datas. O resto dá pra completar depois." footer={<Footer onClose={onClose} onSave={() => void save()} saveLabel={busy ? <Busy>Salvando</Busy> : 'Salvar parada'} disabled={busy || !valid} />}>
       <div className={s.form}>
         {d.restored && v.name ? <span className={s.note}>Rascunho recuperado.</span> : null}
         <PlaceSearch
@@ -190,7 +191,7 @@ export function EditStopSheet({ stop, onClose, onDeleted }: { stop: Stop; onClos
           <Photo photo={photo as PhotoData | null} place={v.name} ratio="16/9" />
           {photo ? <span className={s.note}>{photoCredit(photo)}</span> : <span className={s.note}>Sem foto: a capa usa a ilustração na cor da trilha.</span>}
           <div className={s.row}>
-            {canLook ? <Button size="sm" variant="secondary" icon="search" onClick={() => void look()} disabled={looking === 'busy'}>{looking === 'busy' ? 'Procurando…' : 'Buscar na Wikipedia'}</Button> : null}
+            {canLook ? <Button size="sm" variant="secondary" icon={looking === 'busy' ? undefined : 'search'} onClick={() => void look()} disabled={looking === 'busy'}>{looking === 'busy' ? <Busy>Procurando</Busy> : 'Buscar na Wikipedia'}</Button> : null}
             {photo ? <Button size="sm" variant="ghost" onClick={() => setPhoto(null)}>Tirar foto</Button> : null}
           </div>
           {looking === 'none' ? <span className={s.note}>Não achamos uma foto deste lugar com autor e licença. Melhor ficar sem do que mostrar outro lugar.</span> : null}

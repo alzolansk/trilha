@@ -27,6 +27,7 @@ import { dayMonth } from '../lib/format';
 import { daysBetween } from '../lib/time';
 import { Button, Checkbox, Chip, EmptyState, EstimateBadge, Field, MoneyInput, Photo, ScreenHeader, Segmented, Skeleton } from '../components/ui';
 import { ChatOptions, StepChat, TrilhaBubble } from '../components/ui/StepChat';
+import { AI_STEPS, AiThinking, Busy } from '../components/ui/Loader';
 import { useAction, useConfirm } from '../components/ui/feedback';
 import { InviteSheet } from './Turma';
 import s from './montar.module.css';
@@ -174,7 +175,7 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
         <p className={s.label}>Onde dormir</p>
         <Segmented label="Onde dormir" value={p.stay} onChange={(stay) => setP({ ...p, stay })} options={STAYS} block />
         <MoneyInput label="Teto por pessoa (opcional)" currency={b.trip.base_currency} value={p.budget ? p.budget * 100 : null} onChange={(c) => setP({ ...p, budget: c ? Math.round(c / 100) : null })} hint="Com teto, a Trilha avisa quando a viagem passar dele." />
-        <Button disabled={busy || !p.vibes.length} onClick={next}>{busy ? 'Salvando…' : 'Continuar'}</Button>
+        <Button disabled={busy || !p.vibes.length} onClick={next}>{busy ? <Busy>Salvando</Busy> : 'Continuar'}</Button>
       </ChatOptions>
     </StepChat>
   );
@@ -238,6 +239,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
     return (
       <StepChat label="O que não pode faltar">
         <TrilhaBubble step="3 · Lugares">Procurando lugares que combinam com vocês…</TrilhaBubble>
+        <AiThinking steps={AI_STEPS.places} title="A IA está escolhendo lugares" lines={0} />
         <div className={s.grid} aria-busy="true"><Skeleton h={220} /><Skeleton h={220} /><Skeleton h={220} /></div>
       </StepChat>
     );
@@ -349,6 +351,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
     return (
       <StepChat label="Roteiro sugerido">
         <TrilhaBubble step="4 · Roteiro">Montando a rota com os seus indispensáveis…</TrilhaBubble>
+        <AiThinking steps={AI_STEPS.route} title="A IA está montando a rota" lines={0} />
         <div aria-busy="true" className={s.stack}><Skeleton h={60} /><Skeleton h={60} /><Skeleton h={60} /></div>
       </StepChat>
     );
@@ -451,7 +454,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
           </div>
         ) : null}
         {err ? <p className={s.note} role="alert">{err}</p> : null}
-        <Button disabled={busy || !online} onClick={() => apply(false)}>{busy ? 'Salvando…' : 'Gostei, ver passeios'}</Button>
+        <Button disabled={busy || !online} onClick={() => apply(false)}>{busy ? <Busy>Salvando</Busy> : 'Gostei, ver passeios'}</Button>
       </ChatOptions>
     </StepChat>
   );
@@ -566,7 +569,7 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
           return (
             <section key={st.id} className={s.city} aria-label={`Passeios em ${st.name}`}>
               <h3>{st.name} · {nights} noite{nights === 1 ? '' : 's'}</h3>
-              {!list ? <Skeleton h={90} /> : !list.length ? <p className={s.muted}>Sem sugestões agora.</p> : list.map((t) => (
+              {!list ? <AiThinking steps={AI_STEPS.tours} title={`Passeios em ${st.name}`} lines={2} compact /> : !list.length ? <p className={s.muted}>Sem sugestões agora.</p> : list.map((t) => (
                 <div key={t.id} className={s.tour}>
                   <Checkbox label={t.title} hideLabel checked={pick.has(t.id)} onChange={(on) => { const n = new Set(pick); if (on) n.add(t.id); else n.delete(t.id); setPick(n); }}>
                     <span className={s.tourText} aria-hidden="true"><b>{t.title}{t.wish ? <span className={s.wish}>seu pedido</span> : null}</b><small>{[t.duration, t.why].filter(Boolean).join(' · ')}</small></span>
@@ -579,7 +582,7 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
         })}
         <div className={s.foot}>
           <span><b>{picked.length} passeios</b> · ≈ {money(total)} por pessoa <EstimateBadge /></span>
-          <Button disabled={busy || loadingAny} onClick={() => next(false)}>{busy ? 'Salvando…' : 'Ver quanto custa'}</Button>
+          <Button disabled={busy || loadingAny} onClick={() => next(false)}>{busy ? <Busy>Salvando</Busy> : 'Ver quanto custa'}</Button>
         </div>
       </ChatOptions>
     </StepChat>
@@ -653,7 +656,7 @@ function StepCost({ b, ob, persist, busy, run, money, online, onDone }: StepProp
           </>
         ) : null}
         <div className={s.actions}>
-          <Button disabled={busy || !online} onClick={() => finish(false)}>{busy ? 'Salvando…' : 'Concluir'}</Button>
+          <Button disabled={busy || !online} onClick={() => finish(false)}>{busy ? <Busy>Salvando</Busy> : 'Concluir'}</Button>
           <Button variant="secondary" disabled={busy || !online} onClick={() => finish(true)}>Chamar a turma</Button>
         </div>
         {!online ? <p className={s.muted}>Precisa de internet para salvar.</p> : null}

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../../data/AuthContext';
+import { Busy, LoadingDots } from '../../../components/ui/Loader';
 import { humanError } from '../../../data/source';
 import { ROLE_LABEL } from '../../../lib/format';
 import { getSupabase } from '../../../lib/supabase/client';
@@ -75,7 +76,7 @@ export default function Convite() {
         {!token ? (
           <div className="errbox">Link de convite incompleto. Peça um novo para quem organiza a trilha.</div>
         ) : !ready ? (
-          <div className="skel" style={{ height: 80 }} />
+          <p className="muted" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }} role="status">Conferindo sua conta <LoadingDots /></p>
         ) : !user ? (
           <>
             <p style={{ margin: 0 }}>Entre ou crie sua conta para ver e aceitar o convite.</p>
@@ -84,7 +85,7 @@ export default function Convite() {
         ) : err ? (
           <div className="errbox" role="alert">{err}</div>
         ) : info === null ? (
-          <div className="skel" style={{ height: 80 }} />
+          <p className="muted" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }} role="status">Abrindo o convite <LoadingDots /></p>
         ) : info === 'none' ? (
           <div className="errbox">Convite inválido.</div>
         ) : !info.valid ? (
@@ -93,7 +94,7 @@ export default function Convite() {
           <>
             <p style={{ margin: 0, fontSize: 18 }}>Você foi convidado para <b>{info.trip_title}</b> como <b>{ROLE_LABEL[info.role]?.toLowerCase()}</b>.</p>
             <p className="mono" style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>VÁLIDO ATÉ {new Date(info.expires_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
-            <Button style={{ justifyContent: 'center' }} onClick={accept} disabled={busy}>{busy ? 'Entrando…' : 'Aceitar e abrir a trilha'}</Button>
+            <Button style={{ justifyContent: 'center' }} onClick={accept} disabled={busy}>{busy ? <Busy>Entrando</Busy> : 'Aceitar e abrir a trilha'}</Button>
           </>
         )}
       </div>
