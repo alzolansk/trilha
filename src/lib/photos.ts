@@ -25,13 +25,23 @@ export function isUnfitImage(fileName: string): boolean {
 
 /**
  * A página encontrada é do lugar pedido? Compara a primeira parte da busca ("San Blas, Cusco" → "san blas")
- * com o título da página, sem acento. Aceita título que contém a busca ou o contrário.
+ * com o título da página, sem acento e por palavras inteiras. "Romell Quioto" não serve para "Quioto".
  */
 export function titleMatches(query: string, title: string): boolean {
+  return matchLevel(query, title) > 0;
+}
+
+/**
+ * Quão bem o título casa com a busca: 3 = igual, 2 = a busca contém o título ("Tóquio Shibuya" → "Shibuya"), 0 = não.
+ * Título que só começa com o nome não vale: "Nara" não pode virar a foto de "Nara Leão".
+ */
+export function matchLevel(query: string, title: string): number {
   const q = fold(query.split(',')[0]);
   const t = fold(title.replace(/\s*\(.*\)\s*$/, ''));
-  if (!q || !t) return false;
-  return t === q || t.includes(q) || q.includes(t);
+  if (!q || !t) return 0;
+  if (t === q) return 3;
+  if (` ${q} `.includes(` ${t} `)) return 2;
+  return 0;
 }
 
 const api = (lang: WikiLang, params: Record<string, string>) =>
@@ -57,13 +67,14 @@ interface SearchJson {
 
 /** Escolhe o arquivo da primeira página (na ordem da busca) que é do lugar e tem foto aproveitável. */
 export function pickPageImage(json: SearchJson, query: string): { title: string; file: string } | null {
-  const pages = [...(json.query?.pages ?? [])].filter((p) => !p.missing).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-  for (const p of pages) {
-    if (!p.pageimage || isUnfitImage(p.pageimage)) continue;
-    if (!titleMatches(query, p.title)) continue;
-    return { title: p.title, file: p.pageimage };
-  }
-  return null;
+  // Primeiro o título igual ao lugar, depois o contido na busca (a ordem da Wikipedia desempata).
+  const pages = [...(json.query?.pages ?? [])]
+    .filter((p) => !p.missing && p.pageimage && !isUnfitImage(p.pageimage))
+    .map((p) => ({ p, level: matchLevel(query, p.title) }))
+    .filter((x) => x.level > 0)
+    .sort((a, b) => b.level - a.level || (a.p.index ?? 0) - (b.p.index ?? 0));
+  const best = pages[0]?.p;
+  return best ? { title: best.title, file: best.pageimage! } : null;
 }
 
 /** Tira HTML do campo Artist do Commons ("<a href=…>Fulano</a>" → "Fulano"). */
@@ -127,16 +138,105 @@ export function photoSrcSet(url: string, widths: readonly number[] = PHOTO_WIDTH
   return widths.map((w) => `${thumbAt(url, w)} ${w}w`).join(', ');
 }
 
-/** Navegador: pede a foto ao servidor. null quando não há (ou sem login/rede): o Photo mostra o placeholder. */
-export async function fetchPhoto(q: string, lang: WikiLang = 'pt'): Promise<PhotoRef | null> {
+// ───────────── Busca no navegador (planning §10, ajuste de 08/11/2026) ─────────────
+// A busca vai direto do navegador para a Wikipedia (a API aceita CORS com origin=*), e não mais pelo
+// servidor: com ~15 fotos por tela, todas saindo do mesmo IP, a Wikimedia limitava (429) e o app mostrava
+// placeholder. Fila de 3 por vez, nova tentativa em 429/erro de rede, e cache no aparelho.
+
+const MAX_PARALLEL = 3;
+let active = 0;
+const waiting: (() => void)[] = [];
+async function inQueue<T>(fn: () => Promise<T>): Promise<T> {
+  while (active >= MAX_PARALLEL) await new Promise<void>((r) => waiting.push(r));
+  active++;
   try {
-    // `v` muda a chave do cache do navegador: respostas "sem foto" guardadas antes da correção do
-    // thumb.wikimedia.org (que eram falsas) deixam de valer na hora.
-    const r = await fetch(`/api/photos?${new URLSearchParams({ q, lang, v: '2' })}`);
-    if (!r.ok) return null;
-    const j = (await r.json()) as { photo: PhotoRef | null };
-    return j.photo ?? null;
-  } catch {
-    return null;
+    return await fn();
+  } finally {
+    active--;
+    waiting.shift()?.();
   }
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** JSON da API; `undefined` = falhou (limite, rede), `null` = respondeu sem dado útil. */
+export async function wikiJson<T>(url: string, fetcher: typeof fetch = fetch, tries = 3): Promise<T | null | undefined> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetcher(url, { headers: { 'Api-User-Agent': WIKI_USER_AGENT } });
+      if (r.status === 429 || r.status >= 500) { await sleep(500 * 2 ** i); continue; }
+      if (!r.ok) return null;
+      if (!(r.headers.get('content-type') ?? '').includes('json')) { await sleep(500 * 2 ** i); continue; }
+      return (await r.json()) as T;
+    } catch {
+      await sleep(500 * 2 ** i);
+    }
+  }
+  return undefined;
+}
+
+/** Uma busca numa língua: página do lugar → arquivo → licença. `undefined` = não deu pra saber (falha). */
+export async function findPhoto(query: string, lang: WikiLang, fetcher: typeof fetch = fetch): Promise<PhotoRef | null | undefined> {
+  const search = await wikiJson<Parameters<typeof pickPageImage>[0]>(searchUrl(lang, { q: query }), fetcher);
+  if (search === undefined) return undefined;
+  const hit = search ? pickPageImage(search, query) : null;
+  if (!hit) return null;
+  const info = await wikiJson<Parameters<typeof parseImageInfo>[0]>(imageInfoUrl(lang, hit.file), fetcher);
+  if (info === undefined) return undefined;
+  return info ? parseImageInfo(info) : null;
+}
+
+const CACHE_KEY = 'trilha.photos.v3';
+const DAY = 24 * 60 * 60 * 1000;
+type Cached = { p: PhotoRef | null; at: number };
+const memory = new Map<string, Promise<PhotoRef | null>>();
+function readCache(key: string): PhotoRef | null | undefined {
+  try {
+    const all = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}') as Record<string, Cached>;
+    const hit = all[key];
+    if (!hit) return undefined;
+    // foto achada vale 30 dias; "sem foto" só 1 dia (a página pode ganhar foto)
+    if (Date.now() - hit.at > (hit.p ? 30 * DAY : DAY)) return undefined;
+    return hit.p;
+  } catch {
+    return undefined;
+  }
+}
+function writeCache(key: string, p: PhotoRef | null) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}') as Record<string, Cached>;
+    all[key] = { p, at: Date.now() };
+    const keys = Object.keys(all);
+    if (keys.length > 400) for (const k of keys.sort((a, b) => all[a].at - all[b].at).slice(0, keys.length - 400)) delete all[k];
+    localStorage.setItem(CACHE_KEY, JSON.stringify(all));
+  } catch {
+    /* sem armazenamento: só não guarda */
+  }
+}
+
+/**
+ * Navegador: foto de um lugar. Tenta cada busca de `queries` em português e em inglês, na ordem, até achar.
+ * null quando não há foto; o Photo mostra o placeholder. Falha passageira não é guardada como "sem foto".
+ */
+export async function fetchPhoto(q: string | string[], lang: WikiLang = 'pt', fetcher: typeof fetch = fetch): Promise<PhotoRef | null> {
+  const queries = [...new Set((Array.isArray(q) ? q : [q]).map((x) => x.trim()).filter((x) => x.length >= 2))];
+  if (!queries.length) return null;
+  const key = `${lang}|${queries.join('|')}`;
+  const cached = readCache(key);
+  if (cached !== undefined) return cached;
+  if (!memory.has(key)) {
+    memory.set(key, inQueue(async () => {
+      let failed = false;
+      for (const query of queries) {
+        for (const l of lang === 'pt' ? (['pt', 'en'] as const) : (['en', 'pt'] as const)) {
+          const p = await findPhoto(query, l, fetcher);
+          if (p) { writeCache(key, p); return p; }
+          if (p === undefined) failed = true;
+        }
+      }
+      if (!failed) writeCache(key, null);
+      else memory.delete(key); // tenta de novo na próxima vez que a tela pedir
+      return null;
+    }));
+  }
+  return memory.get(key)!;
 }

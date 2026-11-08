@@ -256,3 +256,18 @@ describe('passo 4 · custo por parada e origem', () => {
     expect(markOf('Bolonha', places, {})).toEqual({ mark: null, nearby: false, added: false });
   });
 });
+
+describe('passagem de ida e volta (splitFlights)', () => {
+  it('divide o bilhete de ida e volta pela metade entre ida e volta', async () => {
+    const { splitFlights } = await import('@/lib/onboarding');
+    // IA manda o bilhete de ida e volta em `flights`: R$ 10–12 mil → R$ 5–6 mil em cada trecho
+    expect(splitFlights({ cost_low: 10000, cost_high: 12000 }, { cost_low: 0, cost_high: 0 }, { cost_low: 0, cost_high: 0 }))
+      .toEqual({ out: { cost_low: 500000, cost_high: 600000 }, back: { cost_low: 500000, cost_high: 600000 } });
+    // Sem `flights`, mas com o mesmo valor repetido na ida e na volta (o erro que contava 11 mil duas vezes)
+    expect(splitFlights(null, { cost_low: 10000, cost_high: 12000 }, { cost_low: 10500, cost_high: 11500 }))
+      .toEqual({ out: { cost_low: 500000, cost_high: 600000 }, back: { cost_low: 525000, cost_high: 575000 } });
+    // Valores bem diferentes (ida de avião, volta de trem): ficam como vieram
+    expect(splitFlights(null, { cost_low: 5000, cost_high: 6000 }, { cost_low: 300, cost_high: 400 }))
+      .toEqual({ out: { cost_low: 500000, cost_high: 600000 }, back: { cost_low: 30000, cost_high: 40000 } });
+  });
+});

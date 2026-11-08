@@ -150,6 +150,8 @@ const legSchema = z.object({ from: z.string().min(2).max(80), to: z.string().min
 const pair = z.tuple([money, money]);
 export const exploreRouteSchema = z.object({
   outbound: z.object({ to: z.string().min(2).max(80), mode, hours: z.number().min(0.1).max(48), cost_low: money, cost_high: money }).nullable().optional(),
+  /** bilhete de IDA E VOLTA por pessoa (origem → destino → origem), dividido pelo app entre ida e volta */
+  flights: z.object({ cost_low: money, cost_high: money }).nullable().optional(),
   stops: z.array(z.object({
     name: z.string().min(2).max(80),
     country: z.string().min(2).max(60),

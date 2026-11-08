@@ -22,7 +22,8 @@ function TourCard({ card, money, recommended, wish, drag, leaving }: {
   card: Card; money: (v: number) => string; recommended: boolean; wish: boolean; drag: number; leaving: Decision | null;
 }) {
   const t = card.idea;
-  const photo = useResolvedPhoto(null, `${t.photo_query || t.title.replace(/^Bate-volta: /, '')}, ${card.stop.name}`, true) as PhotoRef | null;
+  const name = t.title.replace(/^Bate-volta: /, '');
+  const photo = useResolvedPhoto(null, [`${name}, ${card.stop.name}`, t.photo_query ? `${t.photo_query}, ${card.stop.name}` : ''], true) as PhotoRef | null;
   const price = Math.round((t.cost_low + t.cost_high) / 2);
   const hint = leaving ?? (drag > 40 ? 'yes' : drag < -40 ? 'no' : null);
   return (

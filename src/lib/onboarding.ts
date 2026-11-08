@@ -403,3 +403,22 @@ export function missingMust(route: Pick<RouteProposal, 'stops' | 'left_out'>, mu
   const explained = new Set(route.left_out.map((l) => placeKey(l.name)));
   return must.filter((m) => !inRoute.has(placeKey(m)) && !explained.has(placeKey(m)));
 }
+
+export type FlightCost = { cost_low: number; cost_high: number };
+/**
+ * Passagem de ida e volta (ajuste de 08/11/2026): a IA dava o preço do bilhete de ida e volta na ida E na volta,
+ * contando duas vezes. Agora ela manda `flights` (ida e volta) e o app divide pela metade. Se vier sem `flights`
+ * e com ida e volta quase iguais, o valor repetido é tratado como o bilhete de ida e volta (metade em cada).
+ * Valores em unidades da moeda; a saída já em centavos.
+ */
+export function splitFlights(flights: FlightCost | null, out: FlightCost | null, back: FlightCost | null): { out: FlightCost; back: FlightCost } {
+  const c = (v: number) => Math.round(v * 100);
+  const half = (x: FlightCost) => ({ cost_low: c(Math.min(x.cost_low, x.cost_high) / 2), cost_high: c(Math.max(x.cost_low, x.cost_high) / 2) });
+  const asIs = (x: FlightCost | null) => (x ? { cost_low: c(Math.min(x.cost_low, x.cost_high)), cost_high: c(Math.max(x.cost_low, x.cost_high)) } : { cost_low: 0, cost_high: 0 });
+  if (flights && flights.cost_high > 0) return { out: half(flights), back: half(flights) };
+  const mid = (x: FlightCost | null) => (x ? (x.cost_low + x.cost_high) / 2 : 0);
+  const a = mid(out);
+  const b = mid(back);
+  if (a > 0 && b > 0 && Math.abs(a - b) / Math.max(a, b) <= 0.15) return { out: half(out!), back: half(back!) };
+  return { out: asIs(out), back: asIs(back) };
+}

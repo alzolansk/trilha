@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { aiConfigured, runWithFallback } from '@/lib/ai/providers';
 import { claimsAction, EXPLORE_RULES, exploreActivitySchema, exploreDestSchema, explorePlacesSchema, exploreRouteSchema, exploreStaySchema } from '@/lib/ai/prompts';
 import type { NearbyIdea, PlaceIdea, RouteProposal } from '@/data/types';
-import { filterNearby, missingMust, nightsOf, normalizeRoute, parseOnboarding } from '@/lib/onboarding';
+import { filterNearby, missingMust, nightsOf, normalizeRoute, parseOnboarding, splitFlights } from '@/lib/onboarding';
 import { headcount } from '@/lib/people';
 import { consumeQuota, handle, HttpError, loadTripForUser, readJson, requireUser, tripBrief } from '@/lib/ai/server';
 import { haversineKm } from '@/lib/derive';
@@ -220,13 +220,14 @@ ${q.feedback ? `PEDIDO DE AJUSTE da pessoa (prioridade máxima): "${q.feedback.r
 ${q.variant === 'calmo' ? 'Versão MAIS CALMA: menos cidades, mais noites em cada.' : q.variant === 'mais_lugares' ? 'Versão com MAIS LUGARES: mais paradas e bate-voltas, sem passar das noites.' : ''}
 ${q.wishes.length ? `Desejos da turma: ${JSON.stringify(q.wishes)}. Em "wishes", diga em qual parada cada um cabe (ou null).` : ''}
 Regras: a soma de "nights" das paradas deve ser exatamente ${nights}. Ordem geográfica que evite voltar caminho; entrar por uma cidade e sair por outra é normal.
-"outbound" = chegada a partir de ${trip.origin || 'origem (se não souber, null)'} até a primeira parada; "return" = da última parada de volta para a origem (null se não houver origem). Preço POR PESSOA, só ida, em ${cur}.
+"outbound" = chegada a partir de ${trip.origin || 'origem (se não souber, null)'} até a primeira parada; "return" = da última parada de volta para a origem (null se não houver origem). Nesses dois, só modo e horas: deixe cost_low e cost_high em 0.
+"flights" = faixa do preço de UM bilhete de IDA E VOLTA por pessoa (ou multitrecho, entrando por uma cidade e saindo por outra), em ${cur}. É o valor total das duas viagens juntas, não de cada uma.
 "legs" = trechos entre paradas consecutivas, em ordem (from = parada atual, to = próxima), com preço por pessoa em ${cur}.
 "day_trips" = bate-voltas a partir da parada ("day_offset" = dia dentro da parada, 0 = chegada; custo por pessoa).
 "stay_pp_night" = faixa [mín, máx] da diária POR PESSOA (quarto dividido entre a turma) em cada estilo, em ${cur}.
 "food_pp_day" = faixa de comida por pessoa por dia em cada país da rota, em ${cur}.
 "left_out" = lugares pedidos que não couberam e o motivo curto.
-JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"stops":[{"name":"...","country":"...","lat":0,"lng":0,"nights":2,"why":"...","day_trips":[{"name":"...","day_offset":1,"cost_low":0,"cost_high":0}],"stay_pp_night":{"economico":[0,0],"equilibrado":[0,0],"conforto":[0,0]}}],"legs":[{"from":"...","to":"...","mode":"train","hours":0,"cost_low":0,"cost_high":0}],"return":{"from":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"food_pp_day":[{"country":"...","low":0,"high":0}],"left_out":[{"name":"...","reason":"..."}],"wishes":[{"wish":"...","stop":"..."}]}`;
+JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"flights":{"cost_low":0,"cost_high":0},"stops":[{"name":"...","country":"...","lat":0,"lng":0,"nights":2,"why":"...","day_trips":[{"name":"...","day_offset":1,"cost_low":0,"cost_high":0}],"stay_pp_night":{"economico":[0,0],"equilibrado":[0,0],"conforto":[0,0]}}],"legs":[{"from":"...","to":"...","mode":"train","hours":0,"cost_low":0,"cost_high":0}],"return":{"from":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"food_pp_day":[{"country":"...","low":0,"high":0}],"left_out":[{"name":"...","reason":"..."}],"wishes":[{"wish":"...","stop":"..."}]}`;
 
   const parse = (raw: unknown): RouteProposal | null => {
     const v = exploreRouteSchema.safeParse(raw);
@@ -240,11 +241,12 @@ JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":
       stay_pp_night: Object.fromEntries(Object.entries(x.stay_pp_night ?? {}).filter(([, p]) => !!p).map(([k, p]) => [k, { low: cents(Math.min(p![0], p![1])), high: cents(Math.max(p![0], p![1])) }])),
     }));
     if (!stops.length) return null;
+    const flight = splitFlights(d.flights ?? null, d.outbound ?? null, d.return ?? null);
     return {
-      outbound: d.outbound && origin ? { from: origin, to: d.outbound.to, mode: d.outbound.mode, hours: d.outbound.hours, ...range(d.outbound.cost_low, d.outbound.cost_high) } : null,
+      outbound: d.outbound && origin ? { from: origin, to: d.outbound.to, mode: d.outbound.mode, hours: d.outbound.hours, ...flight.out } : null,
       stops,
       legs: d.legs.map((l) => ({ from: l.from, to: l.to, mode: l.mode, hours: l.hours, ...range(l.cost_low, l.cost_high) })),
-      return: d.return && origin ? { from: d.return.from, to: origin, mode: d.return.mode, hours: d.return.hours, ...range(d.return.cost_low, d.return.cost_high) } : null,
+      return: d.return && origin ? { from: d.return.from, to: origin, mode: d.return.mode, hours: d.return.hours, ...flight.back } : null,
       food_pp_day: d.food_pp_day.map((f) => ({ country: f.country, low: cents(Math.min(f.low, f.high)), high: cents(Math.max(f.low, f.high)) })),
       left_out: d.left_out.filter((l) => fair(l.reason)),
       wishes: d.wishes,
@@ -261,3 +263,4 @@ JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":
   const route = normalizeRoute(res.data, nights, must);
   return NextResponse.json({ data: { route, currency: cur }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });
 }
+

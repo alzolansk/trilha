@@ -68,6 +68,7 @@ JSON: {"cost_low":0,"cost_high":0}`,
       EXPLORE_RULES,
       `Moeda: ${cur}. Estilo: ${bundle.trip.style}.
 Para cada trecho, dê a faixa de preço POR PESSOA (só ida) e o modo mais provável, se o informado for "other".
+Os trechos "ida" e "volta" são as duas metades de UMA passagem de ida e volta: para CADA um, dê metade do preço de um bilhete de ida e volta (não o bilhete inteiro).
 Trechos: ${JSON.stringify(legs)}.
 JSON: {"items":[{"id":"<id do trecho>","mode":"plane|bus|train|car|boat|other","cost_low":0,"cost_high":0}]}`,
       (raw) => {

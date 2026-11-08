@@ -25,7 +25,7 @@ import {
 import { headcount } from '../lib/people';
 import { dayMonth } from '../lib/format';
 import { daysBetween } from '../lib/time';
-import { Badge, Button, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, Sheet, Skeleton, type PhotoData } from '../components/ui';
+import { Badge, Button, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, Sheet, type PhotoData } from '../components/ui';
 import type { IconName } from '../components/ui/icons.data';
 import { ChatOptions, StepChat, TrilhaBubble } from '../components/ui/StepChat';
 import { AI_STEPS, AiThinking, Busy } from '../components/ui/Loader';
@@ -223,7 +223,7 @@ function Attraction({ a, place, photo }: { a: PlaceAttraction; place: string; ph
 
 /** Janela dedicada ao lugar: foto grande, por que ir, o que ver, dica e a escolha. */
 function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, tags, facts, mark, onMark }: {
-  open: boolean; onClose: () => void; name: string; sub: string; query: string; why: string; attractions: PlaceAttraction[];
+  open: boolean; onClose: () => void; name: string; sub: string; query: string[]; why: string; attractions: PlaceAttraction[];
   tip?: string | null; tags?: string[]; facts: React.ReactNode; mark: PlaceMark; onMark: (m: PlaceMark) => void;
 }) {
   const photo = useResolvedPhoto(null, open ? query : null, open);
@@ -249,7 +249,8 @@ function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, ta
 
 function PlaceCard({ p, mark, onMark }: { p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void }) {
   const [open, setOpen] = useState(false);
-  const query = p.photo_query || p.name;
+  // "Nara, Japão" ajuda a busca a achar a cidade (e não a cantora); o termo da IA fica de reserva.
+  const query = [p.country ? `${p.name}, ${p.country}` : p.name, p.name, p.photo_query ?? ''];
   const resolved = useResolvedPhoto(null, query, true);
   const sights = p.attractions?.length ? p.attractions : (p.highlights ?? []).map((name) => ({ name }));
   return (
@@ -276,7 +277,7 @@ function PlaceCard({ p, mark, onMark }: { p: PlaceIdea; mark: PlaceMark; onMark:
 
 function NearbyCard({ n, mark, onMark, money }: { n: NearbyIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; money: (v: number) => string }) {
   const [open, setOpen] = useState(false);
-  const query = n.photo_query || n.name;
+  const query = [n.country ? `${n.name}, ${n.country}` : n.name, n.name, n.photo_query ?? ''];
   const resolved = useResolvedPhoto(null, query, true);
   const how = `${hoursText(n.hours)} de ${MODE_LABEL[n.mode as TransportMode]?.toLowerCase() ?? 'viagem'} de ${n.from}`;
   return (
@@ -330,9 +331,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
   if (!places || loading) {
     return (
       <StepChat label="O que não pode faltar">
-        <TrilhaBubble step="3 · Lugares">Procurando lugares que combinam com vocês…</TrilhaBubble>
         <AiThinking steps={AI_STEPS.places} title="A IA está escolhendo lugares" lines={0} />
-        <div className={s.grid} aria-busy="true"><Skeleton h={220} /><Skeleton h={220} /><Skeleton h={220} /></div>
       </StepChat>
     );
   }
@@ -430,7 +429,7 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, onNights, o
   places: OnboardingState['places']; marks: Record<string, PlaceMark>;
   onNights: (d: 1 | -1) => void; onMove: (d: 1 | -1) => void; onRemove: () => void;
 }) {
-  const photo = useResolvedPhoto(null, st.name, true);
+  const photo = useResolvedPhoto(null, [st.country ? `${st.name}, ${st.country}` : st.name, st.name], true);
   return (
     <article className={s.stopCard} data-stop={st.name}>
       <div className={s.stopTop}>
@@ -511,9 +510,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   if (!route || loading) {
     return (
       <StepChat label="Roteiro sugerido">
-        <TrilhaBubble step="4 · Roteiro">{feedback ? 'Refazendo o roteiro com o seu ajuste…' : 'Montando a rota com os seus indispensáveis…'}</TrilhaBubble>
         <AiThinking steps={AI_STEPS.route} title={feedback ? 'A IA está ajustando a rota' : 'A IA está montando a rota'} lines={0} />
-        <div aria-busy="true" className={s.stack}><Skeleton h={120} /><Skeleton h={160} /><Skeleton h={160} /></div>
       </StepChat>
     );
   }
