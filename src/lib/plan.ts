@@ -101,11 +101,11 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
   } else {
     stops.forEach((s, i) => {
       if (i > 0 && !b.transports.some((t) => t.stop_id === s.id) && !s.arrival_mode) {
-        out.push({ key: `arrival-${s.id}`, title: `Como chegar em ${s.name}.`, detail: 'Defina o transporte do trecho.', link: '/roteiro', cta: 'Definir' });
+        out.push({ key: `arrival-${s.id}`, title: `Como chegar em ${s.name}.`, detail: 'Defina o transporte do trecho.', link: `/roteiro/${s.id}`, cta: 'Definir' });
       }
       const stay = b.stays.find((x) => x.stop_id === s.id);
       if (s.arrival_date < s.departure_date && !stay) {
-        out.push({ key: `stay-${s.id}`, title: `Onde ficar em ${s.name}.`, detail: 'Nenhuma hospedagem escolhida ainda.', link: '/roteiro', cta: 'Escolher' });
+        out.push({ key: `stay-${s.id}`, title: `Onde ficar em ${s.name}.`, detail: 'Nenhuma hospedagem escolhida ainda.', link: `/roteiro/${s.id}`, cta: 'Escolher' });
       }
     });
   }

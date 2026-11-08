@@ -113,12 +113,27 @@ export function hoursLabel(h: number): string {
 export interface SearchLink { label: string; url: string }
 
 /** Buscas de hospedagem já com cidade, datas e pessoas (o Trilha não reserva nada). */
-export function staySearchLinks(place: string, checkin: string, checkout: string, adults: number): SearchLink[] {
-  const q = encodeURIComponent(place);
+export function staySearchLinks(
+  place: string, checkin: string, checkout: string, adults: number,
+  opts: { area?: string | null; maxNightCents?: number | null; currency?: string } = {},
+): SearchLink[] {
+  // Bairro escolhido entra na busca ("San Blas, Cusco, Peru"); sem ele, só a cidade.
+  const where = opts.area && !place.toLowerCase().includes(opts.area.toLowerCase()) ? `${opts.area}, ${place}` : place;
+  const q = encodeURIComponent(where);
   const n = Math.max(1, Math.min(16, adults));
+  // Teto por noite (quarto/casa inteiro) em reais inteiros, só onde o site aceita filtro de preço na URL.
+  const max = opts.maxNightCents && opts.maxNightCents > 0 ? Math.round(opts.maxNightCents / 100) : null;
+  const cur = opts.currency ?? 'BRL';
+  const booking = new URLSearchParams({ ss: where, checkin, checkout, group_adults: String(n), no_rooms: '1', group_children: '0' });
+  if (max) {
+    booking.set('selected_currency', cur);
+    booking.set('nflt', `price=${cur}-0-${max}-1`);
+  }
+  const airbnb = new URLSearchParams({ checkin, checkout, adults: String(n) });
+  if (max) airbnb.set('price_max', String(max));
   return [
-    { label: 'Booking', url: `https://www.booking.com/searchresults.pt-br.html?ss=${q}&checkin=${checkin}&checkout=${checkout}&group_adults=${n}&no_rooms=1` },
-    { label: 'Airbnb', url: `https://www.airbnb.com.br/s/${q}/homes?checkin=${checkin}&checkout=${checkout}&adults=${n}` },
+    { label: 'Booking', url: `https://www.booking.com/searchresults.pt-br.html?${booking}` },
+    { label: 'Airbnb', url: `https://www.airbnb.com.br/s/${q}/homes?${airbnb}` },
     { label: 'Hostelworld', url: `https://www.hostelworld.com/find-and-book/search?search_keywords=${q}&from=${checkin}&to=${checkout}&guests=${n}` },
   ];
 }

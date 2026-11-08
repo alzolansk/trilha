@@ -21,3 +21,14 @@ export function currencyForCountry(country: string | null | undefined): string |
   return BY_COUNTRY[n] ?? null;
 }
 export const currencySymbol = (code: string) => SYMBOLS[code] ?? code;
+
+const NAMES: Record<string, string> = {
+  BRL: 'real', PEN: 'sol', BOB: 'boliviano', CLP: 'peso chileno', ARS: 'peso argentino', UYU: 'peso uruguaio', COP: 'peso colombiano',
+  MXN: 'peso mexicano', USD: 'dólar', CAD: 'dólar canadense', EUR: 'euro', GBP: 'libra', CHF: 'franco suíço', JPY: 'iene', CNY: 'yuan',
+  KRW: 'won', THB: 'baht', MAD: 'dirham', ISK: 'coroa islandesa', NOK: 'coroa norueguesa', SEK: 'coroa sueca', DKK: 'coroa dinamarquesa',
+  AUD: 'dólar australiano', NZD: 'dólar neozelandês', TRY: 'lira turca', EGP: 'libra egípcia', ZAR: 'rand', INR: 'rupia indiana',
+};
+/** "sol (PEN)"; sem nome conhecido, só o código. */
+export function currencyLabel(code: string): string {
+  return NAMES[code] ? `${NAMES[code]} (${code})` : code;
+}

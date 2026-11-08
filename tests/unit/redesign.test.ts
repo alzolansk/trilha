@@ -153,7 +153,7 @@ describe('suggestions', () => {
   it('suggestionsForDay respeita o teto de passeios', () => {
     const b = andes();
     const cusco = b.stops[1];
-    expect(suggestionsForDay(b, cusco, '2027-01-20').map((s) => s.payload.title)).toEqual(['Montanha Colorida, saindo de Cusco']);
+    expect(suggestionsForDay(b, cusco, '2027-01-20').map((s) => s.payload.title)).toEqual(['Montanha Colorida, saindo de Cusco', 'Laguna Humantay', 'Aula de cozinha peruana']);
     expect(suggestionsForDay(b, cusco, '2027-01-20', 5_000)).toEqual([]);
   });
 

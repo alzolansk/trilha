@@ -282,7 +282,7 @@ function InRoute({ entry }: { entry: JournalEntry }) {
   const act = b.activities.find((a) => a.from_entry_id === entry.id);
   if (act) {
     return (
-      <Link className={`pill ${s.inRoute}`} data-tone="acc2" href={`${base}/roteiro?parada=${act.stop_id}`}>
+      <Link className={`pill ${s.inRoute}`} data-tone="acc2" href={`${base}/roteiro/${act.stop_id}`}>
         NO ROTEIRO · {dayMonth(act.day).toUpperCase()}
       </Link>
     );

@@ -395,6 +395,10 @@ export interface SuggestionPayload {
   currency?: string | null;
   photo_query?: string | null;
   photo?: PhotoRef | null;
+  /** bairros: o que é bom, o que pede atenção e a distância a pé do centro (só quando a fonte disser) */
+  good?: string | null;
+  watch?: string | null;
+  walk?: string | null;
   /** lembretes: para onde o cartão leva e de qual regra veio */
   href?: string | null;
   rule?: string | null;

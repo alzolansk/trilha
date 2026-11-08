@@ -126,6 +126,8 @@ export const suggestActivitySchema = z.object({
     price_low: money,
     price_high: money,
     photo_query: z.string().min(2).max(80),
+    good: z.string().max(80).optional(),
+    watch: z.string().max(80).optional(),
   })).max(3).optional(),
 });
 

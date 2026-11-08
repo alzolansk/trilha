@@ -6,6 +6,7 @@ export { Card, type CardVariant } from './Card';
 export { Checkbox } from './Checkbox';
 export { Chip, ChipGroup, type ChipOption } from './Chip';
 export { EmptyState } from './EmptyState';
+export { Field, FieldGrid } from './Field';
 export { ErrorBox } from './ErrorBox';
 export { ListRow } from './ListRow';
 export { Logo, LogoMark } from './Logo';

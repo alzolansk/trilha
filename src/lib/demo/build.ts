@@ -96,13 +96,20 @@ const PLANNED: Partial<Record<DemoKey, Record<string, number>>> = { andes: { Tra
 const POOL: Partial<Record<DemoKey, [number, number, string][]>> = {
   andes: [[0, 2000, '2026-09-10'], [1, 2000, '2026-09-12'], [2, 1500, '2026-09-20'], [0, 1900, '2026-10-10'], [1, 1240, '2026-10-15'], [2, 720, '2026-10-28']],
 };
-interface DemoSuggestion { stop: number; kind: Suggestion['kind']; payload: SuggestionPayload }
+interface DemoSuggestion { stop: number; kind: Suggestion['kind']; status?: Suggestion['status']; payload: SuggestionPayload }
 const SUGGESTIONS: Partial<Record<DemoKey, DemoSuggestion[]>> = {
   andes: [
     { stop: 1, kind: 'activity', payload: { title: 'Montanha Colorida, saindo de Cusco', why: 'Dia inteiro, passa dos 5.000 m: melhor depois de aclimatar. A Bia já salvou no Diário.', duration: 'dia inteiro', day_fit: 'dia_todo', effort: 'puxado', cost_low: 12000, cost_high: 18000, currency: 'BRL', photo_query: 'Vinicunca' } },
     { stop: 0, kind: 'activity', payload: { title: 'Circuito Mágico del Agua', why: 'Fontes iluminadas no Parque de la Reserva, bom pra uma noite leve em Lima.', duration: '2h', day_fit: 'noite', effort: 'leve', cost_low: 1000, cost_high: 1500, currency: 'BRL', photo_query: 'Circuito Mágico del Agua' } },
     { stop: 4, kind: 'activity', payload: { title: 'Mirador Killi Killi', why: 'Vista da cidade inteira no fim da tarde, perto do centro.', duration: '1h30', day_fit: 'tarde', effort: 'leve', cost_low: 0, cost_high: 0, currency: 'BRL', photo_query: 'Killi Killi La Paz' } },
     { stop: 2, kind: 'area', payload: { title: 'Ficar perto da estação em Aguas Calientes', why: 'O trem chega e o ônibus para as ruínas sai dali: dá pra fazer tudo a pé.', cost_low: 25000, cost_high: 40000, currency: 'BRL', photo_query: 'Aguas Calientes' } },
+    // Fase 5 (Roteiro e Parada): mais opções em Cusco, para o dia vazio (3 opções) e a folga do dia 4, e bairros na Parada.
+    { stop: 1, kind: 'activity', payload: { title: 'Laguna Humantay', why: 'Lagoa turquesa ao pé do Salkantay. Subida curta mas íngreme, a 4.200 m.', duration: 'dia inteiro', day_fit: 'dia_todo', effort: 'puxado', cost_low: 9000, cost_high: 14000, currency: 'BRL', photo_query: 'Laguna Humantay' } },
+    { stop: 1, kind: 'activity', payload: { title: 'Aula de cozinha peruana', why: 'Começa com a ida ao mercado e termina no almoço que a turma cozinhou.', duration: 'manhã', day_fit: 'manha', effort: 'leve', cost_low: 15000, cost_high: 22000, currency: 'BRL', photo_query: 'Peruvian cuisine' } },
+    { stop: 1, kind: 'activity', payload: { title: 'Sacsayhuamán', why: 'Fortaleza inca a 15 min de táxi do centro. Entra no boleto turístico.', duration: 'meio dia', day_fit: 'tarde', effort: 'leve', cost_low: 4000, cost_high: 7000, currency: 'BRL', photo_query: 'Sacsayhuamán' } },
+    { stop: 1, kind: 'area', status: 'accepted', payload: { title: 'San Blas', why: 'Bairro de artesãos, cafés e mirantes. Calmo à noite, perto de tudo.', good: 'vista, silêncio, cafés', watch: 'ladeira com mala', cost_low: 15000, cost_high: 26000, currency: 'BRL', photo_query: 'San Blas (Cusco)' } },
+    { stop: 1, kind: 'area', payload: { title: 'Centro histórico', why: 'Em volta da Plaza de Armas: agito, restaurantes e mais barulho à noite.', good: 'tudo a pé', watch: 'barulho à noite', cost_low: 18000, cost_high: 32000, currency: 'BRL', photo_query: 'Historic Centre of Cusco' } },
+    { stop: 1, kind: 'area', payload: { title: 'San Pedro', why: 'Mais barato e perto do mercado; menos turístico.', good: 'preço, mercado', watch: 'rua movimentada', cost_low: 11000, cost_high: 19000, currency: 'BRL', photo_query: 'San Pedro Market (Cusco)' } },
   ],
 };
 const PREFERENCES: Partial<Record<DemoKey, Record<string, unknown>[]>> = {
@@ -244,7 +251,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
 
   const suggestions: Suggestion[] = (SUGGESTIONS[key] ?? []).map((sg, i) => ({
     ...base, id: id(key, 'sug', i), trip_id: tripId, stop_id: stops[sg.stop]?.id ?? null, kind: sg.kind, day: null, payload: sg.payload,
-    status: 'new', source: 'ai', acted_by: null, acted_at: null,
+    status: sg.status ?? 'new', source: 'ai', acted_by: null, acted_at: null,
   }));
   const tripPreferences: TripPreference[] = (PREFERENCES[key] ?? []).map((answers, i) => ({ trip_id: tripId, user_id: people[i]?.uid ?? DEMO_USER, answers, updated_at: now }));
   if (key === 'andes') {

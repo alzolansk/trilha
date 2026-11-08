@@ -336,7 +336,7 @@ function PollCard({ poll }: { poll: Poll }) {
       {poll.status === 'closed' ? (
         <p className="mono" style={{ margin: 0, fontSize: 12 }}>
           Decidido por {name(poll.decided_by)} em {poll.decided_at ? dayMonth(poll.decided_at.slice(0, 10)) : ''}
-          {created && stop ? <> · <Link href={`${base}/roteiro?parada=${stop.id}`}>{poll.target === 'stay' ? 'Ver hospedagem no roteiro' : 'Ver no roteiro'}</Link></> : null}
+          {created && stop ? <> · <Link href={`${base}/roteiro/${stop.id}`}>{poll.target === 'stay' ? 'Ver hospedagem no roteiro' : 'Ver no roteiro'}</Link></> : null}
         </p>
       ) : null}
       {deciding ? <DecideDialog poll={poll} onClose={() => setDeciding(false)} /> : null}

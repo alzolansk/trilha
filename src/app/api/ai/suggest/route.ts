@@ -51,8 +51,9 @@ ${cap ? `Teto de passeios por pessoa nesta parada: ${cap} ${cur}. Inclua grátis
 Sugira até 6 passeios ou atrações públicas (sem repetir o plano) e até 2 bairros para ficar${stop.area ? ` (a turma já escolheu ${stop.area}: não sugira bairros)` : ''}.
 "day_fit" = manha | tarde | noite | dia_todo. "effort" = leve | moderado | puxado. "cost_low"/"cost_high" = custo aproximado por pessoa (0 e 0 se grátis).
 ${night ? `Para bairros, "price_low"/"price_high" = faixa da diária para o grupo todo (teto ${night} ${cur}).` : 'Para bairros, "price_low"/"price_high" = faixa da diária para o grupo todo.'}
+Para bairros, "good" = o que é bom (até 6 palavras) e "watch" = o que pede atenção (até 6 palavras), ambos do ponto de vista de quem vai ficar ali.
 "photo_query" = nome do lugar como aparece no título da Wikipedia (ex.: "Vinicunca", "Barranco (Lima)"); nunca um termo genérico.
-JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","effort":"leve","cost_low":0,"cost_high":0,"photo_query":"..."}],"areas":[{"name":"...","why":"...","price_low":0,"price_high":0,"photo_query":"..."}]}`,
+JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","effort":"leve","cost_low":0,"cost_high":0,"photo_query":"..."}],"areas":[{"name":"...","why":"...","price_low":0,"price_high":0,"photo_query":"...","good":"...","watch":"..."}]}`,
       (raw) => {
         const v = suggestActivitySchema.safeParse(raw);
         if (!v.success) return null;
@@ -73,7 +74,7 @@ JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","e
       })),
       ...res.data.areas.map((a) => ({
         trip_id: tripId, stop_id: stopId, kind: 'area', source: 'ai',
-        payload: { title: a.name, why: a.why, cost_low: lo(a.price_low, a.price_high), cost_high: hi(a.price_low, a.price_high), currency: cur, photo_query: a.photo_query, model: `${res.provider}:${res.model}` },
+        payload: { title: a.name, why: a.why, good: a.good ?? null, watch: a.watch ?? null, cost_low: lo(a.price_low, a.price_high), cost_high: hi(a.price_low, a.price_high), currency: cur, photo_query: a.photo_query, model: `${res.provider}:${res.model}` },
       })),
     ];
     const ins = await sb.from('suggestions').insert(rows);

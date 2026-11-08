@@ -42,6 +42,11 @@ export function stopSlots(b: TripBundle, stop: Stop): DaySlot[] {
   return Array.from({ length: n + 1 }, (_, i) => slotsForDay(b, stop, addDays(stop.arrival_date, i)));
 }
 
+/** Chegada numa parada alta: mesmo com algo leve planejado, não é dia de encaixar passeio. */
+export function isRestDay(stop: Pick<Stop, 'altitude_m' | 'arrival_date'>, date: string): boolean {
+  return (stop.altitude_m ?? 0) >= ACCLIMATIZE_M && date === stop.arrival_date;
+}
+
 /** A atividade cabe nesse dia? Dia todo só em dia vazio; meio período também em dia com folga. */
 export function fitsSlot(fit: DayFit | null | undefined, slot: DaySlot): boolean {
   if (slot.state === 'vazio') return true;
@@ -58,7 +63,7 @@ export function bestDayFor(b: TripBundle, s: Suggestion): DaySlot | null {
     const want = slots.find((x) => x.dayNumber === s.day);
     if (want && fitsSlot(s.payload.day_fit, want)) return want;
   }
-  return slots.find((x) => fitsSlot(s.payload.day_fit, x)) ?? null;
+  return slots.find((x) => !isRestDay(stop, x.date) && fitsSlot(s.payload.day_fit, x)) ?? null;
 }
 
 /** Até 3 sugestões novas da parada que cabem no dia e no teto de passeios (quando há teto). */
