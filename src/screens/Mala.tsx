@@ -1,19 +1,21 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, AiTag, Floaters, Icon, MotifCheck, PageTitle, useReveal } from '../components/ui/primitives';
+import { AiNote, AiTag, Icon, useReveal } from '../components/ui/primitives';
+import { Checkbox } from '../components/ui/Checkbox';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { useBundle } from '../data/TripContext';
 import type { BudgetCategory, Expense, PackingItem, Task, TaskStatus } from '../data/types';
 import { callAi } from '../lib/ai/client';
 import { currencyForCountry, currencySymbol } from '../lib/currency';
-import { packingProgress, sortedStops, stopCode, tripPhase, tripTarget } from '../lib/derive';
+import { packingProgress, sortedStops, stopCode } from '../lib/derive';
 import { dayMonth, initials } from '../lib/format';
 import { fgOn } from '../lib/identity/contrast';
-import { colorCycle } from '../lib/identity/theme';
+import { CYCLE } from '../lib/identity/accent';
 import { balances, budgetByCategory, centsToDecimal, convertCents, formatMoney, POOL, poolSummary, splitEqual, suggestTransfers, toCents } from '../lib/money';
 import { BUDGET_SPLIT, splitBudget } from '../lib/explore';
 import { rulePacking, type PackingSuggestion } from '../lib/rules';
-import { countdown, todayIn } from '../lib/time';
+import { todayIn } from '../lib/time';
 import s from './mala.module.css';
 
 interface Fx {
@@ -52,57 +54,35 @@ function useFx(base: string) {
   return { fx, err };
 }
 
+/**
+ * Mala e pendências (/turma/mala). Na Fase 2 os gastos saíram daqui para /dinheiro
+ * (screens/Dinheiro.tsx); a Fase 7 redesenha esta tela e a Fase 6 remove os pedaços de
+ * dinheiro que ainda moram neste arquivo.
+ */
 export default function Mala() {
-  const { bundle: b, identity, canEdit } = useBundle();
-  const cols = colorCycle(identity);
+  const { bundle: b, base } = useBundle();
   const pack = packingProgress(b);
   const C = 2 * Math.PI * 48;
-  const [tab, setTab] = useState<'mala' | 'gastos'>('mala');
-  useReveal([b.packingItems.length, b.expenses.length]);
-  const phase = tripPhase(b.trip);
-  const days = countdown(Date.now(), tripTarget(b.trip), b.trip.departure_tz).totalDays;
-  const spent = b.expenses.reduce((a, e) => a + toCents(String(e.base_amount)), 0);
-  const people = Math.max(1, b.members.length);
+  useReveal([b.packingItems.length]);
 
   return (
     <div className="wrap">
-      <Floaters />
-      <PageTitle eyebrow={`${b.trip.title} · ${phase.kind === 'before' ? `faltam ${days} dias` : phase.kind === 'after' ? 'viagem concluída' : 'em andamento'}`} title="Mala e gastos" sub="O que falta levar e quanto já foi. Dividido com a turma." />
-      <div className={s.tabs} role="group" aria-label="Seção">
-        <button className="chip tap" aria-pressed={tab === 'mala'} onClick={() => setTab('mala')}>Mala e pendências</button>
-        <button className="chip tap" aria-pressed={tab === 'gastos'} onClick={() => setTab('gastos')}>Gastos</button>
-      </div>
-      <section className={`split ${s.body}`}>
-        <div className={`${s.left} ${tab === 'mala' ? '' : s.hideMobile}`}>
+      <ScreenHeader back={`${base}/turma`} title="Mala e pendências" subtitle="O que falta levar e o que falta fazer, com a turma." />
+      <section className={s.body}>
+        <div className={s.left}>
           <div className={`${s.ring} rv`}>
-            <div aria-hidden="true" style={{ position: 'absolute', right: -30, top: -30, width: 130, height: 130, clipPath: 'var(--motif)', background: 'var(--acc2)', opacity: 0.5, animation: 'floaty 8s ease-in-out infinite' }} />
             <svg aria-hidden="true" className={s.ringSvg} width="120" height="120" viewBox="0 0 120 120">
               <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeOpacity=".18" strokeWidth="14" />
-              <circle className={s.v} cx="60" cy="60" r="48" fill="none" stroke="var(--acc2)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${((C * pack.pct) / 100).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 60 60)" />
-              <text x="60" y="68" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="22" fill="currentColor">{pack.pct}%</text>
+              <circle className={s.v} cx="60" cy="60" r="48" fill="none" stroke="var(--sun)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${((C * pack.pct) / 100).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 60 60)" />
+              <text x="60" y="68" textAnchor="middle" fontFamily="var(--font-body)" fontSize="22" fontWeight="700" fill="currentColor">{pack.pct}%</text>
             </svg>
             <div style={{ position: 'relative' }}>
               <div className={`disp ${s.count}`}>{pack.done} de {pack.total}</div>
               <div style={{ marginTop: 6, opacity: 0.85 }}>itens na mochila</div>
             </div>
           </div>
-          <div className={s.mobileTiles}>
-            <div style={{ background: 'var(--acc3)', color: 'var(--fg-acc3)' }}><span className="mono">GASTO</span><b className="disp">{formatMoney(spent, b.trip.base_currency, { compact: true })}</b></div>
-            <div style={{ background: 'var(--acc2)', color: 'var(--fg-acc2)' }}><span className="mono">POR PESSOA</span><b className="disp">{formatMoney(Math.round(spent / people), b.trip.base_currency, { compact: true })}</b></div>
-          </div>
           <Packing />
           <Tasks />
-        </div>
-        <div className={`${s.right} ${tab === 'gastos' ? '' : s.hideMobile}`}>
-          <Budget cols={cols} />
-          <Pool cols={cols} />
-          <StopSpend cols={cols} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(260px,100%),1fr))', gap: 26 }}>
-            <Converter />
-            <Debts cols={cols} />
-          </div>
-          <ExpenseList />
-          {!canEdit ? <p className="muted">Você está como leitor: dá pra consultar tudo, sem editar.</p> : null}
         </div>
       </section>
     </div>
@@ -110,7 +90,7 @@ export default function Mala() {
 }
 
 // ───────────────────── Mala ─────────────────────
-function Packing() {
+export function Packing() {
   const { bundle: b, canEdit, source, reload, me } = useBundle();
   const { run, busy } = useAction();
   const confirm = useConfirm();
@@ -202,9 +182,9 @@ function Packing() {
             <legend>{c.name}</legend>
             {items.map((it) => (
               <div key={it.id} className={s.itemRow}>
-                <MotifCheck checked={it.done} disabled={!canEdit || busy} onChange={(v) => void toggle(it, v)} label={it.label}>
+                <Checkbox strike checked={it.done} disabled={!canEdit || busy} onChange={(v) => void toggle(it, v)} label={it.label}>
                   {it.suggested_by ? <span title={it.suggestion_reason ?? undefined}><AiTag by={it.suggested_by} /></span> : null}
-                </MotifCheck>
+                </Checkbox>
                 {canEdit ? <button className="btn btn-icon btn-sm" style={{ border: 0, background: 'transparent' }} aria-label={`Editar ${it.label}`} onClick={() => setEditing(it)}><Icon name="edit" size={16} /></button> : null}
               </div>
             ))}
@@ -274,11 +254,11 @@ function ItemDialog({ it, onClose }: { it: PackingItem; onClose: () => void }) {
 // ───────────────────── Pendências ─────────────────────
 const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'A fazer', doing: 'Fazendo', done: 'Feito' };
 
-function Tasks() {
-  const { bundle: b, canEdit, source, reload, profileOf, identity } = useBundle();
+export function Tasks() {
+  const { bundle: b, canEdit, source, reload, profileOf } = useBundle();
   const { run } = useAction();
   const [edit, setEdit] = useState<Task | 'new' | null>(null);
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const today = todayIn(b.trip.departure_tz);
   const tasks = [...b.tasks].filter((t) => !t.dismissed).sort((a, c) => Number(a.status === 'done') - Number(c.status === 'done') || (a.due_date ?? '9').localeCompare(c.due_date ?? '9'));
   return (
@@ -350,7 +330,7 @@ function TaskDialog({ t, onClose }: { t: Task | null; onClose: () => void }) {
 }
 
 // ───────────────────── Orçamento ─────────────────────
-function Budget({ cols }: { cols: string[] }) {
+export function Budget({ cols }: { cols: string[] }) {
   const { bundle: b, canEdit } = useBundle();
   const [edit, setEdit] = useState(false);
   const cur = b.trip.base_currency;
@@ -474,7 +454,7 @@ function BudgetDialog({ onClose, cols }: { onClose: () => void; cols: string[] }
 }
 
 // ───────────────────── Caixa da turma ─────────────────────
-function Pool({ cols }: { cols: string[] }) {
+export function Pool({ cols }: { cols: string[] }) {
   const { bundle: b, canEdit, source, reload, profileOf } = useBundle();
   const { run } = useAction();
   const confirm = useConfirm();
@@ -571,7 +551,7 @@ function PoolDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function StopSpend({ cols }: { cols: string[] }) {
+export function StopSpend({ cols }: { cols: string[] }) {
   const { bundle: b } = useBundle();
   const stops = sortedStops(b);
   const by = stops.map((st) => b.expenses.filter((e) => e.stop_id === st.id).reduce((a, e) => a + toCents(String(e.base_amount)), 0));
@@ -593,7 +573,7 @@ function StopSpend({ cols }: { cols: string[] }) {
   );
 }
 
-function Converter() {
+export function Converter() {
   const { bundle: b } = useBundle();
   const base = b.trip.base_currency;
   const { fx, err } = useFx(base);
@@ -632,7 +612,7 @@ function Converter() {
   );
 }
 
-function Debts({ cols }: { cols: string[] }) {
+export function Debts({ cols }: { cols: string[] }) {
   const { bundle: b, canEdit, source, reload, profileOf } = useBundle();
   const { run, busy } = useAction();
   const [open, setOpen] = useState(false);
@@ -691,7 +671,7 @@ function Debts({ cols }: { cols: string[] }) {
   );
 }
 
-function ExpenseList() {
+export function ExpenseList() {
   const { bundle: b, canEdit, profileOf } = useBundle();
   const [edit, setEdit] = useState<Expense | null>(null);
   if (!b.expenses.length) return null;

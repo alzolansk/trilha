@@ -1,34 +1,60 @@
-/* AppHeader, IdentityPill/Menu e TabBar (SPEC §7) */
-.top { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
-.fixed { position: fixed; left: 0; right: 0; }
-.topIn { max-width: var(--maxw); margin: 0 auto; padding: 12px var(--gutter); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: var(--font-display); font-weight: var(--display-weight); font-size: 24px; }
-.logo :global(.motif) { width: 18px; height: 18px; background: var(--acc); animation: wig 3.4s ease-in-out infinite; }
-.nav { display: flex; gap: 2px; padding: 4px; border-radius: var(--r-pill); background: var(--card); border: 1px solid var(--line); }
-.nav a { padding: 10px 16px; border-radius: var(--r-pill); font-size: 14px; font-weight: 500; text-decoration: none; transition: background .25s, color .25s; }
-.nav a[aria-current=page] { background: var(--ink); color: var(--bg); }
-.idwrap { position: relative; }
-.idpill { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px 0 10px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--card); cursor: pointer; font-size: 14px; color: var(--ink); }
-.dots { display: flex; }
-.dots span { width: 18px; height: 18px; border-radius: 50%; margin-left: -6px; border: 1.5px solid var(--card); }
-.dots span:first-child { margin-left: 0; }
-.idmenu { position: absolute; right: 0; top: 54px; min-width: 280px; max-height: 70vh; overflow: auto; padding: 8px; border-radius: var(--r-lg); background: var(--card); border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(0, 0, 0, .15); display: flex; flex-direction: column; gap: 2px; z-index: 70; animation: popin .35s var(--ease-spring) both; }
-.idmenu a, .idmenu button { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border: 0; border-radius: var(--r-md); background: transparent; cursor: pointer; text-align: left; text-decoration: none; font-size: 15px; color: var(--ink); }
-.idmenu a:hover, .idmenu button:hover, .idmenu a[aria-current=true] { background: var(--soft); }
-.menuHead { padding: 8px 12px 4px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--mute); }
-.sw { width: 22px; height: 22px; flex: none; display: inline-block; }
-.tabbar { display: none; }
-.stale { position: relative; z-index: 40; text-align: center; font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; padding: 6px; color: var(--mute); }
-
-@media (max-width: 820px) {
-  .nav { display: none; }
-  .lbl { display: none; }
-  .topIn { padding-top: 8px; padding-bottom: 8px; }
-  .logo { font-size: 21px; }
-  .logo :global(.motif) { width: 15px; height: 15px; }
-  .idpill { min-height: 40px; padding: 0 12px; }
-  .tabbar { display: flex; position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 55; justify-content: space-around; padding: 5px; background: var(--deep); border-radius: 22px; box-shadow: 0 4px 0 var(--acc); }
-  .tabbar a { flex: 1; min-width: 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 17px; text-decoration: none; font-size: 10.5px; font-weight: 600; color: var(--on-deep); }
-  .tabbar a :global(svg) { width: 20px; height: 20px; }
-  .tabbar a[aria-current=page] { background: var(--acc2); color: var(--fg-acc2); }
+/* Shell da Trilha 2.0 (planning §4): TabBar no celular, SideNav no desktop, sem header global. */
+.shell { min-height: 100dvh; }
+.content { min-width: 0; }
+.main { min-height: 60dvh; overscroll-behavior-y: contain; }
+@media (min-width: 821px) {
+  .content { margin-left: var(--sidenav-w); }
 }
+
+/* faixas discretas: demonstração e cópia salva */
+.notice {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px;
+  padding: calc(8px + env(safe-area-inset-top)) var(--gutter) 8px; background: var(--brand-soft); color: var(--brand-ink);
+  font: 500 13px/1.35 var(--font-body); text-align: center;
+}
+.notice + .notice { padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--brand) 12%, transparent); }
+.notice a { font-weight: 700; color: var(--brand-ink); }
+@media (max-width: 480px) { .noticeLong { display: none; } }
+@media (min-width: 821px) { .notice { padding-top: 8px; } }
+
+/* topo da Início no celular: logo + "Minhas trilhas" e a turma (canvas Inicio.dc.html) */
+.homeTop { display: none; }
+@media (max-width: 820px) {
+  .homeTop {
+    position: absolute; z-index: 40; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top));
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: none;
+  }
+  .homeTop > * { pointer-events: auto; }
+  .notice ~ .homeTop { position: relative; top: 0; left: 0; right: 0; padding: 12px 12px 0; }
+}
+.heroSwitch {
+  min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px 4px 6px; border: 0; border-radius: 999px;
+  background: var(--surface); color: var(--ink); font: 700 15px/1 var(--font-body); box-shadow: var(--shadow-float);
+}
+.heroSwitch:active { transform: scale(.98); }
+.homeTurma { display: inline-flex; padding: 4px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-float); }
+
+/* seletor na SideNav */
+.sideSwitch {
+  width: 100%; min-height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border: 1px solid var(--line);
+  border-radius: 14px; background: var(--surface); color: var(--ink); font: 600 14px/1.2 var(--font-body); text-align: left;
+}
+.sideSwitch:hover { background: var(--field); }
+.sideDot { width: 14px; height: 14px; flex: none; border-radius: 999px; background: var(--trip-accent); }
+.sideTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.demoSide { display: block; margin: 0 14px 8px; padding: 6px 10px; border-radius: 10px; background: var(--brand-soft); color: var(--brand-ink); font: 600 12px/1.3 var(--font-body); }
+
+/* lista do seletor de trilhas */
+.tripList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tripItem {
+  display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 8px 12px 8px 8px; border-radius: 18px;
+  background: var(--field); color: var(--ink); text-decoration: none;
+}
+.tripItem:hover { color: var(--ink); background: var(--line-2); }
+.tripItem[aria-current=true] { box-shadow: inset 0 0 0 2px var(--brand); background: var(--surface); }
+.thumb { position: relative; width: 56px; height: 56px; flex: none; border-radius: 14px; overflow: hidden; }
+.thumb svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tripText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tripText b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tripText span { font-size: 13px; color: var(--mute); }
+.tripChev { color: var(--mute); }

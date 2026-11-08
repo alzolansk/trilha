@@ -1,0 +1,17 @@
+.card { position: relative; background: var(--surface); border-radius: var(--r-card); overflow: hidden; }
+.selected { box-shadow: inset 0 0 0 3px var(--brand); }
+.card.selected > :first-child { margin: 3px 3px 0; width: calc(100% - 6px); border-radius: 19px 19px 0 0 !important; }
+.badge { position: absolute; left: 12px; top: 12px; }
+.body { display: flex; flex-direction: column; gap: var(--s2); padding: 14px var(--s4) var(--s4); }
+.title { margin: 0; font: var(--t-card); letter-spacing: -0.01em; }
+.link { color: inherit; text-decoration: none; }
+.link::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+.link:focus-visible { outline: none; }
+.card:has(.link:focus-visible), .row:has(.link:focus-visible) { outline: 2.5px solid var(--brand); outline-offset: 2px; }
+.meta { font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+.actions { position: relative; z-index: 2; display: flex; gap: var(--s2); padding-top: 4px; }
+.row { position: relative; display: flex; align-items: center; gap: 14px; padding: var(--s3); background: var(--surface); border-radius: var(--r-card); }
+.thumb { width: 84px !important; flex: none; }
+.rowBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rowTitle { margin: 0; font: 700 15px/1.3 var(--font-body); }
+.rowActions { position: relative; z-index: 2; flex: none; }

@@ -7,7 +7,7 @@ import { PlaceSearch, type Place } from '../components/forms/PlaceSearch';
 import { StopSuggestions } from '../components/plan/StopSuggestions';
 import { useDraft } from '../components/forms/useDraft';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, Floaters, Icon, PageTitle, Pattern, useReveal } from '../components/ui/primitives';
+import { AiNote, Icon, PageTitle, useReveal } from '../components/ui/primitives';
 import { useBundle } from '../data/TripContext';
 import type { Activity, Stay, Stop, Transport, TransportMode } from '../data/types';
 import { callAi } from '../lib/ai/client';
@@ -18,7 +18,7 @@ import {
 import { dateRange, daysBetween, isValidTimeZone, listTimeZones } from '../lib/time';
 import { dayWeekU, hhmm, MODE_LABEL, MODE_SHORT } from '../lib/format';
 import { fgOn } from '../lib/identity/contrast';
-import { colorCycle } from '../lib/identity/theme';
+import { CYCLE } from '../lib/identity/accent';
 import { ruleTip } from '../lib/rules';
 import { countdown } from '../lib/time';
 import s from './roteiro.module.css';
@@ -35,10 +35,10 @@ function useStopsState() {
 }
 
 export default function Roteiro() {
-  const { bundle: b, identity, canEdit, stops } = useStopsState();
+  const { bundle: b, accent, canEdit, stops } = useStopsState();
   const params = useSearchParams();
   const router = useRouter();
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const [mapOpen, setMapOpen] = useState(false);
   const sel = Math.max(0, stops.findIndex((x) => x.id === params.get('parada')));
   const detailRef = useRef<HTMLElement>(null);
@@ -59,7 +59,6 @@ export default function Roteiro() {
 
   return (
     <div className="wrap">
-      <Floaters />
       <PageTitle
         eyebrow={eyebrow}
         title="Roteiro"
@@ -140,7 +139,7 @@ export default function Roteiro() {
       </section>
 
       <Dialog open={mapOpen} onClose={() => setMapOpen(false)} title="Mapa da trilha">
-        {mapOpen ? <RouteMap stops={stops} colors={cols} line={identity.palette.acc} /> : null}
+        {mapOpen ? <RouteMap stops={stops} colors={cols} line={accent} /> : null}
         <p className="mono" style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>
           A LINHA LIGA AS PARADAS EM ORDEM E NÃO É O TRAJETO REAL.{' '}
           {km.km > 0 ? `${km.km.toLocaleString('pt-BR')} KM EM LINHA RETA${km.complete ? '' : ' (SÓ ENTRE PARADAS COM COORDENADAS)'}.` : ''}
@@ -267,7 +266,7 @@ function Weather({ stop }: { stop: Stop }) {
 }
 
 function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: number; total: number; color: string; refEl: React.RefObject<HTMLElement | null> }) {
-  const { bundle: b, identity, canEdit, source, reload, base } = useBundle();
+  const { bundle: b, canEdit, source, reload, base } = useBundle();
   const { run, busy } = useAction();
   const confirm = useConfirm();
   const toast = useToast();
@@ -315,8 +314,6 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
   return (
     <article className={`${s.detail} card col-main`} ref={refEl as React.RefObject<HTMLElement>} aria-label={`Parada ${stop.name}`}>
       <div className={s.detailHead} style={{ background: color, color: fg }}>
-        <Pattern identity={identity} opacity={0.18} />
-        <div aria-hidden="true" style={{ position: 'absolute', right: -40, top: -50, width: 220, height: 220, clipPath: 'var(--motif)', background: 'var(--bg)', opacity: 0.35, animation: 'floaty 8s ease-in-out infinite' }} />
         <div className="mono" style={{ position: 'relative', fontSize: 12, letterSpacing: '.2em' }}>
           PARADA {index + 1} DE {total}{stop.country ? ` · ${stop.country.toUpperCase()}` : ''}
         </div>
@@ -402,11 +399,11 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
             {docs.length ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {docs.map((d) => (
-                  <Link key={d.id} href={`${base}/documentos?doc=${d.id}`} style={{ fontSize: 14, padding: '8px 12px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--line)', textDecoration: 'none' }}>{d.title}</Link>
+                  <Link key={d.id} href={`${base}/turma/documentos?doc=${d.id}`} style={{ fontSize: 14, padding: '8px 12px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--line)', textDecoration: 'none' }}>{d.title}</Link>
                 ))}
               </div>
             ) : (
-              <Link href={`${base}/documentos?parada=${stop.id}`}>Anexar um documento</Link>
+              <Link href={`${base}/turma/documentos?parada=${stop.id}`}>Anexar um documento</Link>
             )}
           </div>
         </div>

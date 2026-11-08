@@ -35,6 +35,48 @@ Este plano implementa esse design **no app Next.js atual**:
 
 ---
 
+## Status da implementação (atualizado em 08/11/2026)
+
+| Fase | Status | Onde |
+|---|---|---|
+| 0 — Preparação | ✅ concluída | nota de precedência no `ref/SPEC.md`, link no README, linha de base registrada |
+| 1 — Fundação visual | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
+| 2 — Shell e navegação | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
+| 3 — Dados e serviços base | ⏳ não iniciada | — |
+| 4 a 9 | ⏳ não iniciadas | — |
+
+**Verificação ao fim da Fase 2:** `npm run typecheck` ok; `npm test` com 143 testes verdes (a linha de base era 139; entraram 4 de accent); `npm run build` ok; `npx playwright test` com 24 de 24 verdes contra o build de produção; conferência manual em `/demo/andes` com 360, 390, 768, 1280 e 1440 px, sem rolagem horizontal. As Fases 1 e 2 foram feitas juntas na mesma branch, a pedido; não houve um PR por fase.
+
+### Ressalvas de handoff: Fase 1
+
+- **Compatibilidade com as telas antigas.** `globals.css` tem os tokens novos (§3.1) e um bloco marcado "compatibilidade". Ele mantém as classes antigas (`.btn`, `.chip`, `.card`, `.field`, `.page-title`, `.check`, `.pill`, `.ticket` etc.) com o visual novo, e os aliases de variáveis antigas (`--acc`, `--acc2`, `--card`, `--soft`, `--deep`, `--font-display`, `--font-mono`…) apontando para os tokens novos. É isso que deixa as telas antigas abrirem. Cada fase que redesenhar uma tela deve parar de usar essas classes; a limpeza final fica na Fase 9.
+- **`lib/identity/` foi reduzida só em parte.** Saíram `theme.ts`, `IdentityCard`, `/identidades`, `Grain`, `grain.png`, `Pattern`, `Marquee`, `Floaters` e `MotifCheck` (que virou `ui/Checkbox`). Ficam por enquanto `render.ts`, `shapes.ts`, `fontmap.ts`, `generate.ts`, `validate.ts` e o `dictionary.data.ts` completo, porque ainda são usados pela história de scroll da Home antiga (sai na **Fase 4**), pelo passo de identidade de `/nova-trilha` e por `api/ai/identity` (saem na **Fase 8**). `TripContext` ainda expõe `identity`, marcado `@deprecated`; o substituto é `accent`.
+- **`accent` ainda não tem coluna.** `tripAccent()` (`lib/identity/accent.ts`) segue esta ordem: `trips.accent` (quando a Fase 3 criar a coluna), depois a cor do dicionário ou da identidade antiga, depois o padrão `#2B3FF5`. Em Ajustes, a seção "Aparência" só mostra a cor atual; o seletor das 8 cores (`ACCENT_CHOICES`, já testadas para contraste) entra junto com a coluna. A Fase 3 deve fazer o backfill a partir de `DICTIONARY_ACCENT`/`identity->palette->acc`, passando por `safeAccent`.
+- **Fontes.** Inter e Bricolage entram como fontes variáveis, sem lista de pesos: com `weight: [...]`, o Turbopack deste ambiente falhou com "next/font/google queries have exactly one entry".
+- **Ícones.** Entraram `route`, `back`, `next`, `close`, `info`, `more`, `lock`, `list`, `minus` e `settings`, e o traço padrão passou a 2 px. Os ícones antigos não foram redesenhados um a um.
+- **Componentes.** Os componentes da §3.3 estão em `src/components/ui/`, cada um com seu CSS Module, e são exportados por `ui/index.ts`. O `Dialog` de `feedback.tsx` virou alias do `Sheet` (mesma API), então todos os formulários já abrem como bottom sheet. Componentes ainda sem uso em tela real: `Photo` com foto de verdade (a `/api/photos` chega na Fase 3), `SuggestionCard`, `StepChat`, `MoneyInput`, `Segmented` e `PhotoCard`. Estão todos na vitrine.
+- **`/dev/ui`.** A vitrine só funciona em desenvolvimento (em produção responde 404). A imagem de exemplo é um arquivo local identificado como tal, porque este ambiente não alcança a Wikimedia. A conferência contra `Main.dc.html` foi feita por screenshot em 390 e 1280 px: paleta, tipografia, botões e chips batem; não é comparação pixel a pixel.
+- **Placeholder de foto.** As silhuetas usam `color-mix()` sobre `--trip-accent`.
+- **Modo escuro.** Continua fora do escopo. Os componentes novos usam só tokens.
+
+### Ressalvas de handoff: Fase 2
+
+- **`/roteiro/[stopId]` é temporária.** Hoje ela redireciona para `/roteiro?parada=X` (`screens/Parada.tsx`), o contrário do que pede a §4.3. Na **Fase 5**, a `Parada` real ocupa a rota e o `Roteiro` passa a fazer `router.replace` de `?parada=X` para `/roteiro/X`.
+- **Telas temporárias nas rotas novas.** `Dinheiro`, `Orcamento`, `Extrato`, `Acerto` e `Votos` (em `src/screens/`) só embrulham pedaços que agora são exportados de `Mala.tsx` (`Budget`, `Pool`, `StopSpend`, `Converter`, `Debts`, `ExpenseList`) e de `Turma.tsx` (`Decisions`). Cada arquivo tem o comentário "TEMPORÁRIO (Fase 2)". A **Fase 6** reescreve os de dinheiro e tira esses pedaços de `Mala.tsx`; a **Fase 7** faz `TurmaHub` e `Votos`.
+- **`/turma` ainda é a tela Turma antiga**, agora com uma lista de atalhos para Votos, Documentos, Mala, Diário, Ajustes e Conta, que saíram da navegação principal. `Decisions` continua em `/turma`, porque links existentes (`plan.ts`, push de `polls.ts`) usam `/turma#decisoes` e `#nova-votacao`. A Fase 7 precisa migrar esses links para `/turma/votos`.
+- **Topo da Início no celular.** O botão "Minhas trilhas" (abre o seletor em Sheet) e a `AvatarStack` ficam sobrepostos ao hero da Home antiga pelo `TripShell`. Na **Fase 4**, eles vão para dentro do hero de `Inicio.tsx`, e o bloco `homeTop` sai do shell.
+- **`OfflineBanner`** continua em `AppProviders`, que é global e cobre também `/entrar`, `/conta` etc. Não foi para o `TripShell`.
+- **Sheet e o botão Voltar.** O Sheet empurra uma entrada no histórico (`history.pushState`, integrado ao router do Next 16) e a remove ao fechar. Um clique em link interno dentro do Sheet é detectado e não chama `back()`. Se uma ação chamar `router.push` logo depois de fechar o Sheet, sobra uma entrada extra no histórico: inofensiva, mas pede um Voltar a mais. O diálogo de confirmação usa `closeOnBack={false}`. Ainda não existe fechar o Sheet arrastando para baixo.
+- **TabBar.** A lista `HIDE_TABBAR` em `TripShell.tsx` já esconde a barra em `/dinheiro/orcamento`; cada subtela com CTA fixa deve entrar nessa lista. A posição de rolagem de cada aba fica guardada em memória por rota e se perde ao recarregar a página.
+- **SideNav.** Além de Conta e Nova trilha, o rodapé tem "Ajustes da trilha", que não está na §4.2. Na demo, mostra "Criar trilha real", "Entrar" e o selo de demonstração.
+- **Redirects** em `next.config.ts` usam 307 de propósito, porque as rotas ainda podem mudar até a Fase 9. Trocar para 308 no fim.
+- **Faixa de cópia salva.** Ela mostra a hora: `saveBundle` agora grava `saved-at:<tripId>` no IndexedDB, e `TripContext` expõe `staleSince`.
+- **`sw.js` está em `v2`** e já usa as rotas novas no `warmTripPages`. O cache da Wikimedia (`upload.wikimedia.org`) entra na Fase 3. Os comentários do arquivo tinham caracteres corrompidos (texto em UTF-8 lido como cp1252) e foram corrigidos.
+- **Testes e2e.** Os testes de tokens por identidade viraram testes de accent; entraram testes de abas, redirects e Voltar fechando o Sheet; as rotas foram atualizadas. Os testes da "história de scroll do Início" ainda passam, mas devem sair na Fase 4. No `next dev`, o teste de reduced motion falha por tempo de hidratação; no build de produção ele passa.
+- **Ambiente.** Neste sandbox, `/api/fx` (conversor) responde 502 por falta de rede externa. Isso já acontecia antes destas fases.
+
+---
+
 ## 1. Panorama: o que existe e o que muda
 
 ### Dependências (package.json)
@@ -591,13 +633,13 @@ Todas as mudanças são aditivas, nada é apagado. Seguir o padrão das migraç�
 
 Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/andes` no celular (390) e no desktop (1280). Um PR por fase, a partir de `main`.
 
-### Fase 0 — Preparação
+### Fase 0 — Preparação · ✅ concluída
 
 - Ler os guias do Next 16 em `node_modules/next/dist/docs/` (rotas, layouts, redirects, metadata e viewport).
 - Criar `planning.md` (este arquivo) na raiz. Adicionar a nota de precedência no topo de `ref/SPEC.md` e o link no README.
 - Rodar a suíte atual e anotar a linha de base. Marcar `tests/e2e/demo.spec.ts` como a ser reescrito na Fase 9 (`test.describe.skip` por blocos à medida que cada tela muda, com comentário apontando a fase).
 
-### Fase 1 — Fundação visual
+### Fase 1 — Fundação visual · ✅ concluída (ver ressalvas no topo)
 
 - Reescrever `globals.css`: tokens 3.1, reset, utilitários (`.sr`, `.wrap`, `.skip`) e estados.
 - Atualizar `lib/fonts.ts` (Inter e Bricolage) e `layout.tsx` (viewport `cover`, `themeColor`).
@@ -606,7 +648,7 @@ Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/
 - Novo logo (`icon.svg`, PNG 192/512 e maskable) e `manifest.ts`.
 - **Aceite:** `/dev/ui` bate visualmente com `Main.dc.html` (paleta, tipografia, botões, chips); as telas antigas ainda abrem, mesmo feias; o typecheck passa.
 
-### Fase 2 — Shell e navegação
+### Fase 2 — Shell e navegação · ✅ concluída (ver ressalvas no topo)
 
 - `TripShell`: `TabBar` (celular), `SideNav` (desktop), `ScreenHeader`, `OfflineBanner`, faixa de cópia salva e selo de demo.
 - Rotas novas (4.3) nos dois árvores (`/t` e `/demo`), redirects em `next.config.ts`, `warmTripPages`, `sw.js` v2 e o seletor de trilhas em Sheet.

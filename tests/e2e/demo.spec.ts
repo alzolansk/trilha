@@ -1,47 +1,65 @@
 import { expect, test } from '@playwright/test';
 
 const KEYS = ['andes', 'japao', 'marrocos', 'islandia'] as const;
-const TOKENS: Record<string, { bg: string; acc: string; deep: string; font: RegExp; dark: boolean }> = {
-  andes: { bg: '#F3E6D3', acc: '#C8452C', deep: '#17403C', font: /Bricolage/, dark: false },
-  japao: { bg: '#F5F0E6', acc: '#D7262E', deep: '#1E3A5F', font: /Shippori/, dark: false },
-  marrocos: { bg: '#F6E9DA', acc: '#2A4BD7', deep: '#2A4BD7', font: /Gloock/, dark: false },
-  islandia: { bg: '#0D1B21', acc: '#53F0A6', deep: '#132A31', font: /Big Shoulders/, dark: true },
-};
-const ROUTES = ['', '/roteiro', '/documentos', '/mala', '/diario', '/turma'];
+// Trilha 2.0: identidade por destino virou uma cor só (lib/identity/accent.ts DICTIONARY_ACCENT).
+const ACCENT: Record<string, string> = { andes: '#C8452C', japao: '#C2272D', marrocos: '#1F5FA8', islandia: '#1F6F8B' };
+// Rotas da Trilha 2.0 (planning §4.3). A Fase 9 reescreve esta suíte com as telas novas.
+const ROUTES = ['', '/roteiro', '/dinheiro', '/turma', '/turma/documentos', '/turma/mala', '/turma/diario', '/ajustes'];
 const WIDTHS = [360, 390, 768, 1280, 1440];
 
-test.describe('identidades e tokens', () => {
+test.describe('visual fixo e accent por trilha', () => {
   for (const k of KEYS) {
-    test(`tokens de ${k} aplicados no <html>`, async ({ page }) => {
+    test(`accent de ${k} aplicado no <html>, tokens fixos`, async ({ page }) => {
       await page.goto(`/demo/${k}`);
-      await page.waitForSelector('h1');
+      await page.waitForSelector('main h1, main h2');
       const v = await page.evaluate(() => {
         const cs = getComputedStyle(document.documentElement);
-        return { bg: cs.getPropertyValue('--bg').trim(), acc: cs.getPropertyValue('--acc').trim(), deep: cs.getPropertyValue('--deep').trim(), font: cs.getPropertyValue('--font-display'), dark: document.documentElement.hasAttribute('data-dark'), body: getComputedStyle(document.body).backgroundColor };
+        return { bg: cs.getPropertyValue('--bg').trim(), brand: cs.getPropertyValue('--brand').trim(), accent: cs.getPropertyValue('--trip-accent').trim(), body: getComputedStyle(document.body).backgroundColor };
       });
-      expect(v.bg.toUpperCase()).toBe(TOKENS[k].bg);
-      expect(v.acc.toUpperCase()).toBe(TOKENS[k].acc);
-      expect(v.deep.toUpperCase()).toBe(TOKENS[k].deep);
-      expect(v.font).toMatch(TOKENS[k].font);
-      expect(v.dark).toBe(TOKENS[k].dark);
+      expect(v.bg.toUpperCase()).toBe('#F5F6F8');
+      expect(v.brand.toUpperCase()).toBe('#2B3FF5');
+      expect(v.accent.toUpperCase()).toBe(ACCENT[k]);
+      expect(v.body).toBe('rgb(245, 246, 248)');
     });
   }
 
-  test('trocar de trilha troca o tema sem sobrar cor anterior', async ({ page }) => {
+  test('trocar de trilha pelo seletor troca o accent', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/demo/andes/roteiro');
-    await page.waitForSelector('h1');
-    await page.getByRole('button', { name: /Identidade/ }).click();
-    await page.getByRole('menuitem', { name: /Islândia/ }).click();
+    await page.getByRole('button', { name: /Trilha atual/ }).click();
+    await page.getByRole('dialog').getByRole('link', { name: /Islândia/ }).click();
     await page.waitForURL('**/demo/islandia');
-    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toUpperCase())).toBe('#0D1B21');
-    const leftovers = await page.evaluate(() => {
-      const bad = ['rgb(243, 230, 211)', 'rgb(200, 69, 44)', 'rgb(23, 64, 60)'];
-      return Array.from(document.querySelectorAll('body *')).filter((el) => {
-        const cs = getComputedStyle(el);
-        return bad.includes(cs.backgroundColor) || bad.includes(cs.color);
-      }).length;
-    });
-    expect(leftovers).toBe(0);
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--trip-accent').trim().toUpperCase())).toBe(ACCENT.islandia);
+  });
+});
+
+test.describe('shell e navegação (Fase 2)', () => {
+  test('4 abas no celular, aba ativa marcada', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/demo/andes');
+    const tabs = page.getByRole('navigation', { name: 'Abas' });
+    await expect(tabs.getByRole('link')).toHaveCount(4);
+    for (const [name, path] of [['Roteiro', '/roteiro'], ['Dinheiro', '/dinheiro'], ['Turma', '/turma'], ['Início', '']] as const) {
+      await tabs.getByRole('link', { name }).click();
+      await page.waitForURL(`**/demo/andes${path}`);
+      await expect(tabs.getByRole('link', { name })).toHaveAttribute('aria-current', 'page');
+    }
+  });
+  test('links antigos redirecionam', async ({ page }) => {
+    for (const [from, to] of [['/mala', '/turma/mala'], ['/documentos?tipo=Identidade', '/turma/documentos?tipo=Identidade'], ['/diario', '/turma/diario'], ['/editar', '/ajustes'], ['/explorar', '/descobrir']]) {
+      await page.goto(`/demo/andes${from}`);
+      await expect(page).toHaveURL(new RegExp(`/demo/andes${to.replace('?', '\\?')}$`));
+    }
+  });
+  test('Voltar fecha o Sheet sem sair da tela', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/demo/andes/turma');
+    await page.goto('/demo/andes');
+    await page.getByRole('button', { name: 'Demonstrações' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(page).toHaveURL(/\/demo\/andes$/);
   });
 });
 
@@ -80,8 +98,8 @@ test.describe('história de scroll do Início', () => {
 });
 
 test.describe('acessibilidade e teclado', () => {
-  test('checkbox em motif funciona com teclado', async ({ page }) => {
-    await page.goto('/demo/japao/mala');
+  test('checkbox funciona com teclado', async ({ page }) => {
+    await page.goto('/demo/japao/turma/mala');
     const box = page.getByRole('checkbox').first();
     const before = await box.isChecked();
     await box.focus();
@@ -89,7 +107,7 @@ test.describe('acessibilidade e teclado', () => {
     await expect(box).toBeChecked({ checked: !before });
   });
   test('filtros com aria-pressed e parâmetro de URL', async ({ page }) => {
-    await page.goto('/demo/andes/documentos?tipo=Identidade');
+    await page.goto('/demo/andes/turma/documentos?tipo=Identidade');
     await expect(page.getByRole('group', { name: 'Filtrar por tipo' }).getByRole('button', { name: /Identidade/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('article.ticket')).toHaveCount(3);
   });
@@ -119,7 +137,7 @@ test.describe('sem rolagem horizontal', () => {
 
 test.describe('votação da turma', () => {
   test('reagir a uma inspiração muda a contagem', async ({ page }) => {
-    await page.goto('/demo/andes/diario?momento=antes');
+    await page.goto('/demo/andes/turma/diario?momento=antes');
     await page.getByRole('button', { name: 'Abrir inspirações de Cusco' }).click();
     const muito = page.getByRole('dialog').getByRole('button', { name: /^Quero muito, 1 pessoa$/ });
     await expect(muito).toHaveAttribute('aria-pressed', 'false');
@@ -131,7 +149,7 @@ test.describe('votação da turma', () => {
   });
 
   test('levar inspiração ao roteiro cria a atividade na parada', async ({ page }) => {
-    await page.goto('/demo/andes/diario?momento=antes');
+    await page.goto('/demo/andes/turma/diario?momento=antes');
     await page.getByRole('button', { name: 'Abrir inspirações de Cusco' }).click();
     await page.getByRole('button', { name: 'Levar pro roteiro' }).first().click();
     const dlg = page.getByRole('dialog', { name: 'Levar pro roteiro' });

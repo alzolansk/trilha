@@ -5,6 +5,7 @@ import type {
   PackingCategory, PackingItem, Poll, PollOption, PollVote, Profile, Stay, Stop, Task, Transport, TransportMode, Trip, TripBundle,
 } from '../../data/types';
 import { DICTIONARY } from '../identity/dictionary';
+import { PERSON_COLORS } from '../identity/accent';
 import { splitEqual } from '../money';
 import { addDays } from '../time';
 import { DEMO_RAW } from './demo.data';
@@ -93,7 +94,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
   };
 
   const members: Member[] = people.map((p, i) => ({ trip_id: tripId, user_id: p.uid, role: i === 0 ? 'organizer' : 'editor', joined_at: now }));
-  const profiles: Profile[] = people.map((p, i) => ({ ...base, id: p.uid, display_name: p.name, color: [identity.palette.acc, identity.palette.acc2, identity.palette.acc3][i % 3] }));
+  const profiles: Profile[] = people.map((p, i) => ({ ...base, id: p.uid, display_name: p.name, color: PERSON_COLORS[i % PERSON_COLORS.length] }));
 
   const stops: Stop[] = [];
   const transports: Transport[] = [];
@@ -153,7 +154,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
   );
 
   const budgetCategories: BudgetCategory[] = raw.budget.cats.map(([name, , planned], i) => ({
-    ...base, id: id(key, 'bc', i), trip_id: tripId, name, color: [identity.palette.acc, identity.palette.acc2, identity.palette.acc3, identity.palette.deep][i % 4], planned, position: i,
+    ...base, id: id(key, 'bc', i), trip_id: tripId, name, color: ['#8E9BFF', '#FF6B3D', '#4FC08D', '#E3E6EB'][i % 4], planned, position: i,
   }));
   const expenses: Expense[] = [];
   const expenseShares: ExpenseShare[] = [];

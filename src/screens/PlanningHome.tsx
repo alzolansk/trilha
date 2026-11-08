@@ -53,7 +53,7 @@ export default function PlanningHome() {
               {canEdit && next.key === 'destination' ? (
                 <>
                   <Link className={`${s.cta2} tap`} href={`${base}/turma#nova-votacao`}>Já temos opções: votar</Link>
-                  <Link className={`${s.cta2} tap`} href={`${base}/editar`}>Já sei o destino</Link>
+                  <Link className={`${s.cta2} tap`} href={`${base}/ajustes`}>Já sei o destino</Link>
                 </>
               ) : null}
             </div>

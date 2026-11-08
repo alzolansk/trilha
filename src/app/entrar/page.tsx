@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Icon } from '../../components/ui/primitives';
+import { Logo } from '../../components/ui/Logo';
 import { useAuth } from '../../data/AuthContext';
 import { humanError } from '../../data/source';
 import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK, SITE_URL } from '../../lib/env';
@@ -74,13 +75,13 @@ function Entrar() {
   return (
     <main id="main" className={s.page}>
       <div className={s.card}>
-        <Link href="/identidades" className={s.logo}><span className="motif" />trilha</Link>
+        <Link href="/demo/andes" className={s.logo} aria-label="Trilha: ver demonstração"><Logo size={34} /></Link>
         <h1 className="disp" style={{ margin: 0, fontSize: 'clamp(40px,6vw,64px)', lineHeight: 0.95 }}>
           {mode === 'signup' ? 'Criar conta' : mode === 'reset' ? 'Nova senha' : 'Entrar'}
         </h1>
         <p style={{ margin: 0, color: 'var(--mute)' }}>Countdown, roteiro, documentos offline e gastos com a turma.</p>
         {!configured ? (
-          <div className="errbox">O Supabase ainda não está configurado neste ambiente (veja o README). Enquanto isso, explore a <Link href="/identidades">demonstração</Link>.</div>
+          <div className="errbox">O Supabase ainda não está configurado neste ambiente (veja o README). Enquanto isso, explore a <Link href="/demo/andes">demonstração</Link>.</div>
         ) : (
           <>
             {AUTH_GOOGLE || AUTH_APPLE ? (
@@ -110,7 +111,7 @@ function Entrar() {
             {mode === 'reset' || mode === 'magic' ? <p className="mono" style={{ margin: 0, fontSize: 11, color: 'var(--mute)' }}>E-MAILS DEPENDEM DO SMTP CONFIGURADO NO SUPABASE (VEJA O README).</p> : null}
           </>
         )}
-        <Link href="/identidades" className="mono" style={{ fontSize: 12 }}>VER DEMONSTRAÇÃO SEM CONTA →</Link>
+        <Link href="/demo/andes" style={{ fontSize: 14, fontWeight: 600 }}>Ver demonstração sem conta →</Link>
       </div>
     </main>
   );

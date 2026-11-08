@@ -1,15 +1,13 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { IdentityCard } from '../components/identity/IdentityCard';
 import { useAction, useConfirm } from '../components/ui/feedback';
-import { AiNote, PageTitle } from '../components/ui/primitives';
+import { PageTitle } from '../components/ui/primitives';
+import { Placeholder } from '../components/ui/Photo';
 import { useAuth } from '../data/AuthContext';
 import { useBundle } from '../data/TripContext';
 import { deleteBundle } from '../data/offline';
 import type { TripStyle } from '../data/types';
-import { callAi } from '../lib/ai/client';
-import type { DestinationIdentity } from '../lib/identity/types';
 import { centsToDecimal, toCents } from '../lib/money';
 import { instantToWall, isValidTimeZone, listTimeZones, wallToInstant } from '../lib/time';
 
@@ -22,7 +20,7 @@ function localDeparture(iso: string | null, tz: string): string {
 }
 
 export default function EditTrip() {
-  const { bundle: b, canEdit, isOrganizer, source, reload, identity } = useBundle();
+  const { bundle: b, canEdit, isOrganizer, source, reload, accent } = useBundle();
   const { refreshTrips } = useAuth();
   const router = useRouter();
   const { run, busy } = useAction();
@@ -33,7 +31,6 @@ export default function EditTrip() {
     time: localDeparture(t.departure_at, t.departure_tz), tz: t.departure_tz, home: t.home_tz, origin: t.origin ?? '', style: t.style,
     currency: t.base_currency, budget: t.budget_total != null ? String(t.budget_total) : '',
   });
-  const [preview, setPreview] = useState<{ id: DestinationIdentity; by: string } | null>(null);
   const tzs = useMemo(() => listTimeZones(), []);
   const ok = v.title.trim() && v.end >= v.start && isValidTimeZone(v.tz) && isValidTimeZone(v.home) && /^[A-Z]{3}$/.test(v.currency);
 
@@ -56,20 +53,6 @@ export default function EditTrip() {
       await refreshTrips();
     }, { success: 'Trilha atualizada.', onConflict: async () => { await source.update('trips', t.id, { title: v.title.trim() }); await reload(); } });
 
-  const regenerate = async () => {
-    const dest = t.destinations[0]?.trim() || t.title;
-    const r = await callAi<DestinationIdentity>('identity', { destination: dest, departDate: t.start_date, returnDate: t.end_date, style: t.style, version: (t.identity_version ?? 1) + 1 });
-    if (r) setPreview({ id: r.data, by: r.by });
-  };
-  const applyIdentity = () =>
-    run(async () => {
-      if (!preview) return;
-      await source.update('trips', t.id, { identity: preview.id, identity_version: preview.id.version });
-      setPreview(null);
-      await reload();
-      await refreshTrips();
-    }, { success: 'Nova identidade aplicada.' });
-
   const del = async () => {
     if (!(await confirm({ title: `Excluir “${t.title}”?`, message: 'Roteiro, documentos, gastos e diário desta trilha são apagados para todo mundo. Não dá pra desfazer.', confirmLabel: 'Excluir trilha' }))) return;
     await run(async () => {
@@ -90,7 +73,7 @@ export default function EditTrip() {
       <section className="split">
         <div className="col-main card" style={{ padding: 26, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label className="field">Nome da trilha<input value={v.title} maxLength={80} onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
-          <label className="field">Destinos (separados por vírgula)<input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" />{!t.destinations.length ? <span className="hint">Fechou o destino? Escreva aqui, salve e gere a identidade ao lado.</span> : null}</label>
+          <label className="field">Destinos (separados por vírgula)<input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" />{!t.destinations.length ? <span className="hint">Fechou o destino? Escreva aqui e salve.</span> : null}</label>
           <div className="grid2">
             <label className="field">Ida<input type="date" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></label>
             <label className="field">Volta<input type="date" value={v.end} min={v.start} onChange={(e) => setV({ ...v, end: e.target.value })} /></label>
@@ -107,20 +90,16 @@ export default function EditTrip() {
           <button className="btn btn-primary tap" style={{ alignSelf: 'flex-start' }} disabled={!ok || busy} onClick={save}>Salvar</button>
         </div>
         <div className="col-side" style={{ gap: 16 }}>
-          <h2 className="disp" style={{ margin: 0, fontSize: 28 }}>Identidade</h2>
-          {preview || t.identity ? <IdentityCard identity={preview?.id ?? identity} title={t.title} /> : (
-            <p className="muted" style={{ margin: 0 }}>
-              {t.destinations.length ? 'Destino definido. Gere a identidade da trilha: cores, fonte e padrão do lugar.' : 'Sem destino ainda. A identidade nasce quando o destino fechar.'}
-            </p>
-          )}
-          {preview ? (
-            <>
-              <AiNote by={preview.by === 'ai' ? 'ai' : 'rules'}>{preview.by === 'ai' ? 'Nova versão gerada por IA e validada (contraste, fonte, fenda).' : 'IA indisponível: versão gerada por regras locais.'}</AiNote>
-              <div className="actions"><button className="btn btn-primary tap" onClick={applyIdentity} disabled={busy}>Usar esta versão</button><button className="btn tap" onClick={() => setPreview(null)}>Manter a atual</button></div>
-            </>
-          ) : source.kind === 'supabase' ? (
-            <button className="btn btn-ghost tap" onClick={regenerate} disabled={!t.destinations.length && !t.identity}>{t.identity ? 'Gerar outra versão' : 'Gerar identidade'}</button>
-          ) : null}
+          <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Aparência</h2>
+          {/* Trilha 2.0: a identidade por destino virou uma cor só (accent). A escolha entre as
+              8 cores aprovadas chega junto com a coluna trips.accent (planning §6.7 / §7). */}
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ position: 'relative', height: 120 }}><Placeholder label="Capa sem foto na cor da trilha" /></div>
+            <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 999, background: accent, flex: 'none' }} />
+              <span style={{ fontSize: 14, color: 'var(--mute)' }}>Cor da trilha, escolhida pelo destino. Aparece na capa sem foto e no mapa.</span>
+            </div>
+          </div>
           {isOrganizer ? <button className="btn btn-danger tap" style={{ marginTop: 32 }} onClick={del}>Excluir trilha</button> : null}
         </div>
       </section>

@@ -76,7 +76,7 @@ export function StopSuggestions({ stop }: { stop: Stop }) {
       <section className={p.panel} aria-labelledby={`pas-${stop.id}`}>
         <h3 id={`pas-${stop.id}`} className="h3" style={{ margin: 0 }}><Icon name="sparkle" size={16} sw={1.6} />Passeios que cabem</h3>
         <span className={p.cap}>
-          {cap ? <>Teto por pessoa nesta parada: <b>{formatMoney(whole(cap), cur, { compact: true })}</b> (parte de Passeios no orçamento)</> : <>Sem teto de passeios. <Link href={`${base}/mala`}>Definir orçamento</Link> pra separar o que cabe.</>}
+          {cap ? <>Teto por pessoa nesta parada: <b>{formatMoney(whole(cap), cur, { compact: true })}</b> (parte de Passeios no orçamento)</> : <>Sem teto de passeios. <Link href={`${base}/dinheiro/orcamento`}>Definir orçamento</Link> pra separar o que cabe.</>}
         </span>
         {!demo ? (
           <button className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={loadActs} disabled={loading === 'acts'}>
@@ -120,7 +120,7 @@ export function StopSuggestions({ stop }: { stop: Stop }) {
         <section className={p.panel} aria-labelledby={`hosp-${stop.id}`}>
           <h3 id={`hosp-${stop.id}`} className="h3" style={{ margin: 0 }}><Icon name="bed" size={16} />Onde ficar</h3>
           <span className={p.cap}>
-            {nCap ? <>Teto da diária pra turma: <b>{formatMoney(whole(nCap), cur, { compact: true })}</b> ({formatMoney(whole(nCap / headcount(b)), cur, { compact: true })} por pessoa)</> : <>Sem teto de hospedagem. <Link href={`${base}/mala`}>Definir orçamento</Link>.</>}
+            {nCap ? <>Teto da diária pra turma: <b>{formatMoney(whole(nCap), cur, { compact: true })}</b> ({formatMoney(whole(nCap / headcount(b)), cur, { compact: true })} por pessoa)</> : <>Sem teto de hospedagem. <Link href={`${base}/dinheiro/orcamento`}>Definir orçamento</Link>.</>}
           </span>
           <div className={p.links}>
             {links.map((l) => <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer">{l.label} <Icon name="link" size={14} /></a>)}

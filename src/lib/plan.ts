@@ -84,13 +84,13 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
         detail: b.members.length > 1
           ? 'Veja lugares que cabem no tempo e no bolso de vocês, ponha os melhores na disputa e votem juntos.'
           : 'Veja lugares que cabem no seu tempo e no seu bolso, ponha os melhores na disputa e chame a turma pra votar.',
-        link: '/explorar', cta: 'Ver sugestões',
+        link: '/descobrir', cta: 'Ver sugestões',
       });
     }
   }
 
   if (!hasBudget(b)) {
-    out.push({ key: 'budget', title: 'Combinar o orçamento.', detail: 'Quanto cada pessoa quer gastar. Vira o previsto de transporte, hospedagem, comida e passeios.', link: '/mala', cta: 'Definir orçamento' });
+    out.push({ key: 'budget', title: 'Combinar o orçamento.', detail: 'Quanto cada pessoa quer gastar. Vira o previsto de transporte, hospedagem, comida e passeios.', link: '/dinheiro/orcamento', cta: 'Definir orçamento' });
   }
 
   const locked = !hasDestination(b);

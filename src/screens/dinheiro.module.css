@@ -1,0 +1,3 @@
+.grid { display: grid; gap: var(--s6); align-items: start; }
+.col { display: flex; flex-direction: column; gap: var(--s6); min-width: 0; }
+@media (min-width: 1024px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }

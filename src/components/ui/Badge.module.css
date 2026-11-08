@@ -1,0 +1,9 @@
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px; font: 700 12px/1.25 var(--font-body); white-space: nowrap; }
+.upper { text-transform: uppercase; letter-spacing: .06em; font-size: 10.5px; padding: 4px 8px; border-radius: 6px; }
+.ok { background: var(--ok-soft); color: var(--ok-ink); }
+.warn { background: var(--sun-soft); color: var(--warn); }
+.brand { background: var(--brand-soft); color: var(--brand-ink); }
+.sun { background: var(--sun-soft); color: var(--sun-ink); }
+.neutral { background: var(--field); color: var(--ink-2); }
+.dark { background: var(--dark-2); color: var(--dark-text); }
+.light { background: var(--surface); color: var(--ink); }

@@ -24,3 +24,5 @@
 .types { display: flex; flex-wrap: wrap; gap: 6px; }
 .warn { margin: 0; font-size: 14px; border-left: 3px solid var(--acc); padding-left: 10px; }
 .optEdit > :global(.err) { font-weight: 500; color: var(--ink); border-left: 3px solid var(--acc); padding-left: 8px; }
+/* Fase 2: atalhos para as subtelas da Turma */
+.hub { display: flex; flex-direction: column; padding: 4px 16px; border-radius: var(--r-card); background: var(--surface); }

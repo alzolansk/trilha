@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import { AppProviders } from '../components/shell/AppProviders';
-import { Grain } from '../components/shell/Grain';
 import { fontVariables } from '../lib/fonts';
 import '../styles/globals.css';
 
@@ -9,14 +8,16 @@ export const metadata: Metadata = {
   description: 'Countdown de viagens que vira a central da viagem: roteiro, documentos offline, mala, gastos e diário com a turma.',
   applicationName: 'Trilha',
   manifest: '/manifest.webmanifest',
-  icons: { icon: '/icons/icon.svg', apple: '/icons/icon-192.png' },
+  icons: { icon: '/icons/icon.svg', apple: '/icons/apple-touch-icon.png' },
   appleWebApp: { capable: true, title: 'Trilha', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#EEEBE4',
+  // App no celular: conteúdo vai até as bordas e a TabBar respeita a área segura (planning §4.1).
+  viewportFit: 'cover',
+  themeColor: '#F5F6F8',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -27,7 +28,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Pular para o conteúdo
         </a>
         <AppProviders>{children}</AppProviders>
-        <Grain />
       </body>
     </html>
   );

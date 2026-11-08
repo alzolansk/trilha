@@ -2,8 +2,9 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { applyIdentity } from '../../components/shell/ThemeApplier';
-import { Icon, Pattern } from '../../components/ui/primitives';
+import { applyAccent } from '../../components/shell/ThemeApplier';
+import { Icon } from '../../components/ui/primitives';
+import { safeAccent } from '../../lib/identity/accent';
 import { useAction } from '../../components/ui/feedback';
 import { useAuth } from '../../data/AuthContext';
 import type { TripStyle } from '../../data/types';
@@ -45,14 +46,14 @@ function Onboarding() {
   useEffect(() => {
     setV((x) => ({ ...x, tz: localTimeZone() }));
     void aiStatus().then((st) => setAiOn(!!st?.configured));
-    return () => applyIdentity(null);
+    return () => applyAccent(null);
   }, []);
 
   const hit = matchDictionary(text);
   const previewId = identity ?? (hit ? DICTIONARY[hit] : null);
-  // A página assume o tema do destino assim que ele é reconhecido (transição de 800ms).
+  // Trilha 2.0: só a cor de destaque acompanha o destino reconhecido (fase 8 tira o passo de identidade).
   useEffect(() => {
-    applyIdentity(previewId);
+    applyAccent(previewId ? safeAccent(previewId.palette.acc) : null);
   }, [previewId]);
 
   const generate = async (ver: number) => {
@@ -131,7 +132,6 @@ function Onboarding() {
   if (!ready || !user) return <div className="wrap" style={{ paddingTop: 120 }}><div className="skel" style={{ height: 300 }} /></div>;
   return (
     <div className={s.ob}>
-      {previewId && step > 0 && mode === 'dest' ? <div className="bg-pattern" style={{ opacity: 0.07 }}><Pattern identity={previewId} /></div> : null}
       <div className="wrap" style={{ display: 'flex', flexDirection: 'column', gap: 48, paddingTop: 28 }}>
         <header style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
           <Link href="/" className={s.logo}><span className="motif" />trilha</Link>
@@ -161,7 +161,7 @@ function Onboarding() {
                     <span className="mono" style={{ fontSize: 12, letterSpacing: '.1em', opacity: 0.7 }}>{DICTIONARY[k].idName.toUpperCase()}</span>
                   </button>
                 ))}
-                <Link href="/identidades" className="mono" style={{ gridColumn: '1/-1', fontSize: 12 }}>VER AS IDENTIDADES E AS DEMONSTRAÇÕES →</Link>
+                <Link href="/demo/andes" style={{ gridColumn: '1/-1', fontSize: 13, fontWeight: 600 }}>Ver a demonstração →</Link>
               </div>
               <div style={{ flex: '1 1 100%', display: 'flex', justifyContent: 'flex-end' }}>
                 <button className="btn btn-ink tap" disabled={text.trim().length < 2} onClick={() => { setMode('dest'); setStep(1); }}>Continuar<Icon name="arrow" size={18} /></button>
@@ -171,7 +171,7 @@ function Onboarding() {
                   <b style={{ fontSize: 20, letterSpacing: '-.01em' }}>Ainda não sabe pra onde?</b>
                   <span style={{ opacity: 0.8 }}>Crie a trilha só com as datas. O Trilha mostra o próximo passo e a turma vota no destino.</span>
                 </div>
-                <button className="btn btn-ghost tap" onClick={() => { setMode('plan'); applyIdentity(null); setStep(1); }}>Começar sem destino<Icon name="arrow" size={18} /></button>
+                <button className="btn btn-ghost tap" onClick={() => { setMode('plan'); applyAccent(null); setStep(1); }}>Começar sem destino<Icon name="arrow" size={18} /></button>
               </div>
             </section>
           ) : step === 1 && mode === 'plan' ? (
@@ -283,7 +283,6 @@ function Generation({ text, style, identity: t, phase, by, error, busy, onOpen, 
             <div className="disp" style={{ fontSize: 64, lineHeight: 1, marginTop: 8, overflowWrap: 'anywhere' }}>Aa {text}</div>
           </div>
           <div className={on(4)} style={{ flex: '1 1 140px', minHeight: 130, borderRadius: 18, overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
-            {t ? <Pattern identity={t} /> : null}
           </div>
           <div className={on(5)} style={{ flex: '1 1 160px', minHeight: 130, borderRadius: 18, background: 'var(--bg)', border: '1px solid var(--line)', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', inset: 0, background: 'var(--deep)', clipPath: phase >= 5 ? mini : 'inset(50% 50% 50% 50%)', transition: 'clip-path .8s var(--ease-out)' }} />

@@ -2,16 +2,19 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { Avatar, Floaters, Icon, MotifCheck, PageTitle, useReveal } from '../components/ui/primitives';
+import { Avatar, Icon, useReveal } from '../components/ui/primitives';
+import { ListRow } from '../components/ui/ListRow';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { Checkbox } from '../components/ui/Checkbox';
 import { useAuth } from '../data/AuthContext';
 import { useBundle } from '../data/TripContext';
 import type { Invite, Poll, PollOption, PollTarget, Role } from '../data/types';
-import { sortedStops } from '../lib/derive';
+import { packingProgress, sortedStops } from '../lib/derive';
 import { track } from '../lib/analytics';
 import { SITE_URL } from '../lib/env';
 import { dayMonth, initials, MONTHS, pad2, plural, ROLE_LABEL } from '../lib/format';
 import { fgOn } from '../lib/identity/contrast';
-import { colorCycle } from '../lib/identity/theme';
+import { CYCLE } from '../lib/identity/accent';
 import { formatMoney, toCents } from '../lib/money';
 import { canDecide, myVotes, optionsOf, pollState, pollWinners, tallyPoll, votersCount } from '../lib/polls';
 import { getSupabase } from '../lib/supabase/client';
@@ -19,12 +22,14 @@ import { dateRange, instantToWall, wallToInstant } from '../lib/time';
 import t from './turma.module.css';
 
 export default function Turma() {
-  const { bundle: b, identity, isOrganizer, source, reload, me, profileOf } = useBundle();
+  const { bundle: b, isOrganizer, canEdit, source, reload, me, profileOf, base } = useBundle();
+  const packed = packingProgress(b);
+  const openPolls = (b.polls ?? []).filter((p) => pollState(b, p.id, Date.now()) === 'open').length;
   const { refreshTrips } = useAuth();
   const { run, busy } = useAction();
   const confirm = useConfirm();
   const toast = useToast();
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const [invites, setInvites] = useState<Invite[]>([]);
   const [link, setLink] = useState<string | null>(null);
   const [role, setRole] = useState<Exclude<Role, 'organizer'>>('editor');
@@ -80,8 +85,17 @@ export default function Turma() {
   const now = Date.now();
   return (
     <div className="wrap">
-      <Floaters />
-      <PageTitle eyebrow={b.trip.title} title="Turma" sub="Quem viaja junto. Organizador administra; editores mexem no conteúdo; leitores consultam e votam." />
+      <ScreenHeader title="Turma" subtitle="Quem viaja junto. Organizador administra; editores mexem no conteúdo; leitores consultam e votam." />
+      {/* Fase 2: Documentos, Mala e Diário saíram da navegação principal e vivem aqui (planning §4.3).
+          A Fase 7 troca esta lista pelos blocos do TurmaHub (Turma.dc.html). */}
+      <nav aria-label="Da turma" className={t.hub}>
+        <ListRow icon="check" title="Votos" subtitle={`${openPolls} ${openPolls === 1 ? 'aberta' : 'abertas'}`} href={`${base}/turma/votos`} />
+        <ListRow icon="doc" title="Documentos" subtitle={`${b.documents.length} salvos · criptografados e disponíveis sem internet`} href={`${base}/turma/documentos`} />
+        <ListRow icon="bag" title="Mala e pendências" subtitle={`${packed.done} de ${packed.total} itens`} href={`${base}/turma/mala`} />
+        <ListRow icon="book" title="Diário" subtitle="Inspirações, registros e a retrospectiva" href={`${base}/turma/diario`} />
+        {canEdit ? <ListRow icon="settings" title="Ajustes da trilha" subtitle="Datas, destino, moeda e aparência" href={`${base}/ajustes`} /> : null}
+        <ListRow icon="users" title="Conta" subtitle="Notificações e cofre" href="/conta" />
+      </nav>
       <section className="split">
         <div className="col-side" style={{ gap: 12 }}>
           {b.members.map((m, i) => {
@@ -169,7 +183,7 @@ function priceLabel(o: PollOption): string | null {
   return o.price != null && o.currency ? formatMoney(toCents(o.price), o.currency) : null;
 }
 
-function Decisions() {
+export function Decisions() {
   const { bundle: b, canEdit } = useBundle();
   const [creating, setCreating] = useState(false);
   // Link do "Próximo passo" (#nova-votacao): abre a votação do destino já preenchida.
@@ -213,10 +227,10 @@ function Decisions() {
 }
 
 function PollCard({ poll }: { poll: Poll }) {
-  const { bundle: b, identity, me, role, isOrganizer, source, reload, profileOf, base } = useBundle();
+  const { bundle: b, me, role, isOrganizer, source, reload, profileOf, base } = useBundle();
   const { run, busy } = useAction();
   const confirm = useConfirm();
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const state = pollState(b, poll.id);
   const options = optionsOf(b, poll.id);
   const tally = new Map(tallyPoll(b, poll.id).map((r) => [r.optionId, r]));
@@ -272,9 +286,9 @@ function PollCard({ poll }: { poll: Poll }) {
           return (
             <li key={o.id} className={t.option} data-win={winner === o.id}>
               {poll.status === 'open' ? (
-                <MotifCheck className={t.pick} type={poll.multi ? 'checkbox' : 'radio'} name={groupName} label={o.label} checked={sel.includes(o.id)} disabled={!canVote || busy} onChange={(on) => toggle(o.id, on)}>
+                <Checkbox className={t.pick} type={poll.multi ? 'checkbox' : 'radio'} name={groupName} label={o.label} checked={sel.includes(o.id)} disabled={!canVote || busy} onChange={(on) => toggle(o.id, on)}>
                   <span className="mono" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
-                </MotifCheck>
+                </Checkbox>
               ) : (
                 <div className={t.optRow} style={{ minHeight: 32 }}>
                   <b style={{ flex: 1, overflowWrap: 'anywhere' }}>{winner === o.id ? '✓ ' : ''}{o.label}</b>
@@ -372,14 +386,14 @@ function DecideDialog({ poll, onClose }: { poll: Poll; onClose: () => void }) {
       <fieldset style={{ border: 0, margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <legend className="sr-only">Opção escolhida</legend>
         {options.map((o) => (
-          <MotifCheck key={o.id} className={t.pick} type="radio" name={`decide-${poll.id}`} label={o.label} checked={choice === o.id} onChange={(on) => on && setChoice(o.id)}>
+          <Checkbox key={o.id} className={t.pick} type="radio" name={`decide-${poll.id}`} label={o.label} checked={choice === o.id} onChange={(on) => on && setChoice(o.id)}>
             <span className="mono" style={{ fontSize: 12 }}>{plural(tally.get(o.id) ?? 0, 'voto', 'votos')}</span>
-          </MotifCheck>
+          </Checkbox>
         ))}
       </fieldset>
       {winners.length && !winners.includes(choice) ? <p className={t.warn} role="status">Essa não foi a mais votada.</p> : null}
       {appliable ? (
-        <MotifCheck className={t.pick} label={poll.target === 'stay' ? `Aplicar no roteiro (vira a hospedagem pendente de ${stop!.name})` : `Aplicar no roteiro (vira atividade em ${stop!.name})`} checked={apply} onChange={setApply} />
+        <Checkbox className={t.pick} label={poll.target === 'stay' ? `Aplicar no roteiro (vira a hospedagem pendente de ${stop!.name})` : `Aplicar no roteiro (vira atividade em ${stop!.name})`} checked={apply} onChange={setApply} />
       ) : null}
       {appliable && apply && poll.target === 'activity' ? (
         <label className="field">Dia
@@ -528,7 +542,7 @@ function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset
           {tried && stopProblem ? <span className="err">{stopProblem}</span> : null}
         </label>
       ) : null}
-      <MotifCheck className={t.pick} label="Cada pessoa pode marcar mais de uma" checked={v.multi} onChange={(multi) => setV({ ...v, multi })} />
+      <Checkbox className={t.pick} label="Cada pessoa pode marcar mais de uma" checked={v.multi} onChange={(multi) => setV({ ...v, multi })} />
       <DeadlineFields date={v.date} time={v.time} onChange={(d) => setV({ ...v, ...d })} />
 
       <h3 className="h3" style={{ margin: '8px 0 0' }}>Opções ({opts.length} de 6)</h3>

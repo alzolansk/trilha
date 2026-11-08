@@ -2,7 +2,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, Floaters, Icon, Marquee, PageTitle, useReveal } from '../components/ui/primitives';
+import { AiNote, Icon, PageTitle, useReveal } from '../components/ui/primitives';
 import { documentReaders, grantKey } from '../data/docKeys';
 import { useBundle } from '../data/TripContext';
 import { MissingKeyError, useVault, VaultLockedError } from '../data/VaultContext';
@@ -16,7 +16,7 @@ import { suggestFromText, guessTitleFromFileName } from '../lib/classify';
 import { sortedStops, tripPhase, tripTarget } from '../lib/derive';
 import { extract, normalizedMime, validateFile } from '../lib/extract';
 import { CATEGORY_LABEL, dayMonth, formatBytes, normalize } from '../lib/format';
-import { colorCycle, DOC_CAT_VAR } from '../lib/identity/theme';
+import { CYCLE, DOC_CAT_VAR } from '../lib/identity/accent';
 import { ruleAlerts } from '../lib/rules';
 import { countdown } from '../lib/time';
 import s from './documentos.module.css';
@@ -47,7 +47,7 @@ interface Pending {
 }
 
 export default function Documentos() {
-  const { bundle: b, identity, canEdit, source, reload, me } = useBundle();
+  const { bundle: b, canEdit, source, reload, me } = useBundle();
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
@@ -58,7 +58,7 @@ export default function Documentos() {
   const [over, setOver] = useState(false);
   const [openId, setOpenId] = useState<string | null>(params.get('doc'));
   const stops = useMemo(() => sortedStops(b), [b]);
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const ready = b.documents.filter((d) => d.status === 'ready' || d.owner_id === me);
   const tipoParam = params.get('tipo');
   const cat = tipoParam && LABEL_TO_CAT[tipoParam] ? LABEL_TO_CAT[tipoParam] : 'todos';
@@ -191,7 +191,6 @@ export default function Documentos() {
 
   return (
     <div className="wrap">
-      <Floaters />
       <PageTitle
         eyebrow={`${b.trip.title} · ${phase.kind === 'before' ? `faltam ${days} dias` : phase.kind === 'after' ? 'viagem concluída' : 'em andamento'}`}
         title="Documentos"
@@ -257,11 +256,6 @@ export default function Documentos() {
       </section>
       {tickets.length && !visible.length ? <p style={{ marginTop: 20, color: 'var(--mute)' }}>Nada encontrado para “{q}”.</p> : null}
 
-      {tickets.length ? (
-        <div style={{ marginTop: 72 }}>
-          <Marquee words={tickets.slice(0, 8).map((d) => d.title)} />
-        </div>
-      ) : null}
 
       {shots.length ? (
         <section style={{ marginTop: 64 }}>

@@ -1,0 +1,5 @@
+.seg { display: inline-flex; padding: 4px; gap: 2px; border-radius: 14px; background: var(--field); }
+.block { display: flex; width: 100%; }
+.block > button { flex: 1; }
+.seg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 11px; background: transparent; color: var(--ink-2); font: 600 14px/1 var(--font-body); transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.seg button[aria-checked=true] { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(13, 16, 23, .08); }

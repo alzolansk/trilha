@@ -1,9 +1,9 @@
-﻿/* Trilha Â· service worker
- * - Cacheia o "app shell": assets estÃ¡ticos do Next (imutÃ¡veis), pÃ¡ginas visitadas e fontes.
- * - NÃƒO cacheia dados nem arquivos de usuÃ¡rio (Supabase/API): esses ficam no IndexedDB por conta.
- * - Ao sair da conta, apaga as pÃ¡ginas cacheadas.
+/* Trilha · service worker
+ * - Cacheia o "app shell": assets estáticos do Next (imutáveis), páginas visitadas e fontes.
+ * - NÃO cacheia dados nem arquivos de usuário (Supabase/API): esses ficam no IndexedDB por conta.
+ * - Ao sair da conta, apaga as páginas cacheadas.
  */
-const VERSION = 'v1';
+const VERSION = 'v2'; // Trilha 2.0: rotas novas e visual novo (planning §4.3)
 const STATIC = `trilha-static-${VERSION}`;
 const PAGES = `trilha-pages-${VERSION}`;
 const FONTS = `trilha-fonts-${VERSION}`;
@@ -12,7 +12,7 @@ const KEEP = [STATIC, PAGES, FONTS, TILES];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(PAGES).then((c) => c.addAll(['/', '/entrar', '/offline', '/grain.png']).catch(() => undefined)).then(() => self.skipWaiting()),
+    caches.open(PAGES).then((c) => c.addAll(['/', '/entrar', '/offline']).catch(() => undefined)).then(() => self.skipWaiting()),
   );
 });
 
@@ -83,13 +83,13 @@ self.addEventListener('fetch', (event) => {
   if (url.hostname.endsWith('tile.openstreetmap.org')) {
     event.respondWith(cacheFirst(req, TILES, 400));
   }
-  // Supabase e demais origens: rede direta (dados de usuÃ¡rio nÃ£o passam pelo cache do SW).
+  // Supabase e demais origens: rede direta (dados de usuário não passam pelo cache do SW).
 });
 
 self.addEventListener('message', (event) => {
   const msg = event.data || {};
   if (msg.type === 'warm' && Array.isArray(msg.urls)) {
-    // PrÃ©-carrega as telas da trilha para abrirem offline.
+    // Pré-carrega as telas da trilha para abrirem offline.
     event.waitUntil(
       caches.open(PAGES).then((c) =>
         Promise.all(

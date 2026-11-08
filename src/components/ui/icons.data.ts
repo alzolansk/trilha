@@ -1,4 +1,5 @@
-// Gerado a partir de ref/trilha-prototipo.html (window.TRILHA_DATA). Não editar à mão.
+// Ícones de traço (24×24, 2 px, cantos redondos). Base gerada do protótipo antigo; a Trilha 2.0
+// acrescenta os ícones do canvas (route, back, next, close, info, more, lock, list, minus, settings).
 export const ICONS = {
  "plane": "<path d=\"M10.5 13.5 3 11l18-8-8 18-2.5-7.5Z\"></path>",
  "bus": "<rect x=\"4\" y=\"3\" width=\"16\" height=\"15\" rx=\"3\"></rect><path d=\"M4 11h16M8 18v3M16 18v3\"></path>",
@@ -27,6 +28,16 @@ export const ICONS = {
  "swap": "<path d=\"M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7\"></path>",
  "chev": "<path d=\"m6 9 6 6 6-6\"></path>",
  "sun": "<circle cx=\"12\" cy=\"12\" r=\"4\"></circle><path d=\"M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5\"></path>",
- "heart": "<path d=\"M12 20s-8-4.7-8-10.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5C20 15.3 12 20 12 20Z\"></path>"
+ "heart": "<path d=\"M12 20s-8-4.7-8-10.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5C20 15.3 12 20 12 20Z\"></path>",
+ "route": "<circle cx=\"6\" cy=\"18\" r=\"2.5\"></circle><circle cx=\"18\" cy=\"6\" r=\"2.5\"></circle><path d=\"M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5\"></path>",
+ "back": "<path d=\"M15 6l-6 6 6 6\"></path>",
+ "next": "<path d=\"M9 6l6 6-6 6\"></path>",
+ "close": "<path d=\"M6 6l12 12M18 6 6 18\"></path>",
+ "info": "<circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 11v5M12 8h.01\"></path>",
+ "more": "<path d=\"M5 12h.01M12 12h.01M19 12h.01\"></path>",
+ "lock": "<rect x=\"5\" y=\"10\" width=\"14\" height=\"11\" rx=\"3\"></rect><path d=\"M8 10V7a4 4 0 0 1 8 0v3\"></path>",
+ "list": "<path d=\"M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01\"></path>",
+ "minus": "<path d=\"M5 12h14\"></path>",
+ "settings": "<circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4\"></path>"
 } as const;
 export type IconName = keyof typeof ICONS;

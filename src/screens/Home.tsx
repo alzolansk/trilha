@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AiTag, Floaters, Icon, Marquee, Pattern, type FloatSpot } from '../components/ui/primitives';
+import { AiTag, Icon } from '../components/ui/primitives';
 import { useAction, useToast } from '../components/ui/feedback';
 import { useBundle } from '../data/TripContext';
 import { deleteFile, getFile, saveFile } from '../data/offline';
@@ -12,7 +12,7 @@ import {
 import { pad2 } from '../lib/format';
 import { landscapeInner } from '../lib/identity/render';
 import { clamp01, clipFor, easeOutCubic, pathFractions, routePoints, smoothPath } from '../lib/identity/shapes';
-import { colorCycle } from '../lib/identity/theme';
+import { CYCLE } from '../lib/identity/accent';
 import { compressImage } from '../lib/image';
 import { hasDestination, planSteps } from '../lib/plan';
 import { canDecide, myPendingVotes, pollState, votersCount } from '../lib/polls';
@@ -83,7 +83,7 @@ function TripHome() {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const trip = b.trip;
   const stops = useMemo(() => sortedStops(b), [b]);
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const cover = useCover();
   const target = tripTarget(trip);
   const [now, setNow] = useState(() => Date.now());
@@ -327,8 +327,6 @@ function TripHome() {
       <span className={s.l}>{l}</span>
     </div>
   );
-  const pointsFloat: FloatSpot[] = [['84%', '10%', 150, 'acc2', 0.5, -0.25], ['-40px', '60%', 110, 'acc3', 0.45, 0.2]];
-  const pendFloat: FloatSpot[] = [['78%', '18%', 120, 'acc', 0.45, -0.25], ['8%', '70%', 80, 'acc2', 0.5, 0.2], ['50%', '88%', 60, 'acc3', 0.4, -0.15]];
 
   return (
     <div className={reduced ? s.reduced : undefined}>
@@ -342,9 +340,7 @@ function TripHome() {
       ) : null}
       <section className={`${s.hero} ${identity.split === 'h' ? s.splitH : ''}`} ref={r.hero} aria-label="Contagem regressiva">
         <div className={s.stage}>
-          <div className={s.pat} ref={r.heroPat}>
-            <Pattern identity={identity} />
-          </div>
+          <div className={s.pat} ref={r.heroPat} />
           <div className={s.photo} ref={r.photo} style={{ clipPath: reduced ? 'none' : clipFor(identity.slit, 0, 1280) }}>
             <div ref={r.land} style={{ position: 'absolute', inset: 0, transformOrigin: '50% 60%' }}>
               {cover ? (
@@ -411,9 +407,7 @@ function TripHome() {
       {stops.length ? (
         <section className={s.route} ref={r.route} aria-label="A rota">
           <div className={s.stage}>
-            <div className={s.routePat}>
-              <Pattern identity={identity} />
-            </div>
+            <div className={s.routePat} />
             <div className={s.routeInfo}>
               <span className="eyebrow" style={{ color: 'inherit', opacity: 0.8 }}>
                 A rota · parada <span ref={r.rNum}>1</span> de {stops.length}
@@ -475,14 +469,7 @@ function TripHome() {
         </section>
       )}
 
-      {stops.length ? (
-        <div className={s.marqueeWrap}>
-          <Marquee words={stops.map((x) => x.name.toUpperCase())} />
-        </div>
-      ) : null}
-
       <section className={s.numbers} ref={r.nums} aria-label="A viagem em números">
-        {!reduced ? <Floaters spots={pointsFloat} /> : null}
         <span className="eyebrow" style={{ position: 'relative' }}>A viagem em números</span>
         <div className={s.stats}>
           {stats.map((x, i) => (
@@ -498,7 +485,6 @@ function TripHome() {
       </section>
 
       <section className={s.pending} id="pendencias" ref={r.pend} aria-label="Antes de embarcar">
-        {!reduced ? <Floaters spots={pendFloat} /> : null}
         <span className="eyebrow" style={{ position: 'relative' }}>{phase.kind === 'after' ? 'Fechando a viagem' : 'Antes de embarcar'}</span>
         <ul>
           {rows.length ? (
@@ -528,9 +514,6 @@ function TripHome() {
       </section>
 
       <section className={s.final} ref={r.fin} aria-label="Fim">
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.14 }}>
-          <Pattern identity={identity} />
-        </div>
         <h2 className="disp" ref={r.fTitle} style={{ opacity: reduced ? 1 : 0 }}>
           {phase.kind === 'before' ? (
             <>
@@ -555,7 +538,7 @@ function TripHome() {
           )}
         </h2>
         <div className="actions" ref={r.fAct} style={{ position: 'relative', justifyContent: 'center', opacity: reduced ? 1 : 0 }}>
-          <Link className="btn tap" style={{ background: 'var(--fg-acc)', color: 'var(--acc)', borderColor: 'transparent' }} href={phase.kind === 'after' ? `${base}/diario?momento=depois` : `${base}/roteiro`}>
+          <Link className="btn tap" style={{ background: 'var(--fg-acc)', color: 'var(--acc)', borderColor: 'transparent' }} href={phase.kind === 'after' ? `${base}/turma/diario?momento=depois` : `${base}/roteiro`}>
             {phase.kind === 'after' ? 'Abrir a retrospectiva' : 'Abrir roteiro completo'}
             <Icon name="arrow" size={18} />
           </Link>

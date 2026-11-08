@@ -1,8 +1,10 @@
 # Trilha
 
-Countdown de viagens que vira a central da viagem: roteiro, documentos offline, mala, gastos e diário com a turma. Cada trilha tem uma **identidade visual própria** gerada a partir do destino.
+Countdown de viagens que vira a central da viagem: roteiro, documentos offline, mala, gastos e diário com a turma. No redesign (Trilha 2.0) o visual é fixo e cada trilha guarda só uma cor de destaque (`accent`).
 
-> **Referências de produto:** `ref/SPEC.md` (vence conflitos), `ref/trilha-prototipo.html` (visual e comportamento), `ref/Trilha · Design System.pdf` (conferência visual).
+> **Redesign em andamento (Trilha 2.0):** o plano, o status de cada fase e as ressalvas de handoff estão em [`planning.md`](planning.md). Para visual, navegação e telas, ele tem precedência sobre `ref/SPEC.md`.
+
+> **Referências de produto:** `ref/SPEC.md` (dados, segurança, IA e acessibilidade), `ref/trilha-prototipo.html` (visual e comportamento), `ref/Trilha · Design System.pdf` (conferência visual).
 > O antigo `ref/Design.html` **foi substituído** por essas referências e não é mais usado.
 
 ## Stack

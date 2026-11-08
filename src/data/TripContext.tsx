@@ -2,7 +2,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { DestinationIdentity } from '../lib/identity/types';
 import { DICTIONARY } from '../lib/identity/dictionary';
-import { getBundle, saveBundle } from './offline';
+import { tripAccent } from '../lib/identity/accent';
+import { getBundle, getBundleSavedAt, saveBundle } from './offline';
 import { humanError, type TripSource } from './source';
 import type { Profile, Role, TripBundle } from './types';
 
@@ -10,11 +11,16 @@ interface TripState {
   source: TripSource;
   base: string; // "/t/<id>" ou "/demo/<key>"
   bundle: TripBundle | null;
+  /** @deprecated identidade antiga; só as telas ainda não redesenhadas usam. Use `accent`. */
   identity: DestinationIdentity;
+  /** cor de destaque da trilha (planning §1) */
+  accent: string;
   loading: boolean;
   error: string | null;
   /** dados vindos da cópia local (sem conexão ou servidor indisponível) */
   stale: boolean;
+  /** quando a cópia local mostrada foi salva (ISO), se `stale` */
+  staleSince: string | null;
   role: Role | null;
   canEdit: boolean;
   isOrganizer: boolean;
@@ -31,6 +37,7 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
   const [loading, setLoading] = useState(!initialBundle);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  const [staleSince, setStaleSince] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflight = useRef<Promise<void> | null>(null);
 
@@ -92,6 +99,15 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
     };
   }, [source, reload]);
 
+  useEffect(() => {
+    if (!stale || source.kind !== 'supabase') return setStaleSince(null);
+    let alive = true;
+    void getBundleSavedAt(source.userId, source.tripId).then((at) => alive && setStaleSince(at));
+    return () => {
+      alive = false;
+    };
+  }, [stale, source]);
+
   const value = useMemo<TripState>(() => {
     const me = source.userId;
     const role = bundle?.members.find((m) => m.user_id === me)?.role ?? null;
@@ -101,9 +117,11 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
       base,
       bundle,
       identity,
+      accent: tripAccent(bundle?.trip),
       loading,
       error,
       stale,
+      staleSince,
       role,
       canEdit: role === 'organizer' || role === 'editor',
       isOrganizer: role === 'organizer',
@@ -111,7 +129,7 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
       reload,
       profileOf: (id) => bundle?.profiles.find((p) => p.id === id) ?? null,
     };
-  }, [source, base, bundle, loading, error, stale, reload]);
+  }, [source, base, bundle, loading, error, stale, staleSince, reload]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

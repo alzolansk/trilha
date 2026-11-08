@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
       }
       if (p.task_reminders) {
         const due = (tasks ?? []).filter((x) => x.trip_id === t.id && !x.dismissed && x.due_date && (x.assignee_id === p.user_id || !x.assignee_id) && daysBetween(today, x.due_date) >= 0 && daysBetween(today, x.due_date) <= 1);
-        if (due.length) msgs.push({ title: `${t.title}: pendências`, body: due.map((x) => x.title).slice(0, 3).join(' · '), url: `/t/${t.id}/mala`, tag: `tasks-${t.id}` });
+        if (due.length) msgs.push({ title: `${t.title}: pendências`, body: due.map((x) => x.title).slice(0, 3).join(' · '), url: `/t/${t.id}/turma/mala`, tag: `tasks-${t.id}` });
       }
       if (p.poll_reminders !== false) {
         msgs.push(...pollPushes(t, polls ?? [], pollVotes ?? [], pollsWithOptions, { user_id: p.user_id, role: m.role }, nowMs));

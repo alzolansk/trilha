@@ -99,7 +99,7 @@ export default function Explorar() {
     await run(async () => {
       await source.update('trips', b.trip.id, { destinations: [x.name.slice(0, 80)] });
       await reload();
-      router.push(`${base}/editar`);
+      router.push(`${base}/ajustes`);
     }, { success: `Destino: ${x.name}. Agora gere a identidade.` });
   };
 
@@ -200,7 +200,7 @@ export default function Explorar() {
           </div>
           <EstimateNote model={res.model} />
           {planning && destinationPollId(b) ? <Link href={`${base}/turma#decisoes`} style={{ fontWeight: 600 }}>Ver a votação do destino →</Link> : null}
-          {!planning ? <Link href={`${base}/diario`} style={{ fontWeight: 600 }}>Ver inspirações no Diário →</Link> : null}
+          {!planning ? <Link href={`${base}/turma/diario`} style={{ fontWeight: 600 }}>Ver inspirações no Diário →</Link> : null}
         </section>
       ) : null}
 

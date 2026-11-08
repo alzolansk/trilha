@@ -4,7 +4,7 @@ import { DICTIONARY, matchDictionary } from '@/lib/identity/dictionary';
 import { generateRulesIdentity } from '@/lib/identity/generate';
 import { patternDefs, landscapeInner } from '@/lib/identity/render';
 import { clipFor, motifArea, pathFractions, routePoints, smoothPath } from '@/lib/identity/shapes';
-import { themeVars } from '@/lib/identity/theme';
+import { ACCENT_CHOICES, DEFAULT_ACCENT, DICTIONARY_ACCENT, safeAccent, tripAccent } from '@/lib/identity/accent';
 import { checkContrasts, validateIdentity } from '@/lib/identity/validate';
 
 describe('dicionário bate com o SPEC §4.3', () => {
@@ -33,7 +33,6 @@ describe('dicionário bate com o SPEC §4.3', () => {
     expect(isDark(DICTIONARY.islandia.palette.bg)).toBe(true);
     expect(DICTIONARY.islandia.motifSolid).toContain('93.3% 25%');
     expect(motifArea(DICTIONARY.islandia.motif)!).toBeLessThan(0.55);
-    expect(themeVars(DICTIONARY.islandia)['--card']).toBe('#152A31');
   });
   it('reconhece destinos', () => {
     expect(matchDictionary('Machu Picchu')).toBe('andes');
@@ -119,5 +118,27 @@ describe('validação e gerador local', () => {
     const many = `polygon(${Array.from({ length: 25 }, (_, i) => `${i}% ${i}%`).join(', ')})`;
     expect(validateIdentity({ ...base, motif: many }, { key: 'k', generatedBy: 'ai', version: 1 }).ok).toBe(false);
     expect(validateIdentity({ ...base, pattern: { w: 40, h: 40, shapes: [{ t: 'script', src: 'x' }] } }, { key: 'k', generatedBy: 'ai', version: 1 }).ok).toBe(false);
+  });
+});
+
+describe('accent (Trilha 2.0)', () => {
+  it('as 8 cores aprovadas passam 4.5:1 com texto branco', () => {
+    expect(ACCENT_CHOICES).toHaveLength(8);
+    for (const c of ACCENT_CHOICES) expect(contrast(c.hex, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
+  });
+  it('cores do dicionário passam 3:1 com branco (placeholder e pino)', () => {
+    for (const hex of Object.values(DICTIONARY_ACCENT)) expect(contrast(hex, '#FFFFFF')).toBeGreaterThanOrEqual(3);
+  });
+  it('tripAccent: coluna accent > identidade antiga > dicionário pelo destino > padrão', () => {
+    expect(tripAccent({ accent: '#6A3FD1', identity: DICTIONARY.andes })).toBe('#6A3FD1');
+    expect(tripAccent({ identity: DICTIONARY.andes })).toBe(DICTIONARY_ACCENT.andes);
+    expect(tripAccent({ destinations: ['Kyoto'] })).toBe(DICTIONARY_ACCENT.japao);
+    expect(tripAccent({ destinations: ['Paraty'] })).toBe(DEFAULT_ACCENT);
+    expect(tripAccent(null)).toBe(DEFAULT_ACCENT);
+  });
+  it('safeAccent escurece cor clara demais e recusa hex inválido', () => {
+    const fixed = safeAccent('#FFE066');
+    expect(contrast(fixed, '#FFFFFF')).toBeGreaterThanOrEqual(3);
+    expect(safeAccent('vermelho')).toBe(DEFAULT_ACCENT);
   });
 });

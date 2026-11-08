@@ -40,7 +40,9 @@ export const offlineSupported = () => typeof indexedDB !== 'undefined';
 export async function saveBundle(userId: string, bundle: TripBundle) {
   if (!offlineSupported()) return;
   try {
-    await (await open(userId)).put('bundles', bundle, bundle.trip.id);
+    const db = await open(userId);
+    await db.put('bundles', bundle, bundle.trip.id);
+    await db.put('kv', new Date().toISOString(), `saved-at:${bundle.trip.id}`);
   } catch {
     /* sem espaço: o app continua online */
   }
@@ -50,6 +52,16 @@ export async function getBundle(userId: string, tripId: string): Promise<TripBun
   try {
     const b = (await (await open(userId)).get('bundles', tripId)) as TripBundle | undefined;
     return b ? upgradeBundle(b) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Quando a cópia local desta trilha foi gravada (para a faixa "Mostrando cópia salva de {hora}"). */
+export async function getBundleSavedAt(userId: string, tripId: string): Promise<string | null> {
+  if (!offlineSupported()) return null;
+  try {
+    return ((await (await open(userId)).get('kv', `saved-at:${tripId}`)) as string | undefined) ?? null;
   } catch {
     return null;
   }

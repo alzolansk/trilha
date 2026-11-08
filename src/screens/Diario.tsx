@@ -3,14 +3,14 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, Floaters, Icon, PageTitle, Pattern, useReveal } from '../components/ui/primitives';
+import { AiNote, Icon, PageTitle, useReveal } from '../components/ui/primitives';
 import { useBundle } from '../data/TripContext';
 import type { InspirationValue, JournalEntry, JournalPhoto, Stop, TripBundle } from '../data/types';
 import { callAi } from '../lib/ai/client';
 import { track } from '../lib/analytics';
 import { sortedStops, stopDates, stopIndexOn, tripPhase } from '../lib/derive';
 import { dayMonth, initials, plural } from '../lib/format';
-import { colorCycle } from '../lib/identity/theme';
+import { CYCLE } from '../lib/identity/accent';
 import { compressImage } from '../lib/image';
 import { inspirationScore, myInspirationVote } from '../lib/polls';
 import { ruleRetro } from '../lib/rules';
@@ -47,7 +47,7 @@ function usePhotoUrl(path: string | null | undefined) {
 }
 
 export default function Diario() {
-  const { bundle: b, identity, canEdit, source, reload, me } = useBundle();
+  const { bundle: b, canEdit, source, reload, me } = useBundle();
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
@@ -57,7 +57,7 @@ export default function Diario() {
   const tab: Tab = tabParam && ['antes', 'durante', 'depois'].includes(tabParam) ? tabParam : phase.kind === 'after' ? 'depois' : phase.kind === 'before' ? 'antes' : 'durante';
   const t = TABS.find((x) => x[0] === tab)!;
   const stops = useMemo(() => sortedStops(b), [b]);
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const [entryDlg, setEntryDlg] = useState<{ entry: JournalEntry | null; stopId: string | null } | null>(null);
   const [stopDlg, setStopDlg] = useState<Stop | null>(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -87,7 +87,6 @@ export default function Diario() {
 
   return (
     <div className="wrap">
-      <Floaters />
       <PageTitle
         title="Diário"
         eyebrow={b.trip.title}
@@ -101,8 +100,6 @@ export default function Diario() {
         }
       />
       <div className={`${s.banner} rv`}>
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.12 }}><Pattern identity={identity} /></div>
-        <div aria-hidden="true" style={{ position: 'absolute', right: -40, top: -60, width: 220, height: 220, clipPath: 'var(--motif)', background: 'var(--acc)', opacity: 0.7, animation: 'floaty 8s ease-in-out infinite' }} />
         <div style={{ position: 'relative', flex: '1 1 420px' }}>
           <div className="disp" style={{ fontSize: 34 }}>{t[2]}</div>
           <p style={{ margin: '10px 0 0', fontSize: 17, maxWidth: 620 }}>{t[3]}</p>
@@ -425,7 +422,7 @@ function EntryDialog({ entry, stopId, kind, phase, onClose, me }: { entry: Journ
 }
 
 function Retro() {
-  const { bundle: b, identity } = useBundle();
+  const { bundle: b } = useBundle();
   const r = b.retro?.content ?? null;
   const fallback = useMemo(() => ruleRetro(b), [b]);
   const favs = b.journalEntries.filter((e) => e.favorite);
@@ -439,7 +436,8 @@ function Retro() {
     c.width = W;
     c.height = H;
     const ctx = c.getContext('2d')!;
-    const p = identity.palette;
+    // Paleta fixa da Trilha 2.0 (tokens de globals.css).
+    const p = { bg: '#F5F6F8', deep: '#0D1017', onDeep: '#FFFFFF', routeLine: '#8E9BFF', ink: '#0D1017', mute: '#5B6270' };
     ctx.fillStyle = p.bg;
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = p.deep;
@@ -447,7 +445,7 @@ function Retro() {
     await document.fonts.ready;
     const disp = getComputedStyle(document.documentElement).getPropertyValue('--font-display');
     ctx.fillStyle = p.onDeep;
-    ctx.font = `${identity.display.weight} 84px ${disp}`;
+    ctx.font = `800 84px ${disp}`;
     wrap(ctx, b.trip.title, 80, 200, W - 160, 92);
     ctx.font = `500 26px ${getComputedStyle(document.documentElement).getPropertyValue('--font-mono')}`;
     ctx.fillStyle = p.routeLine;
@@ -456,10 +454,10 @@ function Retro() {
     ctx.font = `400 30px ${getComputedStyle(document.body).fontFamily}`;
     let y = wrap(ctx, content.intro, 80, 600, W - 160, 40) + 30;
     content.chapters.slice(0, 6).forEach((ch, i) => {
-      ctx.fillStyle = [p.acc, p.acc2, p.acc3, p.deep][i % 4];
+      ctx.fillStyle = CYCLE[i % CYCLE.length];
       ctx.fillRect(80, y - 22, 18, 18);
       ctx.fillStyle = p.ink;
-      ctx.font = `${identity.display.weight} 36px ${disp}`;
+      ctx.font = `800 36px ${disp}`;
       ctx.fillText(ch.heading, 116, y);
       ctx.font = `400 24px ${getComputedStyle(document.body).fontFamily}`;
       y = wrap(ctx, ch.text, 116, y + 36, W - 200, 32) + 26;
