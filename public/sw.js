@@ -3,7 +3,7 @@
  * - NÃO cacheia dados nem arquivos de usuário (Supabase/API): esses ficam no IndexedDB por conta.
  * - Ao sair da conta, apaga as páginas cacheadas.
  */
-const VERSION = 'v3'; // Trilha 2.0: fotos da Wikimedia em cache (planning §8.1)
+const VERSION = 'v4'; // v4: miniaturas da Wikimedia também vêm de thumb.wikimedia.org
 const STATIC = `trilha-static-${VERSION}`;
 const PAGES = `trilha-pages-${VERSION}`;
 const FONTS = `trilha-fonts-${VERSION}`;
@@ -86,7 +86,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   // Fotos públicas da Wikimedia (crédito vai junto no dado): cache-first, ~300 entradas.
-  if (url.hostname === 'upload.wikimedia.org') {
+  if (url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') {
     event.respondWith(cacheFirst(req, PHOTOS, 300));
   }
   // Supabase e demais origens: rede direta (dados de usuário não passam pelo cache do SW).

@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceIdea, PlaceMark,
-  PhotoRef, RouteLeg, RouteProposal, TourIdea, TransportMode,
+  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, PlaceAttraction, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceIdea, PlaceMark,
+  RouteLeg, RouteStop, RouteProposal, TourIdea, TransportMode,
 } from '../data/types';
 import { useBundle } from '../data/TripContext';
 import { useAuth } from '../data/AuthContext';
@@ -14,22 +14,24 @@ import { useResolvedPhoto } from '../data/usePhoto';
 import { closeBudget } from '../data/budgetActions';
 import { humanError } from '../data/source';
 import { callAi, callAiOrError } from '../lib/ai/client';
-import { budgetFromPlan, budgetRange, capPerPerson, foodLevels, initialPlan, tourOptions, transportLegs } from '../lib/budgetPlan';
+import { budgetFromPlan, budgetRange, capPerPerson, foodLevels, initialPlan, nightFor, tourOptions, transportLegs } from '../lib/budgetPlan';
 import { VIBES } from '../lib/discover';
 import { MODE_LABEL } from '../lib/format';
 import { formatMoney } from '../lib/money';
 import {
-  adjustNights, assignTourDays, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry, MAX_ROUTE_CALLS, minNightsOfMust,
+  adjustNights, assignTourDays, markOf, routeCost, stopCost, type StopCost, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry, MAX_ROUTE_CALLS, minNightsOfMust,
   moveStop, namesBy, nightsOf, parseOnboarding, placeKey, preselectTours, removeStop, routeToRows, stayEstimatesOf, TRIP_STYLE_OF,
 } from '../lib/onboarding';
 import { headcount } from '../lib/people';
 import { dayMonth } from '../lib/format';
 import { daysBetween } from '../lib/time';
-import { Button, Checkbox, Chip, EmptyState, EstimateBadge, Field, MoneyInput, Photo, ScreenHeader, Segmented, Skeleton } from '../components/ui';
+import { Badge, Button, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, Sheet, Skeleton, type PhotoData } from '../components/ui';
+import type { IconName } from '../components/ui/icons.data';
 import { ChatOptions, StepChat, TrilhaBubble } from '../components/ui/StepChat';
 import { AI_STEPS, AiThinking, Busy } from '../components/ui/Loader';
 import { useAction, useConfirm } from '../components/ui/feedback';
 import { InviteSheet } from './Turma';
+import { DeckSummary, TourDeck, type Decision, type DeckGroup } from './TourDeck';
 import s from './montar.module.css';
 import m from '../components/money/money.module.css';
 
@@ -43,10 +45,10 @@ const STAYS: { value: BudgetStyle; label: string }[] = [
   { value: 'equilibrado', label: 'Pousada / Airbnb' },
   { value: 'conforto', label: 'Hotel' },
 ];
-const MARKS: { value: PlaceMark; label: string }[] = [
-  { value: 'must', label: 'Indispensável' },
-  { value: 'maybe', label: 'Talvez' },
-  { value: 'skip', label: 'Pular' },
+const MARKS: { value: PlaceMark; label: string; icon: IconName }[] = [
+  { value: 'must', label: 'Indispensável', icon: 'heart' },
+  { value: 'maybe', label: 'Talvez', icon: 'sparkle' },
+  { value: 'skip', label: 'Pular', icon: 'close' },
 ];
 const DEFAULT_PREFS: OnboardingPrefs = { vibes: ['cidade', 'comida', 'cultura'], pace: 'moderado', stay: 'equilibrado', budget: null };
 
@@ -144,7 +146,7 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
   const people = headcount(b);
   const [p, setP] = useState<OnboardingPrefs>(() => ob.prefs ?? {
     ...DEFAULT_PREFS,
-    budget: b.trip.budget_total != null && Number(b.trip.budget_total) > 0 ? Math.round(Number(b.trip.budget_total) / people) : null,
+    budget: b.trip.budget_total != null && Number(b.trip.budget_total) > 0 ? Math.round(Number(b.trip.budget_total) * 100 / people) / 100 : null,
   });
   const toggle = (id: string) => setP({ ...p, vibes: p.vibes.includes(id) ? p.vibes.filter((v) => v !== id) : [...p.vibes, id].slice(0, 6) });
   const next = () => run(async () => {
@@ -174,7 +176,7 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
         <Segmented label="Ritmo" value={p.pace} onChange={(pace) => setP({ ...p, pace })} options={PACES} block />
         <p className={s.label}>Onde dormir</p>
         <Segmented label="Onde dormir" value={p.stay} onChange={(stay) => setP({ ...p, stay })} options={STAYS} block />
-        <MoneyInput label="Teto por pessoa (opcional)" currency={b.trip.base_currency} value={p.budget ? p.budget * 100 : null} onChange={(c) => setP({ ...p, budget: c ? Math.round(c / 100) : null })} hint="Com teto, a Trilha avisa quando a viagem passar dele." />
+        <MoneyInput label="Teto por pessoa (opcional)" currency={b.trip.base_currency} value={p.budget ? Math.round(p.budget * 100) : null} onChange={(c) => setP({ ...p, budget: c ? c / 100 : null })} hint="Com teto, a Trilha avisa quando a viagem passar dele." />
         <Button disabled={busy || !p.vibes.length} onClick={next}>{busy ? <Busy>Salvando</Busy> : 'Continuar'}</Button>
       </ChatOptions>
     </StepChat>
@@ -183,27 +185,117 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
 
 // ───────────── Passo 3 · O que não pode faltar ─────────────
 
-function PlaceCard({ p, mark, onMark, photo }: { p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; photo: boolean }) {
-  const resolved = useResolvedPhoto(null, photo ? p.photo_query || `${p.name}` : null, photo);
+/** Escolha com ícone e cor (planning §10.5): Indispensável (verde), Talvez (azul), Pular (cinza). */
+function MarkPicker({ value, onChange, label }: { value: PlaceMark; onChange: (m: PlaceMark) => void; label: string }) {
+  const key = (e: React.KeyboardEvent, i: number) => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const n = (i + d + MARKS.length) % MARKS.length;
+    onChange(MARKS[n].value);
+    (e.currentTarget.parentElement?.children[n] as HTMLElement | undefined)?.focus();
+  };
   return (
-    <article className={s.place} data-place={p.name}>
-      {photo ? <Photo photo={resolved as PhotoRef & { url: string } | null} place={p.name} alt="" height={140} /> : null}
-      <div className={s.placeHead}><h3>{p.name}</h3><small>{p.nights_min === p.nights_max ? `${p.nights_min} noite${p.nights_min > 1 ? 's' : ''}` : `${p.nights_min} a ${p.nights_max} noites`}</small></div>
+    <div role="radiogroup" aria-label={label} className={s.marks}>
+      {MARKS.map((m, i) => (
+        <button key={m.value} type="button" role="radio" aria-checked={value === m.value} tabIndex={value === m.value ? 0 : -1} data-mark={m.value} className={s.mark} onClick={() => onChange(m.value)} onKeyDown={(e) => key(e, i)}>
+          <Icon name={m.icon} size={16} />{m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const nightsText = (a: number, b: number) => (a === b ? `${a} noite${a > 1 ? 's' : ''}` : `${a} a ${b} noites`);
+const hoursText = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : `${String(Math.round(h * 10) / 10).replace('.', ',')}h`);
+const tagLabel = (t: string) => VIBES.find((v) => v.id === t)?.label ?? t;
+
+/** Ponto turístico na janela de detalhes, com foto quando a Wikimedia tiver (busca "Atração, Cidade"). */
+function Attraction({ a, place, photo }: { a: PlaceAttraction; place: string; photo: boolean }) {
+  const resolved = useResolvedPhoto(null, photo ? `${a.name}, ${place}` : null, photo);
+  return (
+    <li className={s.attraction}>
+      <Photo photo={resolved as PhotoData | null} place={a.name} alt="" height={64} caption={false} className={s.attractionPhoto} />
+      <span><b>{a.name}</b>{a.why ? <small>{a.why}</small> : null}</span>
+    </li>
+  );
+}
+
+/** Janela dedicada ao lugar: foto grande, por que ir, o que ver, dica e a escolha. */
+function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, tags, facts, mark, onMark }: {
+  open: boolean; onClose: () => void; name: string; sub: string; query: string; why: string; attractions: PlaceAttraction[];
+  tip?: string | null; tags?: string[]; facts: React.ReactNode; mark: PlaceMark; onMark: (m: PlaceMark) => void;
+}) {
+  const photo = useResolvedPhoto(null, open ? query : null, open);
+  return (
+    <Sheet open={open} onClose={onClose} title={name} description={sub} size="lg" footer={<MarkPicker label={`${name}: quanto quer ir`} value={mark} onChange={onMark} />}>
+      <div className={s.sheetBody}>
+        <Photo photo={photo as PhotoData | null} place={name} alt={`Foto de ${name}`} height={240} />
+        <div className={s.facts}>{facts}</div>
+        <p className={s.why}>{why}</p>
+        {tags?.length ? <div className={s.chips}>{tags.map((t) => <Badge key={t}>{tagLabel(t)}</Badge>)}</div> : null}
+        {attractions.length ? (
+          <section aria-label={`O que ver em ${name}`} className={s.stack}>
+            <h3 className={s.label}>O que ver</h3>
+            <ul className={s.attractions}>{attractions.map((a) => <Attraction key={a.name} a={a} place={name} photo={open} />)}</ul>
+          </section>
+        ) : null}
+        {tip ? <p className={s.tip}><Icon name="sparkle" size={16} /> {tip}</p> : null}
+        <p className={s.muted}>Sugestões da Trilha. Horários, preços e regras de entrada mudam: confira antes de ir.</p>
+      </div>
+    </Sheet>
+  );
+}
+
+function PlaceCard({ p, mark, onMark }: { p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void }) {
+  const [open, setOpen] = useState(false);
+  const query = p.photo_query || p.name;
+  const resolved = useResolvedPhoto(null, query, true);
+  const sights = p.attractions?.length ? p.attractions : (p.highlights ?? []).map((name) => ({ name }));
+  return (
+    <article className={s.place} data-place={p.name} data-mark={mark}>
+      <button type="button" className={s.photoBtn} onClick={() => setOpen(true)} aria-label={`Ver detalhes de ${p.name}`}>
+        <Photo photo={resolved as PhotoData | null} place={p.name} alt="" height={140} caption={false} />
+      </button>
+      <div className={s.placeHead}>
+        <h3>{p.name}</h3>
+        <IconButton icon="info" label={`Mais sobre ${p.name}`} size={40} variant="ghost" onClick={() => setOpen(true)} />
+      </div>
+      <small className={s.muted}>{[p.region, nightsText(p.nights_min, p.nights_max)].filter(Boolean).join(' · ')}</small>
       <p className={s.why}>{p.why}</p>
-      {p.highlights?.length ? <ul className={s.highlights}>{p.highlights.map((h) => <li key={h}>{h}</li>)}</ul> : null}
-      <Segmented label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} options={MARKS} block />
+      {sights.length ? <ul className={s.highlights}>{sights.slice(0, 3).map((h) => <li key={h.name}>{h.name}</li>)}</ul> : null}
+      <MarkPicker label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} />
+      <PlaceSheet
+        open={open} onClose={() => setOpen(false)} name={p.name} sub={[p.region, p.country].filter(Boolean).join(', ')} query={query}
+        why={p.why} attractions={sights} tip={p.tip} tags={p.tags} mark={mark} onMark={onMark}
+        facts={<><Badge>{nightsText(p.nights_min, p.nights_max)}</Badge>{p.country ? <Badge>{p.country}</Badge> : null}</>}
+      />
     </article>
   );
 }
 
 function NearbyCard({ n, mark, onMark, money }: { n: NearbyIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; money: (v: number) => string }) {
-  const hours = n.hours < 1 ? `${Math.round(n.hours * 60)} min` : `${String(Math.round(n.hours * 10) / 10).replace('.', ',')}h`;
+  const [open, setOpen] = useState(false);
+  const query = n.photo_query || n.name;
+  const resolved = useResolvedPhoto(null, query, true);
+  const how = `${hoursText(n.hours)} de ${MODE_LABEL[n.mode as TransportMode]?.toLowerCase() ?? 'viagem'} de ${n.from}`;
   return (
-    <article className={s.place} data-nearby={n.name}>
-      <div className={s.placeHead}><h3>{n.name}{n.country ? <small> · {n.country}</small> : null}</h3><small>{n.kind === 'bate_volta' ? 'bate-volta' : 'pede 1 noite'}</small></div>
-      <p className={s.muted}>{hours} de {MODE_LABEL[n.mode as TransportMode]?.toLowerCase() ?? 'viagem'} de {n.from} · ≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa <EstimateBadge /></p>
+    <article className={s.place} data-nearby={n.name} data-mark={mark}>
+      <button type="button" className={s.photoBtn} onClick={() => setOpen(true)} aria-label={`Ver detalhes de ${n.name}`}>
+        <Photo photo={resolved as PhotoData | null} place={n.name} alt="" height={110} caption={false} />
+      </button>
+      <div className={s.placeHead}>
+        <h3>{n.name}{n.country ? <small> · {n.country}</small> : null}</h3>
+        <IconButton icon="info" label={`Mais sobre ${n.name}`} size={40} variant="ghost" onClick={() => setOpen(true)} />
+      </div>
+      <p className={s.muted}>{n.kind === 'bate_volta' ? 'Bate-volta' : 'Pede 1 noite'} · {how} · ≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa <EstimateBadge /></p>
       <p className={s.why}>{n.why}</p>
-      <Segmented label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} options={MARKS} block />
+      <MarkPicker label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} />
+      <PlaceSheet
+        open={open} onClose={() => setOpen(false)} name={n.name} sub={`${n.country} · perto de ${n.from}`} query={query}
+        why={n.why} attractions={n.attractions ?? []} tip={n.tip} mark={mark} onMark={onMark}
+        facts={<><Badge>{n.kind === 'bate_volta' ? 'bate-volta' : 'pede 1 noite'}</Badge><Badge>{how}</Badge><Badge>≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa</Badge></>}
+      />
     </article>
   );
 }
@@ -274,7 +366,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
     <StepChat label="O que não pode faltar">
       <TrilhaBubble step="3 · Lugares">Separei lugares que combinam com vocês. <b>O que não pode faltar?</b></TrilhaBubble>
       <ChatOptions>
-        <div className={s.grid}>{items.map((p, i) => <PlaceCard key={p.name} p={p} photo={i < 3} mark={marks[placeKey(p.name)] ?? 'maybe'} onMark={mark(p.name)} />)}</div>
+        <div className={s.grid}>{items.map((p) => <PlaceCard key={p.name} p={p} mark={marks[placeKey(p.name)] ?? 'maybe'} onMark={mark(p.name)} />)}</div>
         <div className={s.wishRow}>
           <Field label="Adicionar um lugar"><input value={extra} maxLength={80} placeholder="Ex.: Lucca" onChange={(e) => setExtra(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlace(); } }} /></Field>
           <Button variant="secondary" onClick={addPlace} disabled={!extra.trim()}>Adicionar</Button>
@@ -283,7 +375,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
           <>
             <h2 className={s.label}>Perto daqui</h2>
             <p className={s.muted}>Lugares que ficam perto dos que você viu acima, inclusive em países vizinhos. Muita gente não sabe que dá pra ir.</p>
-            <div className={s.grid}>{nearby.map((n) => <NearbyCard key={n.name} n={n} money={money} mark={marks[placeKey(n.name)] ?? 'skip'} onMark={mark(n.name)} />)}</div>
+            <div className={s.grid}>{nearby.map((n) => <NearbyCard key={n.name} n={n} money={money} mark={marks[placeKey(n.name)] ?? 'maybe'} onMark={mark(n.name)} />)}</div>
           </>
         ) : null}
         <h2 className={s.label}>Algo que vocês querem fazer?</h2>
@@ -301,14 +393,77 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
 
 // ───────────── Passo 4 · Roteiro sugerido ─────────────
 
+const MODE_ICON: Partial<Record<TransportMode, IconName>> = { plane: 'plane', train: 'train', bus: 'bus' };
+const FEEDBACK_IDEAS = ['Menos dias na primeira cidade', 'Quero mais praia', 'Terminar a viagem em Roma', 'Trocar uma cidade por bate-volta'];
+
+/** Trecho entre paradas: ícone do meio, duração e preço por pessoa. */
 function LegLine({ leg, money }: { leg: RouteLeg | null; money: (v: number) => string }) {
   if (!leg) return null;
-  const hours = leg.hours ? ` · ${leg.hours < 1 ? `${Math.round(leg.hours * 60)} min` : `${String(Math.round(leg.hours * 10) / 10).replace('.', ',')}h`}` : '';
+  const price = leg.cost_low != null && leg.cost_high != null ? Math.round((leg.cost_low + leg.cost_high) / 2) : null;
   return (
     <div className={s.leg}>
-      <span>{MODE_LABEL[leg.mode] ?? 'Trecho'} {leg.from} → {leg.to}{hours}</span>
-      {leg.cost_low != null && leg.cost_high != null ? <><span>· ≈ {money(Math.round((leg.cost_low + leg.cost_high) / 2))} / pessoa</span><EstimateBadge /></> : <span>· preço a calcular no Orçamento</span>}
+      <span className={s.legIcon} aria-hidden="true"><Icon name={MODE_ICON[leg.mode] ?? 'route'} size={16} /></span>
+      <span className={s.legText}>{MODE_LABEL[leg.mode] ?? 'Trecho'} {leg.from} → {leg.to}{leg.hours ? ` · ${hoursText(leg.hours)}` : ''}</span>
+      {price != null ? <span className={s.legPrice}>≈ {money(price)} <EstimateBadge /></span> : <span className={s.legPrice}>preço no Orçamento</span>}
     </div>
+  );
+}
+
+const ORIGIN: Record<string, { label: string; icon: IconName; tone: 'ok' | 'brand' | 'neutral' | 'sun' }> = {
+  must: { label: 'Indispensável', icon: 'heart', tone: 'ok' },
+  maybe: { label: 'Talvez', icon: 'sparkle', tone: 'brand' },
+  skip: { label: 'Você pulou', icon: 'close', tone: 'neutral' },
+  nearby: { label: 'Perto daqui', icon: 'pin', tone: 'sun' },
+  added: { label: 'Você adicionou', icon: 'plus', tone: 'ok' },
+  trilha: { label: 'Sugestão da Trilha', icon: 'sparkle', tone: 'neutral' },
+};
+/** Selo de onde veio o lugar: como a pessoa marcou no passo 3, ou sugestão nova da Trilha. */
+function OriginBadge({ name, places, marks }: { name: string; places: OnboardingState['places']; marks: Record<string, PlaceMark> }) {
+  const o = markOf(name, places, marks);
+  const key = o.added ? 'added' : o.mark === 'must' ? 'must' : o.nearby && o.mark !== 'skip' ? 'nearby' : o.mark ?? 'trilha';
+  const v = ORIGIN[key];
+  return <span className={s.origin} data-tone={v.tone}><Icon name={v.icon} size={13} />{v.label}</span>;
+}
+
+function StopCard({ st, i, count, dates, cost, money, places, marks, onNights, onMove, onRemove }: {
+  st: RouteStop; i: number; count: number; dates: { arrival: string; departure: string }; cost: StopCost; money: (v: number) => string;
+  places: OnboardingState['places']; marks: Record<string, PlaceMark>;
+  onNights: (d: 1 | -1) => void; onMove: (d: 1 | -1) => void; onRemove: () => void;
+}) {
+  const photo = useResolvedPhoto(null, st.name, true);
+  return (
+    <article className={s.stopCard} data-stop={st.name}>
+      <div className={s.stopTop}>
+        <Photo photo={photo as PhotoData | null} place={st.name} alt="" height={84} caption={false} className={s.stopPhoto} />
+        <div className={s.stopInfo}>
+          <span className={s.stopNum}>{i + 1}</span>
+          <h3>{st.name}</h3>
+          <small>{st.country ? `${st.country} · ` : ''}{dayMonth(dates.arrival)} a {dayMonth(dates.departure)}</small>
+          <OriginBadge name={st.name} places={places} marks={marks} />
+        </div>
+      </div>
+      <div className={s.stopRow}>
+        <div className={s.stepper} role="group" aria-label={`Noites em ${st.name}`}>
+          <button type="button" className={s.ctl} aria-label={`Uma noite a menos em ${st.name}`} disabled={st.nights <= 1} onClick={() => onNights(-1)}>−</button>
+          <span className={s.nights} aria-label={`${st.nights} noites em ${st.name}`}><Icon name="bed" size={15} />{st.nights}</span>
+          <button type="button" className={s.ctl} aria-label={`Uma noite a mais em ${st.name}`} onClick={() => onNights(1)}>+</button>
+        </div>
+        <div className={s.stopMove}>
+          <button type="button" className={s.ctl} aria-label={`Subir ${st.name}`} disabled={i === 0} onClick={() => onMove(-1)}>↑</button>
+          <button type="button" className={s.ctl} aria-label={`Descer ${st.name}`} disabled={i === count - 1} onClick={() => onMove(1)}>↓</button>
+          <button type="button" className={s.ctl} aria-label={`Tirar ${st.name}`} disabled={count <= 1} onClick={onRemove}>✕</button>
+        </div>
+      </div>
+      <div className={s.stopCost} aria-label={`Custo por pessoa em ${st.name}`}>
+        <b>≈ {money(cost.total)} <small>por pessoa aqui</small></b>
+        <span className={s.costChips}>
+          <span><Icon name="bed" size={14} />{money(cost.stay)}</span>
+          <span><Icon name="wallet" size={14} />comida {money(cost.food)}</span>
+          {cost.trips ? <span><Icon name="route" size={14} />bate-volta {money(cost.trips)}</span> : null}
+        </span>
+      </div>
+      {st.day_trips.length ? <div className={s.chips}>{st.day_trips.map((d) => <Badge key={d.name}>Bate-volta: {d.name} · dia {d.day_offset + 1}</Badge>)}</div> : null}
+    </article>
   );
 }
 
@@ -320,14 +475,16 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   const [route, setRoute] = useState<RouteProposal | null>(ob.route ?? null);
   const [replace, setReplace] = useState(false);
   const [err, setErr] = useState('');
+  const [feedback, setFeedback] = useState('');
   const asked = useRef(false);
   const nights = nightsOf(b.trip);
   const places = ob.places ?? { items: [], nearby: [] };
   const marks = ob.marks ?? {};
   const stale = ob.stale?.includes('route');
   const calls = ob.route_calls ?? 0;
+  const style = ob.prefs?.stay ?? b.trip.budget_plan?.style ?? 'equilibrado';
 
-  const fetchRoute = async (opts: { variant?: 'calmo' | 'mais_lugares'; force?: string[] } = {}) => {
+  const fetchRoute = async (opts: { variant?: 'calmo' | 'mais_lugares'; force?: string[]; feedback?: string } = {}) => {
     if (calls >= MAX_ROUTE_CALLS) return;
     setFail(null);
     setLoading(true);
@@ -335,11 +492,15 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
       kind: 'route', tripId: b.trip.id,
       must: namesBy('must', places.items, places.nearby, marks), maybe: namesBy('maybe', places.items, places.nearby, marks),
       skip: namesBy('skip', places.items, places.nearby, marks), wishes: ob.wishes ?? [], variant: opts.variant ?? null, force: opts.force,
+      feedback: opts.feedback || undefined,
+      // O roteiro como está na tela (com as edições) serve de base para qualquer ajuste.
+      current: route?.stops.map((x) => ({ name: x.name, nights: Math.max(1, x.nights) })),
     };
     const r = await callAiOrError<{ route: RouteProposal }>('explore', body);
     setLoading(false);
     if (!r.ok) { setFail({ unavailable: r.status === 503, error: r.error }); return; }
     setRoute(r.res.data.route);
+    if (opts.feedback) setFeedback('');
     await persist({ ...ob, route: r.res.data.route, route_calls: calls + 1, stale: (ob.stale ?? []).filter((x) => x !== 'route') }).catch(() => undefined);
   };
   useEffect(() => {
@@ -350,22 +511,31 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   if (!route || loading) {
     return (
       <StepChat label="Roteiro sugerido">
-        <TrilhaBubble step="4 · Roteiro">Montando a rota com os seus indispensáveis…</TrilhaBubble>
-        <AiThinking steps={AI_STEPS.route} title="A IA está montando a rota" lines={0} />
-        <div aria-busy="true" className={s.stack}><Skeleton h={60} /><Skeleton h={60} /><Skeleton h={60} /></div>
+        <TrilhaBubble step="4 · Roteiro">{feedback ? 'Refazendo o roteiro com o seu ajuste…' : 'Montando a rota com os seus indispensáveis…'}</TrilhaBubble>
+        <AiThinking steps={AI_STEPS.route} title={feedback ? 'A IA está ajustando a rota' : 'A IA está montando a rota'} lines={0} />
+        <div aria-busy="true" className={s.stack}><Skeleton h={120} /><Skeleton h={160} /><Skeleton h={160} /></div>
       </StepChat>
     );
   }
 
   const dates = datesFor(route, b.trip.start_date);
+  const fallbackNight = nightFor(style);
+  const fallbackFood = foodLevels().medio;
+  const costs = route.stops.map((st) => stopCost(st, style, route.food_pp_day, fallbackNight, fallbackFood));
+  const total = routeCost(route, style, fallbackNight, fallbackFood);
+  const legsTotal = total.legs;
   const mustNames = new Set(namesBy('must', places.items, places.nearby, marks).map(placeKey));
-  const skippedNearby = places.nearby.filter((n) => marks[placeKey(n.name)] === 'skip' && !route.stops.some((x) => placeKey(x.name) === placeKey(n.name))).slice(0, 3);
+  // "Perto daqui" que a rota não usou (nem como parada, nem como bate-volta): atalho para incluir.
+  const used = new Set(route.stops.flatMap((x) => [placeKey(x.name), ...x.day_trips.map((d) => placeKey(d.name))]));
+  const skippedNearby = places.nearby.filter((n) => !used.has(placeKey(n.name))).slice(0, 3);
   const edit = (r: RouteProposal) => setRoute(r);
   const remove = async (i: number) => {
     const st = route.stops[i];
     if (mustNames.has(placeKey(st.name)) && !(await confirm({ title: `Tirar ${st.name}?`, message: `${st.name} estava marcado como indispensável. As noites vão para as outras cidades.`, confirmLabel: 'Tirar do roteiro' }))) return;
     edit(removeStop(route, i, nights));
   };
+  const canAsk = calls < MAX_ROUTE_CALLS && online;
+  const sendFeedback = () => { const f = feedback.trim(); if (f && canAsk) void fetchRoute({ feedback: f }); };
 
   const apply = (force = false) => run(async () => {
     setErr('');
@@ -374,7 +544,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
     const prev = b.trip.budget_plan;
     const plan: BudgetPlan = {
       ...(prev ?? {}),
-      style: ob.prefs?.stay ?? prev?.style ?? 'equilibrado',
+      style,
       pace: ob.prefs?.pace ?? prev?.pace ?? 'moderado',
       stay_estimates: stayEstimatesOf(route, rows.stops.map((x) => x.id)),
       food: 'medio',
@@ -402,51 +572,72 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
 
   return (
     <StepChat label="Roteiro sugerido">
-      <TrilhaBubble step="4 · Roteiro">Montei {nights} noites com os seus indispensáveis. <b>Mexa no que quiser.</b></TrilhaBubble>
+      <TrilhaBubble step="4 · Roteiro">Montei {nights} noites com os seus indispensáveis. <b>Mexa no que quiser</b>, ou peça um ajuste lá embaixo.</TrilhaBubble>
       <ChatOptions>
+        <section className={m.summary} aria-label="Resumo do roteiro">
+          <div className={m.row}>
+            <div><small>Roteiro</small><br /><strong>{route.stops.length} cidades · {nights} noites</strong></div>
+            <div><small>Por pessoa</small><br /><b data-testid="route-total">≈ {money(total.total)}</b></div>
+          </div>
+          <EstimateBadge />
+          <div className={s.lines}>
+            <div className={s.line}><span>Transporte · {[route.outbound, ...route.legs, route.return].filter(Boolean).length} trechos</span><span>{money(legsTotal)}</span></div>
+            <div className={s.line}><span>Hospedagem, comida e bate-voltas nas paradas</span><span>{money(total.stops)}</span></div>
+          </div>
+          {total.pendingLegs ? <small>{total.pendingLegs} trecho(s) sem preço ainda: entram no Orçamento.</small> : null}
+        </section>
+
         <div className={s.timeline} data-testid="route-timeline">
           <LegLine leg={route.outbound} money={money} />
           {route.stops.map((st, i) => (
-            <div key={st.name}>
+            <div key={st.name} className={s.stack}>
               {i > 0 ? <LegLine leg={route.legs[i - 1] ?? null} money={money} /> : null}
-              <div className={s.stop} data-stop={st.name}>
-                <span className={s.dot} aria-hidden="true" />
-                <span className={s.stopName}><b>{st.name}</b><small>{st.country ? `${st.country} · ` : ''}{dayMonth(dates[i].arrival)} a {dayMonth(dates[i].departure)}</small></span>
-                <span className={s.stopCtl}>
-                  <button type="button" className={s.ctl} aria-label={`Uma noite a menos em ${st.name}`} disabled={st.nights <= 1} onClick={() => edit(adjustNights(route, i, -1))}>−</button>
-                  <span className={s.nights} aria-label={`${st.nights} noites em ${st.name}`}>{st.nights} n</span>
-                  <button type="button" className={s.ctl} aria-label={`Uma noite a mais em ${st.name}`} onClick={() => edit(adjustNights(route, i, 1))}>+</button>
-                  <button type="button" className={s.ctl} aria-label={`Subir ${st.name}`} disabled={i === 0} onClick={() => edit(moveStop(route, i, i - 1))}>↑</button>
-                  <button type="button" className={s.ctl} aria-label={`Descer ${st.name}`} disabled={i === route.stops.length - 1} onClick={() => edit(moveStop(route, i, i + 1))}>↓</button>
-                  <button type="button" className={s.ctl} aria-label={`Tirar ${st.name}`} disabled={route.stops.length <= 1} onClick={() => void remove(i)}>✕</button>
-                </span>
-                {st.day_trips.length ? <p className={s.dayTrips}>Bate-volta: {st.day_trips.map((d) => `${d.name} (dia ${d.day_offset + 1})`).join(', ')}</p> : null}
-              </div>
+              <StopCard
+                st={st} i={i} count={route.stops.length} dates={dates[i]} cost={costs[i]} money={money} places={ob.places} marks={marks}
+                onNights={(d) => edit(adjustNights(route, i, d))} onMove={(d) => edit(moveStop(route, i, i + d))} onRemove={() => void remove(i)}
+              />
             </div>
           ))}
           <LegLine leg={route.return} money={money} />
         </div>
+
         {route.left_out.length ? (
-          <>
-            <h2 className={s.label}>Ficou de fora</h2>
+          <section aria-labelledby="left-out" className={s.stack}>
+            <h2 id="left-out" className={s.label}>Ficou de fora</h2>
             {route.left_out.map((l) => (
-              <div key={l.name} className={s.cut}><span><b>{l.name}</b><br /><small className={s.muted}>{l.reason}</small></span>{calls < MAX_ROUTE_CALLS ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => void fetchRoute({ force: [l.name] })}>Incluir</Button> : null}</div>
+              <div key={l.name} className={s.cut}>
+                <span className={s.stack} style={{ gap: 4 }}><b>{l.name}</b><OriginBadge name={l.name} places={ob.places} marks={marks} /><small className={s.muted}>{l.reason}</small></span>
+                {canAsk ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => void fetchRoute({ force: [l.name] })}>Incluir</Button> : null}
+              </div>
             ))}
-          </>
+          </section>
         ) : null}
+
         {route.wishes.length ? (
-          <>
-            <h2 className={s.label}>Seus pedidos</h2>
-            {route.wishes.map((w) => <p key={w.wish} className={s.muted}>{w.wish} → {w.stop ?? 'não achei onde encaixar'}</p>)}
-          </>
+          <section aria-labelledby="wishes" className={s.stack}>
+            <h2 id="wishes" className={s.label}>Seus pedidos</h2>
+            <div className={s.chips}>{route.wishes.map((w) => <span key={w.wish} className={s.origin} data-tone={w.stop ? 'ok' : 'neutral'}><Icon name={w.stop ? 'check' : 'alert'} size={13} />{w.wish} → {w.stop ?? 'não coube'}</span>)}</div>
+          </section>
         ) : null}
-        {calls < MAX_ROUTE_CALLS ? (
-          <div className={s.chips} role="group" aria-label="Refazer a rota">
-            <Chip onClick={() => void fetchRoute({ variant: 'calmo' })}>Mais calmo</Chip>
-            <Chip onClick={() => void fetchRoute({ variant: 'mais_lugares' })}>Mais lugares</Chip>
-            {skippedNearby.map((n) => <Chip key={n.name} onClick={() => void fetchRoute({ force: [n.name] })}>Incluir {n.name}</Chip>)}
+
+        <section className={s.feedback} aria-labelledby="ajuste">
+          <h2 id="ajuste" className={s.label}><Icon name="sparkle" size={14} /> Pedir um ajuste à Trilha</h2>
+          <textarea
+            id="route-feedback" className={s.feedbackInput} rows={2} maxLength={300} value={feedback} disabled={!canAsk}
+            placeholder='Ex.: "Roma ficou com muitos dias", "quero terminar em Milão"' onChange={(e) => setFeedback(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFeedback(); } }}
+            aria-label="Ajuste que você quer no roteiro"
+          />
+          <div className={s.chips}>{FEEDBACK_IDEAS.map((f) => <Chip key={f} size="sm" disabled={!canAsk} onClick={() => setFeedback(f)}>{f}</Chip>)}</div>
+          <div className={s.actions}>
+            <Button size="sm" disabled={!feedback.trim() || !canAsk} onClick={sendFeedback}>Refazer com esse ajuste</Button>
+            <Button size="sm" variant="secondary" disabled={!canAsk} onClick={() => void fetchRoute({ variant: 'calmo' })}>Mais calmo</Button>
+            <Button size="sm" variant="secondary" disabled={!canAsk} onClick={() => void fetchRoute({ variant: 'mais_lugares' })}>Mais lugares</Button>
+            {skippedNearby.map((n) => <Button key={n.name} size="sm" variant="ghost" disabled={!canAsk} onClick={() => void fetchRoute({ force: [n.name] })}>Incluir {n.name}</Button>)}
           </div>
-        ) : <p className={s.muted}>Você já pediu {MAX_ROUTE_CALLS} rotas. Os ajustes de noites e ordem continuam valendo.</p>}
+          <small className={s.muted}>{calls < MAX_ROUTE_CALLS ? `A Trilha refaz a rota a partir do que está na tela. Restam ${MAX_ROUTE_CALLS - calls} pedidos.` : `Você já pediu ${MAX_ROUTE_CALLS} rotas. Os ajustes de noites e ordem continuam valendo.`}</small>
+        </section>
+
         {replace ? (
           <div className={s.note} role="alert">
             Já existe um roteiro nesta trilha. Substituir? Paradas, trechos e passeios atuais serão trocados por este.
@@ -470,8 +661,12 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
   const prefs = ob.prefs ?? DEFAULT_PREFS;
   const [tours, setTours] = useState<Record<string, TourIdea[]>>(ob.tours ?? {});
   const [failed, setFailed] = useState<Set<string>>(new Set());
+  // `pick` = recomendações da Trilha (pelo ritmo e pelos gostos); a decisão é da pessoa, carta a carta.
   const [pick, setPick] = useState<Set<string>>(new Set(ob.tour_pick ?? []));
+  const [decisions, setDecisions] = useState<Record<string, Decision>>(ob.tour_decisions ?? {});
+  const [review, setReview] = useState(false);
   const started = useRef(false);
+  const wishKeys = new Set((ob.wishes ?? []).map((w) => w.toLowerCase().trim()));
 
   useEffect(() => {
     if (started.current || ob.tours_applied) return;
@@ -489,7 +684,8 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
         ...extra,
         ...(r?.data.items ?? []).map((t, i) => ({
           id: `${st.id}:${i}`, title: t.title, why: t.why, duration: t.duration, cost_low: Math.round(Math.min(t.cost_low, t.cost_high) * 100), cost_high: Math.round(Math.max(t.cost_low, t.cost_high) * 100),
-          tags: t.tags ?? [], day_fit: t.day_fit ?? null, photo_query: t.photo_query ?? null, wish: t.wish ?? null,
+          // Só vale como "seu pedido" o que a pessoa escreveu no passo 3 (a IA às vezes marca tudo).
+          tags: t.tags ?? [], day_fit: t.day_fit ?? null, photo_query: t.photo_query ?? null, wish: t.wish && wishKeys.has(t.wish.toLowerCase().trim()) ? t.wish : null,
         })),
       ];
       if (!r) setFailed((f) => new Set([...f, st.id]));
@@ -507,10 +703,19 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const all = stops.flatMap((st) => tours[st.id] ?? []);
-  const picked = all.filter((t) => pick.has(t.id));
+  // O que entra: "quero" nas cartas; carta ainda não decidida segue a recomendação da Trilha.
+  const chosenIds = new Set(all.filter((t) => (decisions[t.id] ? decisions[t.id] === 'yes' : pick.has(t.id))).map((t) => t.id));
+  const picked = all.filter((t) => chosenIds.has(t.id));
   const total = picked.reduce((a, t) => a + Math.round((t.cost_low + t.cost_high) / 2), 0);
   const loadingAny = stops.some((st) => !tours[st.id]);
   const allFailed = !loadingAny && stops.every((st) => failed.has(st.id) && !(tours[st.id] ?? []).length);
+  const finished = !loadingAny && all.every((t) => decisions[t.id]);
+  const groups: DeckGroup[] = stops.map((st) => ({ stop: { id: st.id, name: st.name, nights: Math.max(0, daysBetween(st.arrival_date, st.departure_date)) }, ideas: tours[st.id] }));
+  const acceptRest = () => {
+    const next = { ...decisions };
+    for (const t of all) if (!next[t.id]) next[t.id] = pick.has(t.id) ? 'yes' : 'no';
+    setDecisions(next);
+  };
 
   const next = (skip = false) => run(async () => {
     if (ob.tours_applied) { go(6); return; }
@@ -518,7 +723,7 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
     if (!skip) {
       for (const st of stops) {
         const list = tours[st.id] ?? [];
-        const chosen = list.filter((t) => pick.has(t.id));
+        const chosen = list.filter((t) => chosenIds.has(t.id));
         const days = assignTourDays(st, chosen);
         for (const [i, t] of chosen.entries()) {
           const id = crypto.randomUUID();
@@ -529,7 +734,7 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
             suggested_by: 'ai', cost_cents: Math.round((t.cost_low + t.cost_high) / 2), cost_currency: b.trip.base_currency, cost_is_estimate: true,
           });
         }
-        for (const t of list.filter((x) => !pick.has(x.id))) {
+        for (const t of list.filter((x) => !chosenIds.has(x.id))) {
           await source.insert('suggestions', {
             trip_id: b.trip.id, stop_id: st.id, kind: 'activity', status: 'new', source: 'ai',
             payload: { title: t.title.slice(0, 80), why: t.why ?? null, duration: t.duration ?? null, day_fit: t.day_fit ?? null, cost_low: t.cost_low, cost_high: t.cost_high, currency: b.trip.base_currency, photo_query: t.photo_query ?? null },
@@ -538,7 +743,7 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
       }
     }
     const plan: BudgetPlan = { ...(b.trip.budget_plan ?? { style: prefs.stay, pace: prefs.pace }), activities: skip ? undefined : ids };
-    await persist({ ...ob, step: 6, tours, tour_pick: [...pick], tours_applied: true }, { budget_plan: plan });
+    await persist({ ...ob, step: 6, tours, tour_pick: [...pick], tour_decisions: decisions, tours_applied: true }, { budget_plan: plan });
     await reload();
     go(6);
   });
@@ -559,28 +764,24 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
       </StepChat>
     );
   }
+  const showSummary = finished || review;
+  const summaryValue = Object.fromEntries(all.map((t) => [t.id, chosenIds.has(t.id) ? 'yes' : 'no'])) as Record<string, Decision>;
   return (
     <StepChat label="Passeios por cidade">
-      <TrilhaBubble step="5 · Passeios">Separei passeios por cidade. <b>Desmarque o que não for a cara de vocês.</b></TrilhaBubble>
+      <TrilhaBubble step="5 · Passeios">{showSummary ? <>Pronto! Esses são os passeios que entram. <b>Toque para trocar.</b></> : <>Um passeio por vez: <b>quero</b> ou <b>pular</b>?</>}</TrilhaBubble>
       <ChatOptions>
-        {stops.map((st) => {
-          const list = tours[st.id];
-          const nights = Math.max(0, daysBetween(st.arrival_date, st.departure_date));
-          return (
-            <section key={st.id} className={s.city} aria-label={`Passeios em ${st.name}`}>
-              <h3>{st.name} · {nights} noite{nights === 1 ? '' : 's'}</h3>
-              {!list ? <AiThinking steps={AI_STEPS.tours} title={`Passeios em ${st.name}`} lines={2} compact /> : !list.length ? <p className={s.muted}>Sem sugestões agora.</p> : list.map((t) => (
-                <div key={t.id} className={s.tour}>
-                  <Checkbox label={t.title} hideLabel checked={pick.has(t.id)} onChange={(on) => { const n = new Set(pick); if (on) n.add(t.id); else n.delete(t.id); setPick(n); }}>
-                    <span className={s.tourText} aria-hidden="true"><b>{t.title}{t.wish ? <span className={s.wish}>seu pedido</span> : null}</b><small>{[t.duration, t.why].filter(Boolean).join(' · ')}</small></span>
-                  </Checkbox>
-                  <span className={s.price}>{t.cost_high === 0 ? 'grátis' : `≈ ${money(Math.round((t.cost_low + t.cost_high) / 2))}`}</span>
-                </div>
-              ))}
-            </section>
-          );
-        })}
-        <div className={s.foot}>
+        {showSummary ? (
+          <>
+            <DeckSummary groups={groups} value={summaryValue} onChange={setDecisions} money={money} />
+            {!finished ? <Button variant="ghost" onClick={() => setReview(false)}>Voltar para as cartas</Button> : null}
+          </>
+        ) : (
+          <>
+            <TourDeck groups={groups} value={decisions} onChange={setDecisions} recommended={pick} wishes={ob.wishes ?? []} money={money} onAcceptRest={acceptRest} />
+            <Button variant="ghost" onClick={() => setReview(true)} disabled={loadingAny}>Ver a lista inteira</Button>
+          </>
+        )}
+        <div className={s.foot} data-static={!showSummary}>
           <span><b>{picked.length} passeios</b> · ≈ {money(total)} por pessoa <EstimateBadge /></span>
           <Button disabled={busy || loadingAny} onClick={() => next(false)}>{busy ? <Busy>Salvando</Busy> : 'Ver quanto custa'}</Button>
         </div>

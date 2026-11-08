@@ -42,18 +42,18 @@ export const onboardingOpen = (t: Pick<Trip, 'onboarding'>) => parseOnboarding(t
 /** Noites da viagem (0 numa viagem de um dia). */
 export const nightsOf = (t: Pick<Trip, 'start_date' | 'end_date'>) => Math.max(0, daysBetween(t.start_date, t.end_date));
 
-export const MAX_ROUTE_CALLS = 6;
+export const MAX_ROUTE_CALLS = 10;
 
 /** `trips.style` coerente com o estilo de hospedagem escolhido no passo 2. */
 export const TRIP_STYLE_OF: Record<BudgetStyle, TripStyle> = { economico: 'Mochilão', equilibrado: 'Cultural', conforto: 'Conforto' };
 
 // ───────────── Passo 3 ─────────────
 
-/** Marcações iniciais: lugares "talvez", perto daqui "pular", adicionados à mão "não pode faltar". Mantém as já feitas. */
+/** Marcações iniciais: lugares e "perto daqui" como "talvez", adicionados à mão "indispensável". Mantém as já feitas. */
 export function defaultMarks(items: PlaceIdea[], nearby: NearbyIdea[], current: Record<string, PlaceMark> = {}): Record<string, PlaceMark> {
   const out: Record<string, PlaceMark> = {};
   for (const p of items) out[placeKey(p.name)] = current[placeKey(p.name)] ?? (p.added ? 'must' : 'maybe');
-  for (const n of nearby) out[placeKey(n.name)] = current[placeKey(n.name)] ?? 'skip';
+  for (const n of nearby) out[placeKey(n.name)] = current[placeKey(n.name)] ?? 'maybe';
   return out;
 }
 
@@ -244,6 +244,50 @@ export function foodByCountry(
     return { low: avg('low'), high: avg('high') };
   }
   return { low: Math.round(low / w), high: Math.round(high / w) };
+}
+
+export interface StopCost {
+  /** hospedagem por pessoa na parada (diária × noites) */
+  stay: number;
+  /** comida por pessoa na parada (diária do país × noites, no mínimo 1 dia) */
+  food: number;
+  /** bate-voltas da parada, por pessoa */
+  trips: number;
+  total: number;
+  /** a diária veio da referência geral (a IA não deu faixa para o estilo) */
+  stayIsReference: boolean;
+}
+
+const midOf = (r: { low: number; high: number } | undefined | null) => (r ? Math.round((r.low + r.high) / 2) : null);
+
+/**
+ * Quanto custa ficar na parada, por pessoa (planning §10.6): hospedagem no estilo escolhido, comida do país
+ * e bate-voltas. Sem faixa da IA, usa a referência do estilo (`nightFor`) e a diária média de comida.
+ */
+export function stopCost(stop: RouteStop, style: BudgetStyle, food: RouteProposal['food_pp_day'], fallbackNight: number, fallbackFood: number): StopCost {
+  const nightRange = midOf(stop.stay_pp_night?.[style] ?? null);
+  const stay = (nightRange ?? fallbackNight) * Math.max(0, stop.nights);
+  const country = food.find((f) => placeKey(f.country) === placeKey(stop.country)) ?? null;
+  const day = country ? Math.round((country.low + country.high) / 2) : food.length ? Math.round(food.reduce((a, f) => a + (f.low + f.high) / 2, 0) / food.length) : fallbackFood;
+  const foodTotal = day * Math.max(1, stop.nights);
+  const trips = stop.day_trips.reduce((a, d) => a + Math.round((d.cost_low + d.cost_high) / 2), 0);
+  return { stay, food: foodTotal, trips, total: stay + foodTotal + trips, stayIsReference: nightRange == null };
+}
+
+/** Total por pessoa da rota proposta: ida, trechos, volta e o custo de cada parada. */
+export function routeCost(route: RouteProposal, style: BudgetStyle, fallbackNight: number, fallbackFood: number): { legs: number; stops: number; total: number; pendingLegs: number } {
+  const all = [route.outbound, ...route.legs, route.return].filter((l): l is RouteLeg => !!l);
+  const legs = all.reduce((a, l) => a + (mid(l) ?? 0), 0);
+  const stops = route.stops.reduce((a, st) => a + stopCost(st, style, route.food_pp_day, fallbackNight, fallbackFood).total, 0);
+  return { legs, stops, total: legs + stops, pendingLegs: all.filter((l) => mid(l) == null).length };
+}
+
+/** Como a pessoa tinha marcado um lugar no passo 3 (para "Ficou de fora" e para o selo da parada). */
+export function markOf(name: string, places: { items: PlaceIdea[]; nearby: NearbyIdea[] } | null | undefined, marks: Record<string, PlaceMark>): { mark: PlaceMark | null; nearby: boolean; added: boolean } {
+  const k = placeKey(name);
+  const item = places?.items.find((p) => placeKey(p.name) === k);
+  const near = places?.nearby.find((n) => placeKey(n.name) === k);
+  return { mark: marks[k] ?? null, nearby: !!near && !item, added: !!item?.added };
 }
 
 // ───────────── Passo 5 ─────────────

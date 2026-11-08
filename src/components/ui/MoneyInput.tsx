@@ -27,6 +27,27 @@ export function formatMoneyTyping(text: string): string {
 
 const centsToText = (c: number | null) => (c == null ? '' : formatMoneyTyping((c / 100).toFixed(2).replace('.', ',').replace(/,00$/, '')));
 
+/**
+ * Próximo texto do campo depois de uma edição. `prev` é o texto formatado anterior, `value` o que o
+ * navegador entregou e `caret` a posição do cursor depois da edição.
+ * O teclado decimal do celular às vezes só tem ".", então um ponto RECÉM-DIGITADO vira a vírgula decimal.
+ * Os pontos que já estavam lá são separadores de milhar postos pela formatação: saem e são refeitos
+ * (antes, "2.000" + "0" virava "2,0000" → "2,00").
+ */
+export function nextMoneyText(prev: string, value: string, caret: number | null): string {
+  if (value.includes(',')) return formatMoneyTyping(value);
+  // Colou um valor inteiro (ex.: "1234.56" ou "1.234"): interpreta como número.
+  if (value.length - prev.length > 1) {
+    const cents = parseMoneyInput(value);
+    return cents == null ? '' : centsToText(cents);
+  }
+  const at = (caret ?? value.length) - 1;
+  if (value.length > prev.length && value[at] === '.') {
+    return formatMoneyTyping(`${value.slice(0, at).replace(/\./g, '')},${value.slice(at + 1).replace(/\./g, '')}`);
+  }
+  return formatMoneyTyping(value);
+}
+
 /** Valor grande (40 px), teclado decimal, prefixo de moeda trocável e formatação pt-BR enquanto digita. */
 export function MoneyInput({ label, value, onChange, currency = 'BRL', onCurrencyClick, autoFocus, hint, error, hideLabel }: {
   label: string;
@@ -69,8 +90,7 @@ export function MoneyInput({ label, value, onChange, currency = 'BRL', onCurrenc
           aria-invalid={!!error || undefined}
           aria-describedby={hint || error ? `${id}-h` : undefined}
           onChange={(e) => {
-            const raw = e.target.value.replace('.', e.target.value.includes(',') ? '' : ',');
-            const f = formatMoneyTyping(raw);
+            const f = nextMoneyText(text, e.target.value, e.target.selectionStart);
             setText(f);
             onChange(parseMoneyInput(f));
           }}

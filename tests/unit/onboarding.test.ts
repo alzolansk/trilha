@@ -44,7 +44,7 @@ describe('passo 3', () => {
 
   it('marcações iniciais e mínimo de noites dos indispensáveis', () => {
     const m = defaultMarks(items, [near('Siena', 'Florença', 1.2)], { roma: 'must' });
-    expect(m).toEqual({ roma: 'must', florenca: 'maybe', lucca: 'must', siena: 'skip' });
+    expect(m).toEqual({ roma: 'must', florenca: 'maybe', lucca: 'must', siena: 'maybe' });
     expect(minNightsOfMust(items, [], m)).toBe(4);
   });
 
@@ -234,5 +234,25 @@ describe('Orçamento (§10.10) e pessoas na viagem (§10.9)', () => {
     const r2 = budgetFromPlan(b, { ...p, transport_cents: { ...p.transport_cents, volta: 31000 } });
     const text = describeChanges(diffSince(snap, b, r2), (c) => `R$ ${c / 100}`);
     expect(text).toEqual(['+R$ 310 em transporte por pessoa']);
+  });
+});
+
+describe('passo 4 · custo por parada e origem', () => {
+  it('stopCost soma diária × noites, comida do país e bate-voltas', async () => {
+    const { stopCost, routeCost, markOf } = await import('@/lib/onboarding');
+    const st = { ...stop('Roma', 4), stay_pp_night: { equilibrado: { low: 20000, high: 30000 } }, day_trips: [{ name: 'Tivoli', day_offset: 1, cost_low: 4000, cost_high: 6000 }] };
+    const food = [{ country: 'Itália', low: 18000, high: 30000 }];
+    const c = stopCost(st, 'equilibrado', food, 9000, 7000);
+    expect(c).toEqual({ stay: 100000, food: 96000, trips: 5000, total: 201000, stayIsReference: false });
+    // Sem faixa para o estilo: referência
+    expect(stopCost(st, 'conforto', [], 17100, 7000)).toMatchObject({ stay: 68400, food: 28000, stayIsReference: true });
+    const r = italia();
+    const t = routeCost(r, 'equilibrado', 9000, 7000);
+    expect(t.legs).toBe(580000 + 4 * 18000 + 350000);
+    expect(t.total).toBe(t.legs + t.stops);
+    const places = { items: [{ name: 'Roma', country: 'Itália', why: 'x', nights_min: 3, nights_max: 4 }], nearby: [{ name: 'Tivoli', country: 'Itália', why: 'x', from: 'Roma', mode: 'bus' as const, hours: 1, kind: 'bate_volta' as const, cost_low: 1, cost_high: 2 }] };
+    expect(markOf('roma', places, { roma: 'must' })).toEqual({ mark: 'must', nearby: false, added: false });
+    expect(markOf('Tivoli', places, { tivoli: 'maybe' })).toEqual({ mark: 'maybe', nearby: true, added: false });
+    expect(markOf('Bolonha', places, {})).toEqual({ mark: null, nearby: false, added: false });
   });
 });

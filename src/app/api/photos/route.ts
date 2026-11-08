@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
     if (!photo) photo = await find(ask, lang === 'pt' ? 'en' : 'pt');
     return NextResponse.json(
       { photo },
-      { headers: { 'Cache-Control': `private, max-age=${photo ? MONTH : 60 * 60 * 24}` } },
+      // Sem foto: guarda só 1 hora (pode ser falha passageira da Wikimedia).
+      { headers: { 'Cache-Control': `private, max-age=${photo ? MONTH : 60 * 60}` } },
     );
   } catch {
     return NextResponse.json({ error: 'Fotos indisponíveis agora.' }, { status: 502 });

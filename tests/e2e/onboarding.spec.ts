@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const places = {
   items: [
-    { name: 'Reykjavík', region: 'Capital', country: 'Islândia', lat: 64.15, lng: -21.94, why: 'Base perfeita para começar e terminar.', nights_min: 2, nights_max: 3, highlights: ['Hallgrímskirkja'], photo_query: null, tags: ['cidade'] },
+    { name: 'Reykjavík', region: 'Capital', country: 'Islândia', lat: 64.15, lng: -21.94, why: 'Base perfeita para começar e terminar.', nights_min: 2, nights_max: 3, highlights: ['Hallgrímskirkja'], photo_query: null, tags: ['cidade'], attractions: [{ name: 'Hallgrímskirkja', why: 'Igreja com mirante sobre a cidade.' }, { name: 'Harpa', why: 'Centro de concertos à beira-mar.' }], tip: 'Compre o passe da cidade.' },
     { name: 'Vík', region: 'Sul', country: 'Islândia', lat: 63.42, lng: -19.01, why: 'Praia de areia preta e falésias.', nights_min: 1, nights_max: 2, highlights: [], photo_query: null, tags: ['natureza'] },
     { name: 'Höfn', region: 'Sudeste', country: 'Islândia', lat: 64.25, lng: -15.2, why: 'Perto da lagoa glacial.', nights_min: 1, nights_max: 2, highlights: [], photo_query: null, tags: ['natureza'] },
   ],
@@ -34,9 +34,11 @@ const activities = { items: [
 
 async function mockAi(page: Page, opts: { placesStatus?: number } = {}) {
   const calls: string[] = [];
+  const bodies: Record<string, unknown>[] = [];
   await page.route('**/api/ai/explore', async (r) => {
     const body = r.request().postDataJSON() as { kind: string };
     calls.push(body.kind);
+    bodies.push(body);
     if (body.kind === 'places') {
       if (opts.placesStatus) return r.fulfill({ status: opts.placesStatus, contentType: 'application/json', body: JSON.stringify({ error: 'As sugestões precisam da IA, que não está configurada neste app.' }) });
       return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: places, by: 'ai' }) });
@@ -46,7 +48,7 @@ async function mockAi(page: Page, opts: { placesStatus?: number } = {}) {
     return r.fulfill({ status: 404, body: '{}' });
   });
   await page.route('**/api/photos*', (r) => r.fulfill({ contentType: 'application/json', body: 'null' }));
-  return calls;
+  return Object.assign(calls, { bodies });
 }
 
 test.describe('Onboarding roteirizado', () => {
@@ -62,6 +64,14 @@ test.describe('Onboarding roteirizado', () => {
     await rk.getByRole('radio', { name: 'Indispensável' }).click();
     await expect(page.getByRole('heading', { name: 'Perto daqui' })).toBeVisible();
     await expect(page.locator('[data-nearby="Selfoss"]')).toContainText('de Reykjavík');
+    // "Perto daqui" começa como Talvez (não como Pular)
+    await expect(page.locator('[data-nearby="Selfoss"]').getByRole('radio', { name: 'Talvez' })).toHaveAttribute('aria-checked', 'true');
+    // Janela de detalhes do lugar
+    await rk.getByRole('button', { name: 'Mais sobre Reykjavík' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Reykjavík' });
+    await expect(sheet.getByText('O que ver')).toBeVisible();
+    await expect(sheet).toContainText('Hallgrímskirkja');
+    await sheet.getByRole('button', { name: /Fechar/ }).first().click();
     await page.getByRole('button', { name: 'Montar o roteiro' }).click();
 
     // Passo 4: rota com ida, paradas e volta; + e − mantêm a soma
@@ -73,13 +83,27 @@ test.describe('Onboarding roteirizado', () => {
     await expect(page.getByLabel('3 noites em Vík')).toBeVisible();
     const nights = await page.locator('[aria-label$="noites em Reykjavík"], [aria-label$="noites em Vík"], [aria-label$="noites em Höfn"]').allInnerTexts();
     expect(nights.reduce((a, t) => a + parseInt(t, 10), 0)).toBe(8);
+    // Custo por parada e de onde veio cada lugar
+    await expect(page.locator('[data-stop="Reykjavík"]')).toContainText('por pessoa aqui');
+    await expect(page.locator('[data-stop="Reykjavík"]')).toContainText('Indispensável');
+    // Pedido de ajuste em texto: vai para a IA com o roteiro atual (já com a edição de Vík)
+    await page.getByLabel('Ajuste que você quer no roteiro').fill('Höfn ficou com muitos dias');
+    await page.getByRole('button', { name: 'Refazer com esse ajuste' }).click();
+    await expect(page.getByTestId('route-timeline')).toBeVisible();
+    const ask = calls.bodies.filter((x) => x.kind === 'route').at(-1) as { feedback?: string; current?: { name: string; nights: number }[] };
+    expect(ask.feedback).toBe('Höfn ficou com muitos dias');
+    expect(ask.current).toContainEqual({ name: 'Vík', nights: 3 });
     await page.getByRole('button', { name: 'Gostei, ver passeios' }).click();
     // A demo já tem roteiro: pede para substituir
     await page.getByRole('button', { name: 'Substituir' }).click();
 
-    // Passo 5: passeios por cidade, bate-volta já marcado
+    // Passo 5: baralho, um passeio por vez
     await expect(page.getByText('Passo 5 de 6')).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: 'Bate-volta: Círculo Dourado' })).toBeChecked();
+    await page.getByRole('button', { name: 'Quero Bate-volta: Círculo Dourado' }).click();
+    await page.getByRole('button', { name: 'Pular Lagoa glacial de barco' }).click();
+    await page.getByRole('button', { name: 'Aceitar as recomendações da Trilha para o resto' }).click();
+    await expect(page.getByText('Esses são os passeios que entram')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Bate-volta: Círculo Dourado/ })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Ver quanto custa' }).click();
 
     // Passo 6: orçamento completo
@@ -97,7 +121,7 @@ test.describe('Onboarding roteirizado', () => {
     await expect(page.getByRole('navigation', { name: 'Paradas' })).toContainText('Höfn');
     await expect(page.getByText(/Voo Höfn → GRU/)).toBeVisible();
     expect(calls.filter((c) => c === 'places')).toHaveLength(1);
-    expect(calls.filter((c) => c === 'route')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'route')).toHaveLength(2);
   });
 
   test('sem IA, vai direto para o roteiro manual', async ({ page }) => {

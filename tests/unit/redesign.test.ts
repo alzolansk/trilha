@@ -212,7 +212,7 @@ describe('photos', () => {
     expect(pickPageImage({ query: { pages: [{ title: 'Lima', pageimage: 'Lima.jpg' }] } }, 'San Blas, Cusco')).toBeNull();
   });
 
-  it('parse do extmetadata: autor sem HTML, licença obrigatória, só upload.wikimedia.org', () => {
+  it('parse do extmetadata: autor sem HTML, licença obrigatória, só imagens da Wikimedia', () => {
     const json = {
       query: {
         pages: [{
@@ -231,7 +231,7 @@ describe('photos', () => {
       author: 'Fulano & Cia', license: 'CC BY-SA 4.0', source_url: 'https://commons.wikimedia.org/wiki/File:Cusco.jpg',
     });
     expect(photoCredit(p)).toBe('Foto: Fulano & Cia · CC BY-SA 4.0 · Wikimedia Commons');
-    expect(photoSrcSet(p.url!)).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/400px-Cusco.jpg 400w, https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/800px-Cusco.jpg 800w, https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/1200px-Cusco.jpg 1200w');
+    expect(photoSrcSet(p.url!)).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/500px-Cusco.jpg 500w, https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/960px-Cusco.jpg 960w, https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/1280px-Cusco.jpg 1280w');
     expect(photoSrcSet('https://exemplo.com/foto.jpg')).toBeNull();
     expect(thumbAt(p.url!, 400)).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/400px-Cusco.jpg');
     const noLicense = structuredClone(json);
@@ -241,5 +241,11 @@ describe('photos', () => {
     other.query.pages[0].imageinfo[0].thumburl = 'https://exemplo.com/x.jpg';
     expect(parseImageInfo(other)).toBeNull();
     expect(stripHtml('<span>Ana</span>&nbsp;<b>Silva</b>')).toBe('Ana Silva');
+    // Formato atual da Wikimedia: miniatura em thumb.wikimedia.org, com parâmetros de rastreio na URL.
+    const thumbHost = structuredClone(json);
+    thumbHost.query.pages[0].imageinfo[0].thumburl = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/1280px-Cusco.jpg?utm_source=pt.wikipedia.org&utm_campaign=imageinfo';
+    const t = parseImageInfo(thumbHost)!;
+    expect(t.url).toBe('https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/1280px-Cusco.jpg');
+    expect(photoSrcSet(t.url!)).toContain('https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Cusco.jpg/500px-Cusco.jpg 500w');
   });
 });

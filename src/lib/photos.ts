@@ -11,10 +11,16 @@ export const WIKI_USER_AGENT = 'Trilha/2.0 (app de planejamento de viagens em gr
 
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-/** Imagens que não são foto do lugar: brasões, bandeiras, mapas, logos, desenhos vetoriais. */
+/**
+ * Hosts de imagem da Wikimedia. Desde 2026 as miniaturas vêm de thumb.wikimedia.org (antes, upload.wikimedia.org/…/thumb/…);
+ * os dois continuam valendo. Sem aceitar o thumb, toda foto com miniatura era descartada.
+ */
+export const isWikimediaImage = (url: string) => /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(url);
+
+/** Imagens que não são foto do lugar: brasões, bandeiras, mapas, logos, desenhos vetoriais. Colagem da cidade vale. */
 export function isUnfitImage(fileName: string): boolean {
   return /\.(svg|gif)$/i.test(fileName)
-    || /(flag|bandeira|bandera|coat[ _]of[ _]arms|bras[aã]o|escudo|emblem|logo|seal|selo|map|mapa|locator|location|localiza|montage|collage|icon)/i.test(fileName);
+    || /(flag|bandeira|bandera|coat[ _]of[ _]arms|bras[aã]o|escudo|emblem|logo|seal|selo|map|mapa|locator|location|localiza|icon)/i.test(fileName);
 }
 
 /**
@@ -38,7 +44,7 @@ export function searchUrl(lang: WikiLang, q: { q?: string; title?: string }): st
 }
 
 /** Metadados do arquivo (Commons é repositório compartilhado: a Wikipedia responde por ele). */
-export function imageInfoUrl(lang: WikiLang, fileName: string, width = 1200): string {
+export function imageInfoUrl(lang: WikiLang, fileName: string, width = 1280): string {
   return api(lang, {
     prop: 'imageinfo', titles: `File:${fileName}`, iiprop: 'url|size|extmetadata', iiurlwidth: String(width),
     iiextmetadatafilter: 'Artist|LicenseShortName|Credit',
@@ -85,7 +91,7 @@ export function parseImageInfo(json: ImageInfoJson): PhotoRef | null {
   const info = json.query?.pages?.[0]?.imageinfo?.[0];
   if (!info) return null;
   const url = info.thumburl ?? info.url;
-  if (!url || !/^https:\/\/upload\.wikimedia\.org\//.test(url)) return null;
+  if (!url || !isWikimediaImage(url)) return null;
   const meta = info.extmetadata ?? {};
   const license = stripHtml(meta.LicenseShortName?.value ?? '');
   if (!license) return null;
@@ -112,19 +118,21 @@ export function thumbAt(url: string, width: number): string {
   return url.replace(/\/(\d+)px-([^/]+)$/, `/${width}px-$2`);
 }
 
-/** Larguras do srcset (planning §9: 400/800/1200). Se a Wikimedia passar a recusar tamanhos fora dos "degraus" oficiais, é só trocar aqui. */
-export const PHOTO_WIDTHS = [400, 800, 1200] as const;
+/** Larguras do srcset: os "degraus" de miniatura que a Wikimedia serve (pedir 1200 devolve 1280). */
+export const PHOTO_WIDTHS = [500, 960, 1280] as const;
 
 /** srcset com as variantes do thumb da Wikimedia; null para qualquer outra origem (upload próprio, URL assinada). */
 export function photoSrcSet(url: string, widths: readonly number[] = PHOTO_WIDTHS): string | null {
-  if (!/^https:\/\/upload\.wikimedia\.org\/.+\/\d+px-[^/]+$/.test(url)) return null;
+  if (!/^https:\/\/(upload|thumb)\.wikimedia\.org\/.+\/\d+px-[^/]+$/.test(url)) return null;
   return widths.map((w) => `${thumbAt(url, w)} ${w}w`).join(', ');
 }
 
 /** Navegador: pede a foto ao servidor. null quando não há (ou sem login/rede): o Photo mostra o placeholder. */
 export async function fetchPhoto(q: string, lang: WikiLang = 'pt'): Promise<PhotoRef | null> {
   try {
-    const r = await fetch(`/api/photos?${new URLSearchParams({ q, lang })}`);
+    // `v` muda a chave do cache do navegador: respostas "sem foto" guardadas antes da correção do
+    // thumb.wikimedia.org (que eram falsas) deixam de valer na hora.
+    const r = await fetch(`/api/photos?${new URLSearchParams({ q, lang, v: '2' })}`);
     if (!r.ok) return null;
     const j = (await r.json()) as { photo: PhotoRef | null };
     return j.photo ?? null;

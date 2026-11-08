@@ -126,6 +126,8 @@ export const explorePlacesSchema = z.object({
     highlights: z.array(z.string().min(2).max(80)).max(3).default([]),
     photo_query: z.string().max(80).nullable().optional(),
     tags: z.array(z.string().max(20)).max(6).default([]),
+    attractions: z.array(z.object({ name: z.string().min(2).max(80), why: z.string().max(200).nullable().optional() })).max(6).default([]),
+    tip: z.string().max(220).nullable().optional(),
   })).min(3).max(12),
   nearby: z.array(z.object({
     name: z.string().min(2).max(80),
@@ -139,6 +141,8 @@ export const explorePlacesSchema = z.object({
     cost_low: money,
     cost_high: money,
     photo_query: z.string().max(80).nullable().optional(),
+    attractions: z.array(z.object({ name: z.string().min(2).max(80), why: z.string().max(200).nullable().optional() })).max(4).default([]),
+    tip: z.string().max(220).nullable().optional(),
   })).max(10).default([]),
 });
 

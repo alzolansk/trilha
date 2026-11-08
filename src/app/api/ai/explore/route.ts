@@ -30,6 +30,9 @@ const input = z.discriminatedUnion('kind', [
     wishes: z.array(z.string().max(80)).max(5).default([]),
     variant: z.enum(['calmo', 'mais_lugares']).nullable().optional(),
     force: z.array(z.string().max(80)).max(4).optional(),
+    // Ajuste pedido em texto ("Roma ficou com muitos dias") sobre o roteiro atual, já com as edições da pessoa.
+    feedback: z.string().trim().max(300).optional(),
+    current: z.array(z.object({ name: z.string().max(80), nights: z.number().int().min(1).max(60) })).max(12).optional(),
   }),
   z.object({ kind: z.literal('stays'), tripId: z.string().uuid(), stopId: z.string().uuid(), nightlyCap: reais, budgetStyle: z.enum(['economico', 'equilibrado', 'conforto']).optional() }),
 ]);
@@ -116,7 +119,10 @@ JSON: {"items":[{"title":"...","why":"...","duration":"...","cost_low":0,"cost_h
         (raw) => {
           const v = exploreActivitySchema.safeParse(raw);
           if (!v.success) return null;
-          const items = v.data.items.filter((i) => fair(i.why) && !planned.some((t) => t.toLowerCase() === i.title.toLowerCase())).map(range);
+          const wishes = new Set((q.wishes ?? []).map((w) => w.toLowerCase().trim()));
+          const items = v.data.items.filter((i) => fair(i.why) && !planned.some((t) => t.toLowerCase() === i.title.toLowerCase())).map(range)
+            // "wish" só vale se for um dos desejos enviados (a IA às vezes preenche em todos).
+            .map((i) => ({ ...i, wish: i.wish && wishes.has(i.wish.toLowerCase().trim()) ? i.wish : null }));
           return items.length ? items : null;
         },
         { maxTokens: 1200, temperature: 0.7 },
@@ -150,7 +156,10 @@ JSON: {"areas":[{"name":"...","why":"...","price_low":0,"price_high":0}]}`,
 
 type Brief = Partial<import('@/data/types').TripBundle> & { trip: import('@/data/types').Trip };
 type PlacesQ = { kind: 'places'; tripId: string };
-type RouteQ = { kind: 'route'; tripId: string; must: string[]; maybe: string[]; skip: string[]; wishes: string[]; variant?: 'calmo' | 'mais_lugares' | null; force?: string[] };
+type RouteQ = {
+  kind: 'route'; tripId: string; must: string[]; maybe: string[]; skip: string[]; wishes: string[];
+  variant?: 'calmo' | 'mais_lugares' | null; force?: string[]; feedback?: string; current?: { name: string; nights: number }[];
+};
 const cents = (v: number) => Math.round(v * 100);
 const PACE_TEXT = { leve: 'calmo, poucas cidades (cerca de 3 ou mais noites por parada)', moderado: 'equilibrado (2 a 4 noites por parada)', intenso: 'ver tudo (cerca de 2 noites por parada, com bate-voltas)' } as const;
 
@@ -176,21 +185,26 @@ ${prefs?.budget ? `Teto por pessoa para a viagem toda: ${prefs.budget} ${cur}.` 
 ${fromDiscover.length ? `Já sugeridas antes (inclua): ${JSON.stringify(fromDiscover)}.` : ''}
 1) "items": de 8 a 10 cidades ou regiões DENTRO de ${dest} que combinam com a turma, das mais imperdíveis para as menos. "nights_min"/"nights_max" = noites que o lugar costuma pedir. "highlights" = até 3 destaques curtos. "why" = uma frase do porquê combina.
 2) "nearby": de 4 a 8 lugares PERTO de algum dos items, que muitos viajantes não sabem que ficam perto, inclusive em países vizinhos (a até ~3h de viagem). "from" = o item de onde se sai (mesmo nome usado em items). "hours" = tempo de ida. "kind" = "bate_volta" se cabe num dia sem dormir, senão "parada". "cost_low"/"cost_high" = custo extra por pessoa (transporte ida e volta) em ${cur}.
+"attractions" = os principais pontos turísticos ou experiências do lugar (4 a 6 nos items, 2 a 3 no nearby), com o nome oficial curto e uma frase do que tem de legal. "tip" = uma dica prática curta (melhor horário, como circular, o que evitar). Nada de nomes de hotel ou restaurante.
 "lat"/"lng" = coordenadas aproximadas. "photo_query" = nome do lugar + uma palavra-chave. "tags" só entre: natureza, cidade, praia, cultura, arte, comida, aventura, noturna, compras.
-JSON: {"items":[{"name":"...","region":"...","country":"...","lat":0,"lng":0,"why":"...","nights_min":2,"nights_max":3,"highlights":["..."],"photo_query":"...","tags":["..."]}],"nearby":[{"name":"...","country":"...","lat":0,"lng":0,"why":"...","from":"...","mode":"train","hours":1.5,"kind":"bate_volta","cost_low":0,"cost_high":0,"photo_query":"..."}]}`,
+JSON: {"items":[{"name":"...","region":"...","country":"...","lat":0,"lng":0,"why":"...","nights_min":2,"nights_max":3,"highlights":["..."],"photo_query":"...","tags":["..."],"attractions":[{"name":"...","why":"..."}],"tip":"..."}],"nearby":[{"name":"...","country":"...","lat":0,"lng":0,"why":"...","from":"...","mode":"train","hours":1.5,"kind":"bate_volta","cost_low":0,"cost_high":0,"photo_query":"...","attractions":[{"name":"...","why":"..."}],"tip":"..."}]}`,
       (raw) => {
         const v = explorePlacesSchema.safeParse(raw);
         if (!v.success) return null;
         const items: PlaceIdea[] = v.data.items.filter((i) => fair(i.why)).map((i) => ({
           ...i, region: i.region ?? null, nights_min: Math.min(i.nights_min, i.nights_max), nights_max: Math.max(i.nights_min, i.nights_max),
           highlights: i.highlights.filter(fair), photo_query: i.photo_query ?? null,
+          attractions: i.attractions.filter((x) => fair(x.why ?? '')).map((x) => ({ name: x.name, why: x.why ?? null })),
+          tip: i.tip && fair(i.tip) ? i.tip : null,
         }));
         const nearby: NearbyIdea[] = filterNearby(v.data.nearby.filter((n) => fair(n.why)).map((n) => ({
           ...n, cost_low: cents(Math.min(n.cost_low, n.cost_high)), cost_high: cents(Math.max(n.cost_low, n.cost_high)), photo_query: n.photo_query ?? null,
+          attractions: n.attractions.filter((x) => fair(x.why ?? '')).map((x) => ({ name: x.name, why: x.why ?? null })),
+          tip: n.tip && fair(n.tip) ? n.tip : null,
         })), items);
         return items.length >= 3 ? { items, nearby } : null;
       },
-      { maxTokens: 2600, temperature: 0.6 },
+      { maxTokens: 4200, temperature: 0.6 },
     );
     if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
     return NextResponse.json({ data: { ...res.data, currency: cur }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });
@@ -201,6 +215,8 @@ Monte o roteiro de ${nights} noites.
 NÃO PODE FALTAR: ${JSON.stringify(q.must)}${strict ? ' (OBRIGATÓRIO: inclua todos como parada ou bate-volta; se for impossível, explique em left_out)' : ''}.
 Talvez: ${JSON.stringify(q.maybe)}. Não incluir: ${JSON.stringify(q.skip)}.
 ${q.force?.length ? `Inclua também, obrigatoriamente: ${JSON.stringify(q.force)}.` : ''}
+${q.current?.length ? `Roteiro atual (com as edições da pessoa): ${q.current.map((c) => `${c.name} ${c.nights} noite(s)`).join(' → ')}.` : ''}
+${q.feedback ? `PEDIDO DE AJUSTE da pessoa (prioridade máxima): "${q.feedback.replace(/"/g, "'")}". Refaça o roteiro atendendo o pedido e mantendo o resto do roteiro atual o mais parecido possível. Se o pedido for impossível, faça o mais próximo e explique em left_out.` : ''}
 ${q.variant === 'calmo' ? 'Versão MAIS CALMA: menos cidades, mais noites em cada.' : q.variant === 'mais_lugares' ? 'Versão com MAIS LUGARES: mais paradas e bate-voltas, sem passar das noites.' : ''}
 ${q.wishes.length ? `Desejos da turma: ${JSON.stringify(q.wishes)}. Em "wishes", diga em qual parada cada um cabe (ou null).` : ''}
 Regras: a soma de "nights" das paradas deve ser exatamente ${nights}. Ordem geográfica que evite voltar caminho; entrar por uma cidade e sair por outra é normal.

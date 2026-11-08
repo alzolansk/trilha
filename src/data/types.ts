@@ -83,10 +83,18 @@ export interface PlaceIdea {
   highlights?: string[];
   photo_query?: string | null;
   tags?: string[];
+  /** principais pontos turísticos / experiências, com uma frase (janela de detalhes) */
+  attractions?: PlaceAttraction[];
+  /** dica prática curta (melhor horário, como circular) */
+  tip?: string | null;
   /** adicionado à mão pela pessoa */
   added?: boolean;
   /** veio do Descobrir */
   from_discover?: boolean;
+}
+export interface PlaceAttraction {
+  name: string;
+  why?: string | null;
 }
 /** "Perto daqui": cidade próxima de um dos lugares (inclusive em país vizinho). */
 export interface NearbyIdea {
@@ -104,6 +112,8 @@ export interface NearbyIdea {
   cost_low: number;
   cost_high: number;
   photo_query?: string | null;
+  attractions?: PlaceAttraction[];
+  tip?: string | null;
 }
 export interface RouteLeg {
   from: string;
@@ -178,8 +188,10 @@ export interface OnboardingState {
   route_calls?: number;
   /** passeios sugeridos por parada (id da parada) */
   tours?: Record<string, TourIdea[]>;
-  /** ids de TourIdea escolhidos */
+  /** ids de TourIdea recomendados pela Trilha (ritmo e gostos) */
   tour_pick?: string[];
+  /** decisão carta a carta no passo 5 */
+  tour_decisions?: Record<string, 'yes' | 'no'>;
   stale?: ('places' | 'route' | 'tours')[];
   /** cidades do destino escolhido no Descobrir (entram no passo 3) */
   discover_stops?: string[];
