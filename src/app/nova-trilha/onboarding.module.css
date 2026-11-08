@@ -14,3 +14,4 @@
 .genOn .ok { background: var(--acc2); color: var(--fg-acc2); }
 .g { opacity: 0; transform: translateY(20px); transition: all .6s var(--ease-out); }
 .on { opacity: 1; transform: none; }
+.undecided { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; padding: 22px 24px; border-radius: 22px; border: 1.5px dashed var(--line); }

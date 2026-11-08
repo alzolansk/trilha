@@ -14,7 +14,9 @@ import { landscapeInner } from '../lib/identity/render';
 import { clamp01, clipFor, easeOutCubic, pathFractions, routePoints, smoothPath } from '../lib/identity/shapes';
 import { colorCycle } from '../lib/identity/theme';
 import { compressImage } from '../lib/image';
+import { hasDestination, planSteps } from '../lib/plan';
 import { canDecide, myPendingVotes, pollState, votersCount } from '../lib/polls';
+import PlanningHome from './PlanningHome';
 import { ruleAlerts, ruleTip } from '../lib/rules';
 import { countdown } from '../lib/time';
 import s from './home.module.css';
@@ -67,7 +69,13 @@ function useCover() {
   return url;
 }
 
+/** Trilha sem destino abre o Início do planejamento; com destino, a história de scroll. */
 export default function Home() {
+  const { bundle } = useBundle();
+  return hasDestination(bundle) ? <TripHome /> : <PlanningHome />;
+}
+
+function TripHome() {
   const { bundle: b, identity, base, canEdit, source, reload, me } = useBundle();
   const reduced = useReducedMotion();
   const toast = useToast();
@@ -121,6 +129,10 @@ export default function Home() {
     }
     for (const p of (b.polls ?? []).filter((x) => pollState(b, x.id) === 'awaiting_decision' && canDecide(b, x, me))) {
       out.push({ key: `decide-${p.id}`, title: `Hora de decidir: ${p.question}`, detail: 'O prazo da votação acabou.', href: `${base}/turma#decisoes`, cta: 'Decidir', by: null });
+    }
+    // Planejamento ainda aberto (orçamento, paradas, trechos). Hospedagem já vem dos alertas por regra.
+    for (const p of planSteps(b, me).filter((x) => !x.locked && !x.key.startsWith('stay'))) {
+      out.push({ key: `plan-${p.key}`, title: p.title.replace(/\.$/, ''), detail: p.detail, href: base + p.link, cta: p.cta, by: 'rules' });
     }
     for (const t of b.tasks.filter((x) => x.status !== 'done' && !x.dismissed).sort((a, c) => (a.due_date ?? '9').localeCompare(c.due_date ?? '9'))) {
       out.push({ key: t.id, title: t.title, detail: t.detail ?? (t.due_date ? `Prazo ${t.due_date.split('-').reverse().slice(0, 2).join('/')}` : ''), href: `${base}/${t.link === 'turma' ? 'turma' : t.link}`, cta: 'Abrir', by: t.source === 'user' ? null : t.source });

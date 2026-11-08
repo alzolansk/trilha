@@ -26,6 +26,9 @@ function Onboarding() {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const preset = params.get('identidade');
   const [step, setStep] = useState(0);
+  // 'plan' = trilha sem destino ainda (modo planejamento): o destino é decidido depois, com a turma.
+  const [mode, setMode] = useState<'dest' | 'plan'>('dest');
+  const [name, setName] = useState('');
   const [text, setText] = useState(preset && DEST[preset] ? DEST[preset] : '');
   const [v, setV] = useState({ start: '', end: '', time: '', tz: 'America/Sao_Paulo', origin: '', style: 'Mochilão' as TripStyle });
   const [identity, setIdentity] = useState<DestinationIdentity | null>(null);
@@ -96,8 +99,27 @@ function Onboarding() {
       router.replace(`/t/${id}`);
     });
 
+  const createPlanning = () =>
+    run(async () => {
+      const sb = getSupabase();
+      if (!sb || !user) throw new Error('Entre na sua conta para criar a trilha.');
+      const id = crypto.randomUUID();
+      const [y, mo, d] = v.start.split('-').map(Number);
+      const [h, mi] = (v.time || '00:00').split(':').map(Number);
+      const departure = v.time ? new Date(wallToInstant(v.tz, { y, mo, d, h, mi, s: 0 })).toISOString() : null;
+      const ins = await sb.from('trips').insert({
+        id, title: name.trim().slice(0, 80), destinations: [], start_date: v.start, end_date: v.end, departure_at: departure,
+        departure_tz: v.tz, home_tz: localTimeZone(), origin: v.origin.trim() || null, style: v.style, created_by: user.id, identity: null,
+      });
+      if (ins.error) throw ins.error;
+      await sb.from('packing_categories').insert(['Documentos', 'Roupas', 'Equipamento', 'Farmácia'].map((n, i) => ({ trip_id: id, name: n, position: i })));
+      await sb.from('budget_categories').insert(['Transporte', 'Hospedagem', 'Passeios', 'Comida'].map((n, i) => ({ trip_id: id, name: n, position: i, planned: 0, color: '#000000' })));
+      await refreshTrips();
+      router.replace(`/t/${id}`);
+    });
+
   const datesOk = v.start && v.end && v.end >= v.start;
-  const steps = ['01 Destino', '02 Datas', '03 Identidade'];
+  const steps = mode === 'plan' ? ['01 Começo', '02 Datas'] : ['01 Destino', '02 Datas', '03 Identidade'];
   const msg = hit
     ? `IDENTIDADE ENCONTRADA NO DICIONÁRIO: ${DICTIONARY[hit].idName.toUpperCase()}`
     : text.trim().length > 3
@@ -109,7 +131,7 @@ function Onboarding() {
   if (!ready || !user) return <div className="wrap" style={{ paddingTop: 120 }}><div className="skel" style={{ height: 300 }} /></div>;
   return (
     <div className={s.ob}>
-      {previewId && step > 0 ? <div className="bg-pattern" style={{ opacity: 0.07 }}><Pattern identity={previewId} /></div> : null}
+      {previewId && step > 0 && mode === 'dest' ? <div className="bg-pattern" style={{ opacity: 0.07 }}><Pattern identity={previewId} /></div> : null}
       <div className="wrap" style={{ display: 'flex', flexDirection: 'column', gap: 48, paddingTop: 28 }}>
         <header style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
           <Link href="/" className={s.logo}><span className="motif" />trilha</Link>
@@ -142,7 +164,36 @@ function Onboarding() {
                 <Link href="/identidades" className="mono" style={{ gridColumn: '1/-1', fontSize: 12 }}>VER AS IDENTIDADES E AS DEMONSTRAÇÕES →</Link>
               </div>
               <div style={{ flex: '1 1 100%', display: 'flex', justifyContent: 'flex-end' }}>
-                <button className="btn btn-ink tap" disabled={text.trim().length < 2} onClick={() => setStep(1)}>Continuar<Icon name="arrow" size={18} /></button>
+                <button className="btn btn-ink tap" disabled={text.trim().length < 2} onClick={() => { setMode('dest'); setStep(1); }}>Continuar<Icon name="arrow" size={18} /></button>
+              </div>
+              <div className={s.undecided} style={{ flex: '1 1 100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <b style={{ fontSize: 20, letterSpacing: '-.01em' }}>Ainda não sabe pra onde?</b>
+                  <span style={{ opacity: 0.8 }}>Crie a trilha só com as datas. O Trilha mostra o próximo passo e a turma vota no destino.</span>
+                </div>
+                <button className="btn btn-ghost tap" onClick={() => { setMode('plan'); applyIdentity(null); setStep(1); }}>Começar sem destino<Icon name="arrow" size={18} /></button>
+              </div>
+            </section>
+          ) : step === 1 && mode === 'plan' ? (
+            <section className="view" style={{ display: 'flex', flexDirection: 'column', gap: 34, paddingTop: '4vh', maxWidth: 820 }}>
+              <h1 className="disp" style={{ margin: 0, fontSize: 'clamp(44px,5.5vw,84px)', lineHeight: 0.95 }}>Sem destino ainda. Tudo bem.</h1>
+              <p style={{ margin: 0, fontSize: 18, opacity: 0.8, maxWidth: 560 }}>Dá um nome pra viagem e diz quando. O destino vocês escolhem depois, e aí a trilha ganha a identidade dele.</p>
+              <label className="field">Nome da viagem<input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Viagem com a turma" required /></label>
+              <div className="grid2">
+                <label className="field">Ida<input type="date" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} required /><span className="hint">Ainda sem data certa? Coloque uma aproximada, dá pra mudar depois.</span></label>
+                <label className="field">Volta<input type="date" value={v.end} min={v.start} onChange={(e) => setV({ ...v, end: e.target.value })} required /></label>
+                <label className="field">Saindo de (opcional)<input value={v.origin} maxLength={60} onChange={(e) => setV({ ...v, origin: e.target.value })} placeholder="São Paulo" /></label>
+              </div>
+              {v.start && v.end && v.end < v.start ? <span className="field"><span className="err">A volta precisa ser depois da ida.</span></span> : null}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 500 }}>Estilo da viagem</span>
+                <div role="group" aria-label="Estilo" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                  {STYLES.map((x) => <button key={x} className="chip tap" aria-pressed={x === v.style} onClick={() => setV({ ...v, style: x })}>{x}</button>)}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
+                <button className="btn btn-ghost tap" style={{ background: 'transparent' }} onClick={() => setStep(0)}>Voltar</button>
+                <button className="btn btn-ink tap" disabled={!datesOk || !name.trim() || busy} onClick={createPlanning}>{busy ? 'Criando…' : 'Criar trilha'}<Icon name="arrow" size={18} /></button>
               </div>
             </section>
           ) : step === 1 ? (

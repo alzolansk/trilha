@@ -57,7 +57,8 @@ export default function EditTrip() {
     }, { success: 'Trilha atualizada.', onConflict: async () => { await source.update('trips', t.id, { title: v.title.trim() }); await reload(); } });
 
   const regenerate = async () => {
-    const r = await callAi<DestinationIdentity>('identity', { destination: t.title, departDate: t.start_date, returnDate: t.end_date, style: t.style, version: (t.identity_version ?? 1) + 1 });
+    const dest = t.destinations[0]?.trim() || t.title;
+    const r = await callAi<DestinationIdentity>('identity', { destination: dest, departDate: t.start_date, returnDate: t.end_date, style: t.style, version: (t.identity_version ?? 1) + 1 });
     if (r) setPreview({ id: r.data, by: r.by });
   };
   const applyIdentity = () =>
@@ -88,8 +89,8 @@ export default function EditTrip() {
       <PageTitle eyebrow={t.title} title="Dados da trilha" sub="Datas, horário e fuso do embarque alimentam o countdown." />
       <section className="split">
         <div className="col-main card" style={{ padding: 26, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <label className="field">Destino (título)<input value={v.title} maxLength={80} onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
-          <label className="field">Destinos (separados por vírgula)<input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} /></label>
+          <label className="field">Nome da trilha<input value={v.title} maxLength={80} onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
+          <label className="field">Destinos (separados por vírgula)<input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" />{!t.destinations.length ? <span className="hint">Fechou o destino? Escreva aqui, salve e gere a identidade ao lado.</span> : null}</label>
           <div className="grid2">
             <label className="field">Ida<input type="date" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></label>
             <label className="field">Volta<input type="date" value={v.end} min={v.start} onChange={(e) => setV({ ...v, end: e.target.value })} /></label>
@@ -107,14 +108,18 @@ export default function EditTrip() {
         </div>
         <div className="col-side" style={{ gap: 16 }}>
           <h2 className="disp" style={{ margin: 0, fontSize: 28 }}>Identidade</h2>
-          <IdentityCard identity={preview?.id ?? identity} title={t.title} />
+          {preview || t.identity ? <IdentityCard identity={preview?.id ?? identity} title={t.title} /> : (
+            <p className="muted" style={{ margin: 0 }}>
+              {t.destinations.length ? 'Destino definido. Gere a identidade da trilha: cores, fonte e padrão do lugar.' : 'Sem destino ainda. A identidade nasce quando o destino fechar.'}
+            </p>
+          )}
           {preview ? (
             <>
               <AiNote by={preview.by === 'ai' ? 'ai' : 'rules'}>{preview.by === 'ai' ? 'Nova versão gerada por IA e validada (contraste, fonte, fenda).' : 'IA indisponível: versão gerada por regras locais.'}</AiNote>
               <div className="actions"><button className="btn btn-primary tap" onClick={applyIdentity} disabled={busy}>Usar esta versão</button><button className="btn tap" onClick={() => setPreview(null)}>Manter a atual</button></div>
             </>
           ) : source.kind === 'supabase' ? (
-            <button className="btn btn-ghost tap" onClick={regenerate}>Gerar outra versão</button>
+            <button className="btn btn-ghost tap" onClick={regenerate} disabled={!t.destinations.length && !t.identity}>{t.identity ? 'Gerar outra versão' : 'Gerar identidade'}</button>
           ) : null}
           {isOrganizer ? <button className="btn btn-danger tap" style={{ marginTop: 32 }} onClick={del}>Excluir trilha</button> : null}
         </div>

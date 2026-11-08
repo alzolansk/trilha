@@ -48,16 +48,17 @@ function IdentityMenu() {
     };
   }, [open]);
   const demo = source.kind === 'demo';
+  const planning = !!bundle && !bundle.trip.identity;
   return (
     <div ref={ref} className={styles.idwrap}>
-      <button className={`${styles.idpill} tap`} aria-haspopup="true" aria-expanded={open} aria-label={`Identidade ${identity.idName}: trocar de trilha`} onClick={() => setOpen((v) => !v)}>
+      <button className={`${styles.idpill} tap`} aria-haspopup="true" aria-expanded={open} aria-label={planning ? 'Planejando, sem identidade ainda: trocar de trilha' : `Identidade ${identity.idName}: trocar de trilha`} onClick={() => setOpen((v) => !v)}>
         <span className={styles.dots} aria-hidden="true">
           <span style={{ background: 'var(--acc)' }} />
           <span style={{ background: 'var(--acc2)' }} />
           <span style={{ background: 'var(--deep)' }} />
         </span>
         <span className={styles.lbl}>
-          Identidade <b>{identity.idName}</b>
+          {planning ? <b>Planejando</b> : <>Identidade <b>{identity.idName}</b></>}
         </span>
       </button>
       {open ? (
@@ -86,7 +87,7 @@ function IdentityMenu() {
                   <span>
                     <b>{trip.title}</b>
                     <br />
-                    <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{(trip.identity?.idName ?? '').toUpperCase()}</span>
+                    <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{(trip.identity?.idName ?? 'Planejando').toUpperCase()}</span>
                   </span>
                 </Link>
               ))}
@@ -110,6 +111,8 @@ export function TripShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const rel = path.slice(base.length) || '';
   const isHome = rel === '' || rel === '/';
+  // Trilha sem identidade (ainda sem destino): fica no tema neutro até o destino fechar.
+  const themed = !!bundle?.trip.identity;
   // Fade de entrada só em navegações (no primeiro carregamento o HTML do servidor aparece direto).
   const firstPath = useRef(path);
   const navigated = path !== firstPath.current;
@@ -141,8 +144,8 @@ export function TripShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <ThemeApplier identity={bundle ? identity : null} />
-      {bundle ? (
+      <ThemeApplier identity={themed ? identity : null} />
+      {themed ? (
         // Tokens também no HTML do servidor: evita o "piscar" do tema neutro antes de hidratar.
         <style
           dangerouslySetInnerHTML={{
@@ -152,7 +155,7 @@ export function TripShell({ children }: { children: React.ReactNode }) {
           }}
         />
       ) : null}
-      {bundle ? (
+      {themed ? (
         <div className="bg-pattern">
           <Pattern identity={identity} />
         </div>

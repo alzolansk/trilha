@@ -172,6 +172,14 @@ function priceLabel(o: PollOption): string | null {
 function Decisions() {
   const { bundle: b, canEdit } = useBundle();
   const [creating, setCreating] = useState(false);
+  // Link do "Próximo passo" (#nova-votacao): abre a votação do destino já preenchida.
+  const [preset, setPreset] = useState<{ question: string; target: PollTarget } | null>(null);
+  useEffect(() => {
+    if (!canEdit || window.location.hash !== '#nova-votacao') return;
+    setPreset({ question: 'Pra onde a gente vai?', target: 'free' });
+    setCreating(true);
+    document.getElementById('decisoes')?.scrollIntoView();
+  }, [canEdit]);
   const now = Date.now();
   const polls = b.polls ?? [];
   const deadline = (p: Poll) => (p.closes_at ? Date.parse(p.closes_at) : Infinity);
@@ -194,7 +202,7 @@ function Decisions() {
           <div className={t.closedList}>{closed.map((p) => <PollCard key={p.id} poll={p} />)}</div>
         </details>
       ) : null}
-      {creating ? <NewPollDialog onClose={() => setCreating(false)} /> : null}
+      {creating ? <NewPollDialog preset={preset} onClose={() => { setCreating(false); setPreset(null); }} /> : null}
     </section>
   );
 }
@@ -443,13 +451,13 @@ function optProblem(o: OptDraft, target: PollTarget): string | null {
   return null;
 }
 
-function NewPollDialog({ onClose }: { onClose: () => void }) {
+function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset?: { question: string; target: PollTarget } | null }) {
   const { bundle: b, source, reload, me } = useBundle();
   const { run, busy } = useAction();
   const stops = sortedStops(b);
   const tz = b.trip.departure_tz;
   const cur = b.trip.base_currency;
-  const [v, setV] = useState({ question: '', detail: '', target: 'stay' as PollTarget, stop_id: stops[0]?.id ?? '', multi: false, date: '', time: '' });
+  const [v, setV] = useState({ question: preset?.question ?? '', detail: '', target: preset?.target ?? ('stay' as PollTarget), stop_id: stops[0]?.id ?? '', multi: false, date: '', time: '' });
   const [opts, setOpts] = useState<OptDraft[]>([emptyOpt(cur), emptyOpt(cur)]);
   const [tried, setTried] = useState(false);
   const needsStop = v.target !== 'free';
