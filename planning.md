@@ -45,7 +45,8 @@ Este plano implementa esse design **no app Next.js atual**:
 | 3 — Dados e serviços base | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
 | 4 — Início | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
 | 5 — Roteiro e página da parada | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
-| 6 a 9 | ⏳ não iniciadas | — |
+| 6 — Dinheiro | 🟡 parcial: só a lógica pura (`budgetPlan.ts`, `money.ts`); telas não começadas | ver `handoff.md` |
+| 7 a 9 | ⏳ não iniciadas | — |
 
 **Verificação ao fim da Fase 5:** `npm run typecheck` ok; `npm test` com 196 testes verdes (eram 181: entraram 15 em `tests/unit/route.test.ts`); `npm run build` ok; `npx playwright test` com 36 de 36 verdes contra o build de produção (entraram 9 da Fase 5 e `/roteiro?vista=mapa` no teste de rolagem; os testes que usavam `?parada=` e o botão `CUZ` foram atualizados). `/demo/andes/roteiro` e `/demo/andes/roteiro/<Cusco>` conferidos em 390 e 1280 px contra `Roteiro.dc.html` e `Parada.dc.html`, sem rolagem horizontal de 360 a 1440 px.
 
@@ -740,7 +741,7 @@ Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/
 - Links de hospedagem com bairro, datas, pessoas e teto.
 - **Aceite:** comparar com `Roteiro.dc.html` e `Parada.dc.html`; os links abrem a busca já filtrada; enviar 3 sugestões para votação cria o poll com preço.
 
-### Fase 6 — Dinheiro
+### Fase 6 — Dinheiro · 🟡 parcial (ver `handoff.md`)
 
 - `Orcamento.tsx` (5.5), `Dinheiro.tsx` (5.6), Sheets de gasto e aporte (6.1, 6.2), `Extrato` (6.3), `Acerto` (6.4) e "Marcar como pago" nos itens do roteiro.
 - Remover os pedaços de dinheiro de `Mala.tsx`.

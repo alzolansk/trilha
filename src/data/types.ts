@@ -76,6 +76,7 @@ export interface PhotoRef {
 
 export type BudgetStyle = 'economico' | 'equilibrado' | 'conforto';
 export type BudgetPace = 'leve' | 'moderado' | 'intenso';
+export type BudgetFood = 'econ' | 'medio' | 'solto';
 /** Respostas do Orçamento em conversa, gravadas em trips.budget_plan. */
 export interface BudgetPlan {
   style: BudgetStyle;
@@ -84,6 +85,10 @@ export interface BudgetPlan {
   activities?: string[];
   /** diária de comida por pessoa, em centavos (estimativa confirmada pela turma) */
   daily_food_cents?: number | null;
+  /** ritmo de comida escolhido (Econômico / Médio / Solto) */
+  food?: BudgetFood | null;
+  /** valor por pessoa de trechos sem preço no roteiro (estimativa da Trilha), por id do transporte */
+  transport_cents?: Record<string, number> | null;
   /** foto do roteiro usada no cálculo, para avisar o que mudou depois (diffSince) */
   snapshot?: BudgetSnapshot | null;
   updated_at?: string;

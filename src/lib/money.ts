@@ -407,3 +407,172 @@ export function expenseImpact(d: ExpenseDraft, b: TripBundle): ExpenseImpact {
     item: type && itemId && title ? { type, id: itemId, title } : null,
   };
 }
+
+// ───────────────────────── Fase 6: telas de Dinheiro (planning §5.6 e §6) ─────────────────────────
+
+export type MovementKind = 'expense' | 'deposit' | 'refund' | 'settlement';
+export interface Movement {
+  kind: MovementKind;
+  id: string;
+  /** data do movimento (yyyy-mm-dd) */
+  date: string;
+  /** desempate na ordem (mais recente primeiro) */
+  at: string;
+  title: string;
+  /** quem pagou / aportou / recebeu; POOL quando saiu do caixa */
+  who: string;
+  /** destino de um pagamento entre pessoas */
+  to?: string;
+  /** valor na base (positivo = entra no caixa ou pagamento; gastos também positivos) */
+  cents: number;
+  /** valor original quando a moeda é outra */
+  original?: { cents: number; currency: string } | null;
+  categoryId?: string | null;
+  stopId?: string | null;
+  item?: { type: ItemType; id: string } | null;
+  /** gasto: quem dividiu */
+  people?: string[];
+}
+
+/** Extrato: gastos, aportes, devoluções e pagamentos, do mais recente ao mais antigo. */
+export function ledger(b: Pick<TripBundle, 'expenses' | 'expenseShares' | 'poolContributions' | 'settlements' | 'trip'>): Movement[] {
+  const base = b.trip.base_currency;
+  const out: Movement[] = [];
+  for (const e of b.expenses) {
+    out.push({
+      kind: 'expense', id: e.id, date: e.spent_on, at: e.created_at ?? e.spent_on, title: e.description,
+      who: e.paid_from_pool ? POOL : e.payer_id, cents: toCents(String(e.base_amount)),
+      original: e.currency !== base ? { cents: toCents(String(e.amount)), currency: e.currency } : null,
+      categoryId: e.category_id, stopId: e.stop_id,
+      item: e.activity_id ? { type: 'activity', id: e.activity_id } : e.stay_id ? { type: 'stay', id: e.stay_id } : e.transport_id ? { type: 'transport', id: e.transport_id } : null,
+      people: b.expenseShares.filter((s) => s.expense_id === e.id).map((s) => s.user_id),
+    });
+  }
+  for (const c of b.poolContributions ?? []) {
+    out.push({ kind: c.kind, id: c.id, date: c.contributed_on, at: c.created_at, title: c.kind === 'deposit' ? 'Aporte no caixa' : 'Devolução do caixa', who: c.user_id, cents: c.amount_cents });
+  }
+  for (const s of b.settlements) {
+    out.push({ kind: 'settlement', id: s.id, date: s.paid_on, at: s.created_at, title: 'Pagamento entre a turma', who: s.from_user, to: s.to_user, cents: s.amount_cents });
+  }
+  return out.sort((x, y) => y.date.localeCompare(x.date) || y.at.localeCompare(x.at));
+}
+
+export interface MovementFilter {
+  type?: 'all' | 'expenses' | 'pool';
+  categoryId?: string | null;
+  stopId?: string | null;
+  person?: string | null;
+  q?: string;
+}
+
+/** Filtros do Extrato (planning §6.3). Pessoa casa com quem pagou, quem dividiu, quem aportou e os dois lados de um pagamento. */
+export function filterMovements(list: Movement[], f: MovementFilter): Movement[] {
+  const q = f.q ? fold(f.q.trim()) : '';
+  return list.filter((m) => {
+    if (f.type === 'expenses' && m.kind !== 'expense') return false;
+    if (f.type === 'pool' && m.kind !== 'deposit' && m.kind !== 'refund') return false;
+    if (f.categoryId && m.categoryId !== f.categoryId) return false;
+    if (f.stopId && m.stopId !== f.stopId) return false;
+    if (f.person && m.who !== f.person && m.to !== f.person && !m.people?.includes(f.person)) return false;
+    if (q && !fold(m.title).includes(q)) return false;
+    return true;
+  });
+}
+
+/** CSV do extrato (separador ";" e vírgula decimal, como o Excel em pt-BR abre). */
+export function movementsCsv(list: Movement[], opts: { base: string; nameOf: (uid: string) => string; categoryOf: (id: string | null | undefined) => string; stopOf: (id: string | null | undefined) => string }): string {
+  const dec = (c: number) => (c / 100).toFixed(2).replace('.', ',');
+  const esc = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const KIND: Record<MovementKind, string> = { expense: 'Gasto', deposit: 'Aporte', refund: 'Devolução', settlement: 'Pagamento' };
+  const rows = [['Data', 'Tipo', 'Descrição', 'Quem', 'Para', 'Categoria', 'Parada', 'Valor original', 'Moeda original', `Valor (${opts.base})`]];
+  for (const m of list) {
+    rows.push([
+      m.date, KIND[m.kind], m.title, m.who === POOL ? 'Caixa da turma' : opts.nameOf(m.who), m.to ? opts.nameOf(m.to) : '',
+      m.kind === 'expense' ? opts.categoryOf(m.categoryId) : '', m.kind === 'expense' ? opts.stopOf(m.stopId) : '',
+      m.original ? dec(m.original.cents) : dec(m.cents), m.original?.currency ?? opts.base, dec(m.cents),
+    ]);
+  }
+  return rows.map((r) => r.map((v) => esc(String(v))).join(';')).join('\r\n');
+}
+
+/** Itens do roteiro ainda sem gasto ligado, para sugerir no Sheet de gasto ("Ingresso Machu Picchu"). */
+export function unpaidItems(b: TripBundle, rates: Rates = {}): (CategoryItem & { categoryId: string | null })[] {
+  const out: (CategoryItem & { categoryId: string | null })[] = [];
+  const cats = categoryStatus(b, rates);
+  const kinds = new Set(cats.map((c) => c.kind));
+  for (const c of cats) for (const i of c.items) if (!i.paid) out.push({ ...i, categoryId: c.id });
+  // trilha sem categoria de passeios: as atividades ainda aparecem, sem categoria
+  if (!kinds.has('passeios')) {
+    for (const a of b.activities) if (!b.expenses.some((e) => e.activity_id === a.id)) out.push({ type: 'activity', id: a.id, title: a.title, stopId: a.stop_id, costCents: itemCost(b, 'activity', a.id, rates), isEstimate: a.cost_is_estimate ?? true, paidCents: 0, paid: false, categoryId: null });
+  }
+  return out;
+}
+
+/** Preenchimento do Sheet de gasto a partir de um item ("Marcar como pago"). */
+export function paymentPreset(b: TripBundle, type: ItemType, id: string, rates: Rates = {}): { description: string; categoryId: string | null; stopId: string | null; cents: number | null } {
+  const cat = categoryStatus(b, rates).find((c) => c.items.some((i) => i.type === type && i.id === id));
+  const kind: BudgetKind = type === 'activity' ? 'passeios' : type === 'stay' ? 'hospedagem' : 'transporte';
+  const categoryId = cat?.id ?? b.budgetCategories.find((c) => categoryKind(c) === kind)?.id ?? null;
+  if (type === 'activity') {
+    const a = b.activities.find((x) => x.id === id);
+    return { description: a?.title ?? 'Passeio', categoryId, stopId: a?.stop_id ?? null, cents: itemCost(b, type, id, rates) };
+  }
+  if (type === 'stay') {
+    const s = b.stays.find((x) => x.id === id);
+    return { description: s?.name ?? 'Hospedagem', categoryId, stopId: s?.stop_id ?? null, cents: itemCost(b, type, id, rates) };
+  }
+  const t = b.transports.find((x) => x.id === id);
+  const title = t ? [t.origin_code ?? t.origin_name, t.dest_code ?? t.dest_name].filter(Boolean).join(' → ') : '';
+  return { description: title ? `Passagem ${title}` : 'Passagem', categoryId, stopId: t?.stop_id ?? null, cents: itemCost(b, type, id, rates) };
+}
+
+/** Título curto de um item do roteiro (cadeia "Caixa → Passeios → Dia 7 ✓ pago"). */
+export function itemLabel(b: TripBundle, type: ItemType, id: string): string | null {
+  if (type === 'activity') {
+    const a = b.activities.find((x) => x.id === id);
+    return a ? `Dia ${Math.max(1, Math.round((Date.parse(a.day) - Date.parse(b.trip.start_date)) / 86_400_000) + 1)}` : null;
+  }
+  if (type === 'stay') return b.stays.find((x) => x.id === id)?.name ?? null;
+  const t = b.transports.find((x) => x.id === id);
+  return t ? [t.origin_code ?? t.origin_name, t.dest_code ?? t.dest_name].filter(Boolean).join(' → ') || 'Trecho' : null;
+}
+
+/** Linha de contexto do cartão da categoria: "Voos pagos · falta o trem e os ônibus". */
+export function categoryContext(b: TripBundle, c: CategoryStatus): string {
+  const list = (xs: string[]) => (xs.length <= 2 ? xs.join(' e ') : `${xs.slice(0, 2).join(', ')} e mais ${xs.length - 2}`);
+  if (c.kind === 'comida') {
+    const d = b.trip.budget_plan?.daily_food_cents;
+    return d ? `Reserva para a viagem, ${formatMoney(d, b.trip.base_currency, { compact: true })} por pessoa/dia` : 'Reserva para comida e compras durante a viagem';
+  }
+  if (c.kind === 'hospedagem') {
+    const voting = (b.polls ?? []).filter((p) => p.status === 'open' && p.target === 'stay' && p.stop_id).map((p) => b.stops.find((s) => s.id === p.stop_id)?.name).filter(Boolean) as string[];
+    if (voting.length && !c.items.some((i) => i.paid)) return `${list(voting)} em votação`;
+  }
+  if (!c.items.length) return c.spentCents ? 'Gastos lançados à mão' : 'Nada lançado ainda';
+  const paid = c.items.filter((i) => i.paid).map((i) => i.title);
+  const open = c.items.filter((i) => !i.paid).map((i) => i.title);
+  if (!open.length) return `Tudo pago: ${list(paid)}`;
+  if (!paid.length) return `Falta pagar ${list(open)}`;
+  return `${list(paid)} ${paid.length > 1 ? 'pagos' : 'pago'} · falta ${list(open)}`;
+}
+
+/** Gasto lançado nas últimas 24 h (o cartão da categoria ganha destaque "Acabou de baixar"). */
+export function recentHit(b: Pick<TripBundle, 'expenses'>, now = Date.now()): { categoryId: string; description: string } | null {
+  const fresh = b.expenses
+    .filter((e) => e.category_id && e.created_at && now - Date.parse(e.created_at) < 86_400_000 && now - Date.parse(e.created_at) >= -60_000)
+    .sort((x, y) => y.created_at.localeCompare(x.created_at))[0];
+  return fresh ? { categoryId: fresh.category_id!, description: fresh.description } : null;
+}
+
+/** Valores rápidos do Sheet de aporte: o que falta para a meta e metade disso. */
+export function poolQuickAmounts(m: Pick<MemberPool, 'depositedCents' | 'targetCents'> | null | undefined): { missing: number; half: number } | null {
+  if (!m || m.targetCents <= 0) return null;
+  const missing = Math.max(0, m.targetCents - m.depositedCents);
+  return missing > 0 ? { missing, half: Math.round(missing / 2) } : null;
+}
+
+/** Divisão "valores diferentes": confere se soma o total. */
+export function customSplit(total: number, values: Record<string, number | null>): { shares: { user_id: string; share_cents: number }[]; diff: number } {
+  const shares = Object.entries(values).filter(([, v]) => v != null && v > 0).map(([user_id, v]) => ({ user_id, share_cents: v! }));
+  return { shares, diff: total - shares.reduce((a, s) => a + s.share_cents, 0) };
+}
