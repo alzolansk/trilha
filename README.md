@@ -43,7 +43,7 @@ BASE_URL=http://localhost:3000 npm run test:e2e   # Playwright (usa o Chrome ins
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | sim | URL do projeto |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | sim | chave publishable/anon (segurança vem do RLS) |
-| `NEXT_PUBLIC_SITE_URL` | sim | URL pública (links de convite, retorno do login) |
+| `NEXT_PUBLIC_SITE_URL` | sim | URL pública (links de convite). O retorno do login usa a origem atual, então previews do Vercel funcionam se estiverem nas Redirect URLs do Supabase |
 | `NEXT_PUBLIC_AUTH_GOOGLE` / `_APPLE` / `_MAGIC_LINK` | sim | `1` mostra o botão depois que o provedor estiver configurado |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | sim | push (gere com `npx web-push generate-vapid-keys`) |
 | `SUPABASE_SECRET_KEY` | **não** | só a rotina diária de notificações (`/api/cron/daily`) |

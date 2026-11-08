@@ -6,7 +6,7 @@ import { Icon } from '../../components/ui/primitives';
 import { Logo } from '../../components/ui/Logo';
 import { useAuth } from '../../data/AuthContext';
 import { humanError } from '../../data/source';
-import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK, SITE_URL } from '../../lib/env';
+import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK } from '../../lib/env';
 import { getSupabase } from '../../lib/supabase/client';
 import s from './auth.module.css';
 
@@ -30,7 +30,9 @@ function Entrar() {
     if (ready && user) router.replace(next);
   }, [ready, user, router, next]);
 
-  const origin = () => SITE_URL || window.location.origin;
+  // Retorno do login sempre na origem onde ele começou (produção, preview do Vercel ou localhost):
+  // o verificador PKCE fica num cookie desta origem. NEXT_PUBLIC_SITE_URL vale só para links de convite.
+  const origin = () => window.location.origin;
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const sb = getSupabase();
