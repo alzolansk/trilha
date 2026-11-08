@@ -21,6 +21,7 @@ import styles from './shell.module.css';
 
 const NAV: [string, string, string, IconName][] = [
   ['', 'Início', 'Início', 'home'],
+  ['/explorar', 'Explorar', 'Explorar', 'search'],
   ['/roteiro', 'Roteiro', 'Roteiro', 'map'],
   ['/documentos', 'Documentos', 'Docs', 'doc'],
   ['/mala', 'Mala e gastos', 'Mala', 'bag'],

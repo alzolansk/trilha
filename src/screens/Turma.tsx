@@ -173,13 +173,18 @@ function Decisions() {
   const { bundle: b, canEdit } = useBundle();
   const [creating, setCreating] = useState(false);
   // Link do "Próximo passo" (#nova-votacao): abre a votação do destino já preenchida.
-  const [preset, setPreset] = useState<{ question: string; target: PollTarget } | null>(null);
+  const [preset, setPreset] = useState<PollPreset | null>(null);
   useEffect(() => {
-    if (!canEdit || window.location.hash !== '#nova-votacao') return;
-    setPreset({ question: 'Pra onde a gente vai?', target: 'free' });
+    if (!canEdit) return;
+    const h = window.location.hash;
+    const stay = /^#nova-votacao-stay-([0-9a-f-]{36})$/i.exec(h);
+    const stop = stay ? b.stops.find((x) => x.id === stay[1]) : null;
+    if (stop) setPreset({ question: `Onde ficar em ${stop.name}?`, target: 'stay', stop_id: stop.id });
+    else if (h === '#nova-votacao') setPreset({ question: 'Pra onde a gente vai?', target: 'free' });
+    else return;
     setCreating(true);
     document.getElementById('decisoes')?.scrollIntoView();
-  }, [canEdit]);
+  }, [canEdit]); // eslint-disable-line react-hooks/exhaustive-deps
   const now = Date.now();
   const polls = b.polls ?? [];
   const deadline = (p: Poll) => (p.closes_at ? Date.parse(p.closes_at) : Infinity);
@@ -451,13 +456,15 @@ function optProblem(o: OptDraft, target: PollTarget): string | null {
   return null;
 }
 
-function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset?: { question: string; target: PollTarget } | null }) {
+interface PollPreset { question: string; target: PollTarget; stop_id?: string }
+
+function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset?: PollPreset | null }) {
   const { bundle: b, source, reload, me } = useBundle();
   const { run, busy } = useAction();
   const stops = sortedStops(b);
   const tz = b.trip.departure_tz;
   const cur = b.trip.base_currency;
-  const [v, setV] = useState({ question: preset?.question ?? '', detail: '', target: preset?.target ?? ('stay' as PollTarget), stop_id: stops[0]?.id ?? '', multi: false, date: '', time: '' });
+  const [v, setV] = useState({ question: preset?.question ?? '', detail: '', target: preset?.target ?? ('stay' as PollTarget), stop_id: preset?.stop_id ?? stops[0]?.id ?? '', multi: false, date: '', time: '' });
   const [opts, setOpts] = useState<OptDraft[]>([emptyOpt(cur), emptyOpt(cur)]);
   const [tried, setTried] = useState(false);
   const needsStop = v.target !== 'free';

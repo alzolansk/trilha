@@ -60,3 +60,49 @@ export function sensitiveWithoutSource(t: { text: string; kind: string; source?:
   const sensitive = t.kind === 'fronteira' || /\b(visto|vacina|febre amarela|passaporte|fronteira|imigra|exig)/i.test(t.text);
   return sensitive && !t.source;
 }
+
+/**
+ * Exceção controlada à regra "não invente preços/distâncias": no planejamento a pessoa pede
+ * ordem de grandeza. Só faixas aproximadas, que o app mostra com o selo ESTIMATIVA.
+ */
+export const EXPLORE_RULES = `${BASE_RULES}
+- EXCEÇÃO para esta tarefa: você PODE dar faixas APROXIMADAS de preço e de tempo de viagem, baseadas em conhecimento geral (ordem de grandeza, não valor exato). O app mostra tudo como ESTIMATIVA e manda conferir antes de reservar.
+- Nunca cite nome de hotel, pousada, empresa ou estabelecimento específico: fale de bairros, regiões, tipos de passeio e atrações públicas conhecidas.
+- Valores sempre em números inteiros na moeda pedida, sem símbolo.`;
+
+const money = z.number().int().min(0).max(10_000_000);
+
+export const exploreDestSchema = z.object({
+  origin: z.object({ name: z.string().max(80), lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }).nullable().optional(),
+  items: z.array(z.object({
+    name: z.string().min(2).max(80),
+    region: z.string().max(80),
+    country: z.string().max(60),
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    why: z.string().min(8).max(220),
+    mode: z.enum(['bus', 'car', 'plane', 'train', 'boat']),
+    hours: z.number().min(0.2).max(40),
+    cost_low: money,
+    cost_high: money,
+  })).min(1).max(6),
+});
+
+export const exploreActivitySchema = z.object({
+  items: z.array(z.object({
+    title: z.string().min(3).max(80),
+    why: z.string().min(8).max(200),
+    duration: z.string().max(30),
+    cost_low: money,
+    cost_high: money,
+  })).min(1).max(8),
+});
+
+export const exploreStaySchema = z.object({
+  areas: z.array(z.object({
+    name: z.string().min(2).max(60),
+    why: z.string().min(8).max(200),
+    price_low: money,
+    price_high: money,
+  })).min(1).max(4),
+});

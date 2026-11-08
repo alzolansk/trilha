@@ -4,7 +4,7 @@ import 'server-only';
 // entra em "resfriamento" e a próxima chamada pula para o seguinte (preserva cotas).
 
 export type ProviderId = 'gemini' | 'groq' | 'openrouter';
-export type TaskKind = 'identity' | 'tips' | 'packing' | 'classify' | 'alerts' | 'retro';
+export type TaskKind = 'identity' | 'tips' | 'packing' | 'classify' | 'alerts' | 'retro' | 'explore';
 
 interface Provider {
   id: ProviderId;
@@ -26,6 +26,8 @@ export const ORDER: Record<TaskKind, ProviderId[]> = {
   alerts: ['groq', 'gemini', 'openrouter'],
   retro: ['gemini', 'groq', 'openrouter'],
   classify: ['openrouter', 'groq', 'gemini'],
+  // explore: listas maiores com coordenadas e faixas de preço → Gemini segue melhor o schema.
+  explore: ['gemini', 'groq', 'openrouter'],
 };
 
 class ProviderError extends Error {

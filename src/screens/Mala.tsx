@@ -11,6 +11,7 @@ import { dayMonth, initials } from '../lib/format';
 import { fgOn } from '../lib/identity/contrast';
 import { colorCycle } from '../lib/identity/theme';
 import { balances, budgetByCategory, centsToDecimal, convertCents, formatMoney, POOL, poolSummary, splitEqual, suggestTransfers, toCents } from '../lib/money';
+import { BUDGET_SPLIT, splitBudget } from '../lib/explore';
 import { rulePacking, type PackingSuggestion } from '../lib/rules';
 import { countdown, todayIn } from '../lib/time';
 import s from './mala.module.css';
@@ -401,6 +402,29 @@ function BudgetDialog({ onClose, cols }: { onClose: () => void; cols: string[] }
   const [total, setTotal] = useState(b.trip.budget_total != null ? String(b.trip.budget_total) : '');
   const [cats, setCats] = useState(b.budgetCategories.map((c) => ({ ...c, planned: String(c.planned) })));
   const [newName, setNewName] = useState('');
+  const people = Math.max(1, b.members.length);
+  const totalCents = total.trim() ? toCents(total) : 0;
+  const perOf = (t: string) => {
+    const c = t.trim() ? toCents(t) : NaN;
+    return c > 0 ? centsToDecimal(Math.round(c / people)) : '';
+  };
+  // Os dois campos andam juntos: por pessoa × turma = total.
+  const [perPerson, setPP] = useState(() => perOf(total));
+  const setPerPerson = (v: string) => {
+    setPP(v);
+    const c = v.trim() ? toCents(v) : NaN;
+    setTotal(isNaN(c) ? '' : centsToDecimal(c * people));
+  };
+  const setTotalBoth = (v: string) => {
+    setTotal(v);
+    setPP(perOf(v));
+  };
+  // Preenche o previsto de Transporte, Hospedagem, Comida e Passeios com a divisão sugerida.
+  const suggestSplit = () => {
+    const m = splitBudget(totalCents, cats);
+    setCats(cats.map((c) => (m.has(c.id) ? { ...c, planned: centsToDecimal(m.get(c.id)!) } : c)));
+  };
+  const canSplit = totalCents > 0 && cats.some((c) => BUDGET_SPLIT.some((x) => x.name.toLowerCase() === c.name.trim().toLowerCase()));
   const save = () => run(async () => {
     const t = total.trim() ? toCents(total) : null;
     if (t != null && (isNaN(t) || t < 0)) throw new Error('Valor total inválido.');
@@ -423,7 +447,16 @@ function BudgetDialog({ onClose, cols }: { onClose: () => void; cols: string[] }
   });
   return (
     <Dialog open onClose={onClose} title="Orçamento" footer={<><button className="btn tap" onClick={onClose}>Cancelar</button><button className="btn btn-primary tap" onClick={save} disabled={busy}>Salvar</button></>}>
-      <label className="field">Total previsto ({b.trip.base_currency})<input inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} placeholder="9.500,00" /></label>
+      <div className="grid2">
+        <label className="field">Por pessoa ({b.trip.base_currency})<input inputMode="decimal" value={perPerson} onChange={(e) => setPerPerson(e.target.value)} placeholder="1.500,00" /><span className="hint">{people} {people === 1 ? 'pessoa' : 'pessoas'} na turma</span></label>
+        <label className="field">Total previsto ({b.trip.base_currency})<input inputMode="decimal" value={total} onChange={(e) => setTotalBoth(e.target.value)} placeholder="9.500,00" /></label>
+      </div>
+      {canSplit ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+          <button className="btn btn-sm tap" onClick={suggestSplit}>Dividir no sugerido</button>
+          <span className="hint" style={{ fontSize: 13, color: 'var(--mute)' }}>{BUDGET_SPLIT.map((x) => `${x.name} ${Math.round(x.share * 100)}%`).join(' · ')}. Vira o teto de hospedagem e passeios no Roteiro.</span>
+        </div>
+      ) : null}
       {cats.map((c, i) => (
         <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <span aria-hidden="true" className="bullet" style={{ background: cols[i % 4], marginBottom: 18 }} />

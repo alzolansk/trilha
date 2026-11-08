@@ -82,9 +82,9 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
       out.push({
         key: 'destination', title: 'Escolher o destino.',
         detail: b.members.length > 1
-          ? 'Ainda em dúvida? Abra uma votação com as opções e decidam juntos.'
-          : 'Ainda em dúvida? Abra uma votação com as opções e chame a turma pra votar.',
-        link: '/turma#nova-votacao', cta: 'Abrir votação',
+          ? 'Veja lugares que cabem no tempo e no bolso de vocês, ponha os melhores na disputa e votem juntos.'
+          : 'Veja lugares que cabem no seu tempo e no seu bolso, ponha os melhores na disputa e chame a turma pra votar.',
+        link: '/explorar', cta: 'Ver sugestões',
       });
     }
   }

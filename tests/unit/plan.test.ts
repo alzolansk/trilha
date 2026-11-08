@@ -31,7 +31,7 @@ describe('modo planejamento', () => {
     expect(hasDestination(b)).toBe(false);
     expect(planStage(b, NOW)).toBe('sonhar');
     expect(nextStep(b, me, NOW)?.key).toBe('destination');
-    expect(nextStep(b, me, NOW)?.link).toBe('/turma#nova-votacao');
+    expect(nextStep(b, me, NOW)?.link).toBe('/explorar');
     const steps = planSteps(b, me, NOW);
     expect(steps.map((s) => s.key)).toEqual(['destination', 'budget', 'stops', 'stay']);
     expect(steps.find((s) => s.key === 'stops')?.locked).toBe(true);

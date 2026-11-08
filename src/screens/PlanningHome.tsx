@@ -50,7 +50,12 @@ export default function PlanningHome() {
             <p style={{ margin: 0, fontSize: 16, lineHeight: 1.45 }}>{next.detail}</p>
             <div className={s.nextActions}>
               <Link className={`${s.cta} tap`} href={base + next.link}>{next.cta}<Icon name="arrow" size={18} /></Link>
-              {canEdit && next.key === 'destination' ? <Link className={`${s.cta2} tap`} href={`${base}/editar`}>Já sei o destino</Link> : null}
+              {canEdit && next.key === 'destination' ? (
+                <>
+                  <Link className={`${s.cta2} tap`} href={`${base}/turma#nova-votacao`}>Já temos opções: votar</Link>
+                  <Link className={`${s.cta2} tap`} href={`${base}/editar`}>Já sei o destino</Link>
+                </>
+              ) : null}
             </div>
           </section>
         ) : null}

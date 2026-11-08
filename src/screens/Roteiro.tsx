@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PlaceSearch, type Place } from '../components/forms/PlaceSearch';
+import { StopSuggestions } from '../components/plan/StopSuggestions';
 import { useDraft } from '../components/forms/useDraft';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
 import { AiNote, Floaters, Icon, PageTitle, Pattern, useReveal } from '../components/ui/primitives';
@@ -433,6 +434,8 @@ function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: n
             <p style={{ margin: '12px 0 0', color: 'var(--mute)' }}>Nenhuma atividade planejada.</p>
           )}
         </div>
+
+        <StopSuggestions key={stop.id} stop={stop} />
 
         <label className="field">
           <span className="h3" style={{ margin: 0 }}>Notas</span>
