@@ -206,3 +206,12 @@
 .mapLegend i[data-k='stop'] { background: var(--trip-accent, var(--brand)); }
 .mapLegend i[data-k='trip'] { background: var(--surface); border: 2.5px solid var(--trip-accent, var(--brand)); }
 .mapLegend i[data-k='out'] { background: var(--surface); border: 2px dashed var(--sun); }
+.mapLegend i[data-k='base'] { background: var(--trip-accent, var(--brand)); border-radius: 3px; }
+
+/* Dormir numa cidade vizinha mais barata (sugestão opcional) */
+.stayAlt { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--suggest-bg); border: 1.5px dashed var(--brand-soft); }
+.stayAlt[data-on='true'] { border-style: solid; border-color: var(--brand); }
+.stayAltHead { margin: 0; display: flex; gap: 8px; align-items: flex-start; color: var(--brand-ink); font-size: 14px; }
+.stayAltHead span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stayAltHead small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.sleepsAt { display: inline-flex; align-items: center; gap: 4px; color: var(--brand-ink) !important; font-weight: 600; }

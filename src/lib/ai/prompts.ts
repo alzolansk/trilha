@@ -164,6 +164,17 @@ export const exploreRouteSchema = z.object({
     })).max(4).default([]),
     wish: z.string().max(80).nullable().optional(),
     stay_pp_night: z.object({ economico: pair.optional(), equilibrado: pair.optional(), conforto: pair.optional() }).partial().optional(),
+    /** cidade vizinha mais barata onde os turistas costumam dormir (ex.: Costa Amalfitana → Salerno) */
+    stay_alt: z.object({
+      name: z.string().min(2).max(80),
+      country: z.string().max(60).nullable().optional(),
+      lat: lat.nullable().optional(), lng: lng.nullable().optional(),
+      why: z.string().max(220).nullable().optional(),
+      mode,
+      minutes: z.number().min(1).max(240),
+      commute_pp_day: money,
+      stay_pp_night: z.object({ economico: pair.optional(), equilibrado: pair.optional(), conforto: pair.optional() }).partial(),
+    }).nullable().optional(),
   })).min(1).max(12),
   legs: z.array(legSchema).max(12).default([]),
   return: z.object({ from: z.string().min(2).max(80), mode, hours: z.number().min(0.1).max(48), cost_low: money, cost_high: money }).nullable().optional(),

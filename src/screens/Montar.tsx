@@ -20,13 +20,13 @@ import { VIBES } from '../lib/discover';
 import { MODE_LABEL } from '../lib/format';
 import { formatMoney } from '../lib/money';
 import {
-  adjustNights, applyPlaceInfo, assignTourDays, infoOf, markOf, needsInfo, routeCost, stopCost, type StopCost, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry,
+  adjustNights, applyPlaceInfo, assignTourDays, infoOf, keepStayChoices, markOf, stayAltSaving, needsInfo, routeCost, stopCost, type StopCost, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry,
   MAX_ROUTE_CALLS, minNightsOfMust, moveStop, namesBy, nightsOf, parseOnboarding, placeKey, preselectTours, removeStop, routeToRows, stayEstimatesOf, TRIP_STYLE_OF, wishesAt,
 } from '../lib/onboarding';
 import { headcount } from '../lib/people';
 import { dayMonth } from '../lib/format';
 import { daysBetween } from '../lib/time';
-import { Badge, Button, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, Sheet, type PhotoData } from '../components/ui';
+import { Badge, Button, Checkbox, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, Sheet, type PhotoData } from '../components/ui';
 import type { IconName } from '../components/ui/icons.data';
 import { ChatOptions, StepChat, TrilhaBubble } from '../components/ui/StepChat';
 import { AI_STEPS, AiThinking, Busy } from '../components/ui/Loader';
@@ -193,6 +193,8 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
         <Segmented label="Ritmo" value={p.pace} onChange={(pace) => setP({ ...p, pace })} options={PACES} block />
         <p className={s.label}>Onde dormir</p>
         <Segmented label="Onde dormir" value={p.stay} onChange={(stay) => setP({ ...p, stay })} options={STAYS} block />
+        <Checkbox label="Mostrar quando der pra dormir numa cidade vizinha bem mais barata" checked={p.stay_nearby !== false} onChange={(v) => setP({ ...p, stay_nearby: v })} />
+        <p className={s.muted} style={{ marginTop: -6 }}>Ex.: dormir em Salerno e ir e voltar da Costa Amalfitana. A Trilha só sugere quando a economia vale a pena; você decide em cada cidade.</p>
         <MoneyInput label="Teto por pessoa (opcional)" currency={b.trip.base_currency} value={p.budget ? Math.round(p.budget * 100) : null} onChange={(c) => setP({ ...p, budget: c ? c / 100 : null })} hint="Com teto, a Trilha avisa quando a viagem passar dele." />
         <Button disabled={busy || !p.vibes.length} onClick={next}>{busy ? <Busy>Salvando</Busy> : 'Continuar'}</Button>
       </ChatOptions>
@@ -524,12 +526,17 @@ function WishHere({ wish, how, dayTrip }: { wish: string; how: string | null; da
   );
 }
 
-function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishes, onNights, onMove, onRemove, onOpen, onTrip }: {
+function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishes, saving, onNights, onMove, onRemove, onOpen, onTrip, onStayAlt }: {
   st: RouteStop; i: number; count: number; dates: { arrival: string; departure: string }; cost: StopCost; money: (v: number) => string;
   places: OnboardingState['places']; marks: Record<string, PlaceMark>; info: PlaceInfo | null;
   wishes: { wish: string; how: string | null; dayTrip: string | null }[];
-  onNights: (d: 1 | -1) => void; onMove: (d: 1 | -1) => void; onRemove: () => void; onOpen: () => void; onTrip: (name: string) => void;
+  /** economia de dormir na cidade vizinha (null = não vale a pena) */
+  saving: { saves: number; share: number } | null;
+  onNights: (d: 1 | -1) => void; onMove: (d: 1 | -1) => void; onRemove: () => void; onOpen: () => void; onTrip: (name: string) => void; onStayAlt: (on: boolean) => void;
 }) {
+  const alt = st.stay_alt ?? null;
+  // A escolha fica visível enquanto vale a pena ou enquanto a pessoa estiver usando (para poder desfazer).
+  const showAlt = !!alt && (!!saving || !!st.stay_at_alt);
   const photo = useResolvedPhoto(null, photoQuery(st.name, info, st.country), true);
   const summary = info?.why && !/^Você adicionou\.?$|^Estava no roteiro/.test(info.why) ? info.why : st.why;
   const sights = (info?.attractions?.length ? info.attractions.map((a) => a.name) : info?.highlights ?? []).slice(0, 3);
@@ -543,6 +550,7 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishe
           <span className={s.stopNum}>{i + 1}</span>
           <h3>{st.name}</h3>
           <small>{st.country ? `${st.country} · ` : ''}{dayMonth(dates.arrival)} a {dayMonth(dates.departure)}</small>
+          {st.stay_at_alt && alt ? <small className={s.sleepsAt}><Icon name="bed" size={13} /> dormindo em {alt.name}</small> : null}
           <OriginBadge name={st.name} places={places} marks={marks} />
         </div>
       </div>
@@ -550,6 +558,21 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishe
       {sights.length ? <p className={s.stopSights}><Icon name="sparkle" size={13} /> {sights.join(' · ')}</p> : null}
       <button type="button" className={s.more} onClick={onOpen}>Ver mais sobre {st.name} <Icon name="next" size={14} /></button>
       {wishes.map((w) => <WishHere key={w.wish} {...w} />)}
+      {showAlt && alt ? (
+        <div className={s.stayAlt} data-on={st.stay_at_alt ? 'true' : undefined} aria-label={`Onde dormir em ${st.name}`} role="group">
+          <p className={s.stayAltHead}>
+            <Icon name="sparkle" size={15} />
+            <span>
+              <b>{saving ? `Dormir em ${alt.name} economiza ≈ ${money(saving.saves)} por pessoa` : `Dormir em ${alt.name} já não economiza com essas noites`}</b>
+              <small>{hoursText(alt.minutes / 60)} de {MODE_LABEL[alt.mode]?.toLowerCase() ?? 'viagem'} até {st.name} · ida e volta ≈ {money(alt.commute_pp_day)} por dia{alt.why ? `. ${alt.why}` : ''}</small>
+            </span>
+          </p>
+          <Segmented
+            label={`Onde dormir em ${st.name}`} block value={st.stay_at_alt ? 'alt' : 'here'} onChange={(v) => onStayAlt(v === 'alt')}
+            options={[{ value: 'here', label: `Dormir em ${st.name}` }, { value: 'alt', label: `Dormir em ${alt.name}` }]}
+          />
+        </div>
+      ) : null}
       <div className={s.stopRow}>
         <div className={s.stepper} role="group" aria-label={`Noites em ${st.name}`}>
           <button type="button" className={s.ctl} aria-label={`Uma noite a menos em ${st.name}`} disabled={st.nights <= 1} onClick={() => onNights(-1)}>−</button>
@@ -568,6 +591,7 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishe
           <span><Icon name="bed" size={14} />{money(cost.stay)}</span>
           <span><Icon name="wallet" size={14} />comida {money(cost.food)}</span>
           {cost.trips ? <span><Icon name="route" size={14} />bate-volta {money(cost.trips)}</span> : null}
+          {cost.commute ? <span><Icon name={MODE_ICON[alt?.mode ?? 'train'] ?? 'route'} size={14} />trajeto {money(cost.commute)}</span> : null}
         </span>
       </div>
       {st.day_trips.length ? (
@@ -613,7 +637,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   };
 
   // Mapa: paradas em ordem, bate-voltas ligados à parada e o que ficou de fora (tracejado).
-  const mapKey = JSON.stringify([route?.stops.map((x) => [x.name, x.lat, x.lng, x.day_trips.map((d) => [d.name, d.lat, d.lng])]), route?.left_out.map((l) => [l.name, l.lat, l.lng, l.reason]), Object.keys(info).length]);
+  const mapKey = JSON.stringify([route?.stops.map((x) => [x.name, x.lat, x.lng, x.stay_at_alt ? x.stay_alt?.name : null, x.day_trips.map((d) => [d.name, d.lat, d.lng])]), route?.left_out.map((l) => [l.name, l.lat, l.lng, l.reason]), Object.keys(info).length]);
   const { mapStops, extras } = useMemo(() => {
     if (!route) return { mapStops: [] as MapStop[], extras: [] as MapExtra[] };
     const mapStops: MapStop[] = route.stops.map((x) => { const c = coordOf(x.name, x.lat, x.lng); return { id: stopId(x.name), name: x.name, lat: c?.[0] ?? null, lng: c?.[1] ?? null }; });
@@ -623,6 +647,10 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
         const c = coordOf(d.name, d.lat, d.lng);
         if (c) extras.push({ id: tripMark(x.name, d.name), name: d.name, lat: c[0], lng: c[1], kind: 'trip', from: stopId(x.name), note: `Bate-volta saindo de ${x.name}` });
       }
+    }
+    for (const x of route.stops) {
+      const a = x.stay_at_alt ? x.stay_alt : null;
+      if (a?.lat != null && a.lng != null) extras.push({ id: `b:${placeKey(x.name)}`, name: a.name, lat: a.lat, lng: a.lng, kind: 'base', from: stopId(x.name), note: `Vocês dormem aqui e vão a ${x.name}` });
     }
     for (const l of route.left_out) {
       const c = coordOf(l.name, l.lat, l.lng);
@@ -648,9 +676,10 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
     const r = await callAiOrError<{ route: RouteProposal }>('explore', body);
     setLoading(false);
     if (!r.ok) { setFail({ unavailable: r.status === 503, error: r.error }); return; }
-    setRoute(r.res.data.route);
+    const fresh = keepStayChoices(r.res.data.route, route);
+    setRoute(fresh);
     if (opts.feedback) setFeedback('');
-    await persist({ ...ob, route: r.res.data.route, route_calls: calls + 1, stale: (ob.stale ?? []).filter((x) => x !== 'route') }).catch(() => undefined);
+    await persist({ ...ob, route: fresh, route_calls: calls + 1, stale: (ob.stale ?? []).filter((x) => x !== 'route') }).catch(() => undefined);
   };
   useEffect(() => {
     if ((!route || stale) && !asked.current && online) { asked.current = true; void fetchRoute(); }
@@ -707,6 +736,8 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
     mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
   const openExtra = (id: string) => {
+    const home = route.stops.find((x) => `b:${placeKey(x.name)}` === id);
+    if (home) return openSheet({ type: 'stop', name: home.name });
     for (const x of route.stops) for (const d of x.day_trips) if (tripMark(x.name, d.name) === id) return openSheet({ type: 'trip', stop: x.name, name: d.name }, x.name);
     const l = route.left_out.find((o) => outId(o.name) === id);
     if (l) openSheet({ type: 'out', name: l.name });
@@ -766,6 +797,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
           footer={<div className={s.actions}><Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(stopId(st.name), st.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button></div>}
         >
           {here.map((w) => <WishHere key={w.wish} {...w} />)}
+          {st.stay_at_alt && st.stay_alt ? <p className={s.tip}><Icon name="bed" size={16} /> Vocês dormem em {st.stay_alt.name} ({hoursText(st.stay_alt.minutes / 60)} de {MODE_LABEL[st.stay_alt.mode]?.toLowerCase() ?? 'viagem'}) e vêm pra cá durante o dia.</p> : null}
           {st.day_trips.length ? (
             <section className={s.stack} aria-label={`Bate-voltas saindo de ${st.name}`}>
               <h3 className={s.label}>Bate-voltas daqui</h3>
@@ -841,6 +873,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
           <p className={s.mapLegend}>
             <span><i data-k="stop" /> paradas em ordem</span>
             {extras.some((x) => x.kind === 'trip') ? <span><i data-k="trip" /> bate-voltas</span> : null}
+            {extras.some((x) => x.kind === 'base') ? <span><i data-k="base" /> onde vocês dormem</span> : null}
             {extras.some((x) => x.kind === 'out') ? <span><i data-k="out" /> ficou de fora</span> : null}
             <span className={s.muted}>A linha liga as paradas, não é o caminho real.</span>
           </p>
@@ -853,7 +886,8 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
               {i > 0 ? <LegLine leg={route.legs[i - 1] ?? null} money={money} /> : null}
               <StopCard
                 st={st} i={i} count={route.stops.length} dates={dates[i]} cost={costs[i]} money={money} places={ob.places} marks={marks}
-                info={about(st.name).info} wishes={wishesAt(route, st)}
+                info={about(st.name).info} wishes={wishesAt(route, st)} saving={stayAltSaving(st, style, fallbackNight)}
+                onStayAlt={(on) => edit({ ...route, stops: route.stops.map((x, j) => (j === i ? { ...x, stay_at_alt: on } : x)) })}
                 onNights={(d) => edit(adjustNights(route, i, d))} onMove={(d) => edit(moveStop(route, i, i + d))} onRemove={() => void remove(i)}
                 onOpen={() => openSheet({ type: 'stop', name: st.name })} onTrip={(name) => openSheet({ type: 'trip', stop: st.name, name }, st.name)}
               />
@@ -1087,8 +1121,9 @@ function StepCost({ b, ob, persist, busy, run, money, online, onDone }: StepProp
   const range = budgetRange(result, plan);
   const cap = capPerPerson(b);
   const legs = transportLegs(b, plan);
-  const flights = legs.filter((l) => /^Voo/.test(l.title));
-  const ground = legs.filter((l) => !/^Voo/.test(l.title));
+  const flights = legs.filter((l) => !l.commute && /^Voo/.test(l.title));
+  const ground = legs.filter((l) => !l.commute && !/^Voo/.test(l.title));
+  const commute = legs.filter((l) => l.commute);
   const sum = (xs: typeof legs) => xs.reduce((a, l) => a + (l.perPersonCents ?? 0), 0);
   const tours = tourOptions(b);
   const line = (k: string) => result.lines.find((l) => l.kind === k)!.perPersonCents;
@@ -1120,6 +1155,7 @@ function StepCost({ b, ob, persist, busy, run, money, online, onDone }: StepProp
           <div className={s.lines}>
             {flights.length ? <div className={s.line}><span>Voo{flights.length > 1 ? 's' : ''} ({flights.length})</span><span>{money(sum(flights))}</span></div> : null}
             {ground.length ? <div className={s.line}><span>Trechos entre cidades · {ground.length}</span><span>{money(sum(ground))}</span></div> : null}
+            {commute.length ? <div className={s.line}><span>Trajeto diário da cidade onde dormem · {commute.length}</span><span>{money(sum(commute))}</span></div> : null}
             <div className={s.line}><span>Hospedagem · {result.nights} noites ({styleName})</span><span>{money(line('hospedagem'))}</span></div>
             <div className={s.line}><span>Passeios{plan.activities ? ` · ${plan.activities.length}` : ''}</span><span>{money(line('passeios'))}</span></div>
             <div className={s.line}><span>Comida · {result.days} dias × {money(daily)}</span><span>{money(line('comida'))}</span></div>

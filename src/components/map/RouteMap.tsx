@@ -19,8 +19,8 @@ export interface MapExtra {
   name: string;
   lat: number;
   lng: number;
-  kind: 'trip' | 'out';
-  /** id da parada de onde sai (bate-volta): desenha uma linha fina até ela */
+  kind: 'trip' | 'out' | 'base';
+  /** id da parada ligada (bate-volta ou cidade onde se dorme): desenha uma linha fina até ela */
   from?: string | null;
   /** texto curto mostrado junto do nome (ex.: o motivo de ter ficado de fora) */
   note?: string | null;
@@ -71,7 +71,7 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
 
       // Bate-voltas: linha fina da parada até o lugar.
       for (const x of extras) {
-        if (x.kind !== 'trip' || !x.from) continue;
+        if (x.kind === 'out' || !x.from) continue;
         const base = pts.find((s) => s.id === x.from);
         if (base) L.polyline([[base.lat as number, base.lng as number], [x.lat, x.lng]], { color: accent, weight: 2, opacity: 0.7, dashArray: '1 6' }).addTo(map);
       }
@@ -79,9 +79,11 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
       for (const x of extras) {
         const big = x.id === focusId;
         const out = x.kind === 'out';
-        const size = big ? 34 : out ? 22 : 16;
+        const home = x.kind === 'base';
+        const size = big ? 34 : out ? 22 : home ? 20 : 16;
         const style = out
           ? `background:${big ? sun : '#fff'};border:2.5px dashed ${big ? '#fff' : sun};color:${big ? '#111' : sun};font:800 ${big ? 16 : 12}px/1 var(--font-body)`
+          : home ? `background:${accent};border:2px solid #fff;border-radius:6px;color:${fg};font:800 11px/1 var(--font-body)`
           : `background:#fff;border:3px solid ${accent}`;
         const icon = L.divIcon({
           className: '',
@@ -89,7 +91,7 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
         });
-        const what = out ? 'Ficou de fora' : 'Bate-volta';
+        const what = out ? 'Ficou de fora' : home ? 'Onde vocês dormem' : 'Bate-volta';
         const m = L.marker([x.lat, x.lng], { icon, title: x.name, alt: `${what}: ${x.name}`, keyboard: true, zIndexOffset: big ? 1000 : out ? 200 : 0 }).addTo(map!);
         m.bindTooltip(`<b>${esc(x.name)}</b>${x.note ? `<br><small>${esc(x.note)}</small>` : `<br><small>${what}</small>`}`, { direction: 'top', offset: [0, -size / 2], permanent: big });
         m.on('click', () => extraRef.current?.(x.id));
@@ -116,7 +118,7 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
         });
       });
       // Enquadra a rota e os bate-voltas; um lugar de fora em destaque entra no quadro (mostra o quanto foge da rota).
-      const frame = [...latlngs, ...extras.filter((x) => x.kind === 'trip').map((x) => [x.lat, x.lng] as [number, number])];
+      const frame = [...latlngs, ...extras.filter((x) => x.kind !== 'out').map((x) => [x.lat, x.lng] as [number, number])];
       if (focusExtra) frame.push([focusExtra.lat, focusExtra.lng]);
       if (frame.length) map.fitBounds(L.latLngBounds(frame).pad(0.2), { maxZoom: 9 });
       else map.setView([0, 0], 2);

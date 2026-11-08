@@ -243,7 +243,7 @@ describe('passo 4 · custo por parada e origem', () => {
     const st = { ...stop('Roma', 4), stay_pp_night: { equilibrado: { low: 20000, high: 30000 } }, day_trips: [{ name: 'Tivoli', day_offset: 1, cost_low: 4000, cost_high: 6000 }] };
     const food = [{ country: 'Itália', low: 18000, high: 30000 }];
     const c = stopCost(st, 'equilibrado', food, 9000, 7000);
-    expect(c).toEqual({ stay: 100000, food: 96000, trips: 5000, total: 201000, stayIsReference: false });
+    expect(c).toEqual({ stay: 100000, food: 96000, trips: 5000, commute: 0, total: 201000, stayIsReference: false });
     // Sem faixa para o estilo: referência
     expect(stopCost(st, 'conforto', [], 17100, 7000)).toMatchObject({ stay: 68400, food: 28000, stayIsReference: true });
     const r = italia();

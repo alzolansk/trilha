@@ -135,3 +135,4 @@
   .tours > :first-child { grid-row: span 3; }
   .stay { max-width: 760px; }
 }
+.sleepBase { margin: 0; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,.08); font-size: 14px; line-height: 1.45; color: var(--on-dark); overflow-wrap: anywhere; }

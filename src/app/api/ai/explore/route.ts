@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { aiConfigured, runWithFallback } from '@/lib/ai/providers';
 import { claimsAction, EXPLORE_RULES, exploreActivitySchema, exploreDestSchema, explorePlacesSchema, exploreRouteSchema, exploreStaySchema, placeInfoSchema } from '@/lib/ai/prompts';
 import type { NearbyIdea, PlaceIdea, PlaceInfo, RouteProposal } from '@/data/types';
-import { filterNearby, missingMust, nightsOf, normalizeRoute, parseOnboarding, splitFlights } from '@/lib/onboarding';
+import { filterNearby, missingMust, nightsOf, normalizeRoute, parseOnboarding, splitFlights, stayAltSaving } from '@/lib/onboarding';
+import { nightFor } from '@/lib/budgetPlan';
 import { headcount } from '@/lib/people';
 import { consumeQuota, handle, HttpError, loadTripForUser, readJson, requireUser, tripBrief } from '@/lib/ai/server';
 import { haversineKm } from '@/lib/derive';
@@ -219,6 +220,8 @@ JSON: {"items":[{"name":"...","region":"...","country":"...","lat":0,"lng":0,"wh
   // Itens marcados que a IA já descreveu como experiência (não cidade): ajudam a encaixar como bate-volta.
   const wanted = new Set([...q.must, ...q.maybe, ...(q.force ?? [])].map((n) => n.toLowerCase()));
   const experiences = (ob?.places?.items ?? []).filter((p) => p.kind === 'experiencia' && wanted.has(p.name.toLowerCase()));
+  const stayNearby = prefs?.stay_nearby !== false;
+  const style = prefs?.stay ?? 'equilibrado';
   const ask = (strict: boolean) => `${about}
 Monte o roteiro de ${nights} noites.
 NÃO PODE FALTAR: ${JSON.stringify(q.must)}${strict ? ' (OBRIGATÓRIO: inclua todos como parada ou bate-volta; se for impossível, explique em left_out)' : ''}.
@@ -241,10 +244,13 @@ Regras: a soma de "nights" das paradas deve ser exatamente ${nights}. Ordem geog
 "why" da parada = uma frase do que é o lugar e por que está no roteiro.
 "day_trips" = bate-voltas a partir da parada ("day_offset" = dia dentro da parada, 0 = chegada; custo por pessoa; "why" = uma frase do que é o lugar; "lat"/"lng" do lugar).
 "stay_pp_night" = faixa [mín, máx] da diária POR PESSOA (quarto dividido entre a turma) em cada estilo, em ${cur}.
+${stayNearby ? `"stay_alt" = SÓ quando é comum os turistas dormirem numa cidade vizinha bem mais barata e ir e voltar todo dia (ex.: Costa Amalfitana → Salerno, Veneza → Mestre, Cinque Terre → La Spezia, Zermatt → Täsch): a cidade, "why" (uma frase), "mode" e "minutes" de cada ida (no máximo 60), "commute_pp_day" = ida e volta por pessoa por dia em ${cur}, e "stay_pp_night" da base. Na maioria das paradas é null: não invente.` : '"stay_alt" = null.'}
 "food_pp_day" = faixa de comida por pessoa por dia em cada país da rota, em ${cur}.
 "left_out" = lugares pedidos que não couberam: "reason" = o motivo curto, "sacrifice" = o que tirar ou encurtar para ele caber, "lat"/"lng" do lugar.
-JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"flights":{"cost_low":0,"cost_high":0},"stops":[{"name":"...","country":"...","lat":0,"lng":0,"nights":2,"why":"...","wish":null,"day_trips":[{"name":"...","day_offset":1,"cost_low":0,"cost_high":0,"why":"...","lat":0,"lng":0,"wish":null}],"stay_pp_night":{"economico":[0,0],"equilibrado":[0,0],"conforto":[0,0]}}],"legs":[{"from":"...","to":"...","mode":"train","hours":0,"cost_low":0,"cost_high":0}],"return":{"from":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"food_pp_day":[{"country":"...","low":0,"high":0}],"left_out":[{"name":"...","reason":"...","sacrifice":"...","lat":0,"lng":0}],"wishes":[{"wish":"...","stop":"...","how":"...","reason":null,"sacrifice":null}]}`;
+JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"flights":{"cost_low":0,"cost_high":0},"stops":[{"name":"...","country":"...","lat":0,"lng":0,"nights":2,"why":"...","wish":null,"day_trips":[{"name":"...","day_offset":1,"cost_low":0,"cost_high":0,"why":"...","lat":0,"lng":0,"wish":null}],"stay_pp_night":{"economico":[0,0],"equilibrado":[0,0],"conforto":[0,0]},"stay_alt":null}],"legs":[{"from":"...","to":"...","mode":"train","hours":0,"cost_low":0,"cost_high":0}],"return":{"from":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"food_pp_day":[{"country":"...","low":0,"high":0}],"left_out":[{"name":"...","reason":"...","sacrifice":"...","lat":0,"lng":0}],"wishes":[{"wish":"...","stop":"...","how":"...","reason":null,"sacrifice":null}]}`;
 
+  const nightsOfStyle = (o: Partial<Record<'economico' | 'equilibrado' | 'conforto', [number, number]>> | null | undefined) =>
+    Object.fromEntries(Object.entries(o ?? {}).filter(([, p]) => !!p).map(([k, p]) => [k, { low: cents(Math.min(p![0], p![1])), high: cents(Math.max(p![0], p![1])) }]));
   const parse = (raw: unknown): RouteProposal | null => {
     const v = exploreRouteSchema.safeParse(raw);
     if (!v.success) return null;
@@ -257,8 +263,14 @@ JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":
         name: t.name, day_offset: t.day_offset, ...range(t.cost_low, t.cost_high),
         why: t.why && fair(t.why) ? t.why : null, lat: t.lat ?? null, lng: t.lng ?? null, wish: t.wish ?? null,
       })),
-      stay_pp_night: Object.fromEntries(Object.entries(x.stay_pp_night ?? {}).filter(([, p]) => !!p).map(([k, p]) => [k, { low: cents(Math.min(p![0], p![1])), high: cents(Math.max(p![0], p![1])) }])),
-    }));
+      stay_pp_night: nightsOfStyle(x.stay_pp_night),
+      stay_alt: stayNearby && x.stay_alt && fair(x.stay_alt.why ?? '') ? {
+        name: x.stay_alt.name, country: x.stay_alt.country ?? null, lat: x.stay_alt.lat ?? null, lng: x.stay_alt.lng ?? null, why: x.stay_alt.why ?? null,
+        mode: x.stay_alt.mode, minutes: Math.round(x.stay_alt.minutes), commute_pp_day: cents(x.stay_alt.commute_pp_day), stay_pp_night: nightsOfStyle(x.stay_alt.stay_pp_night),
+      } : null,
+    }))
+      // Base mais barata só fica quando a economia é considerável no estilo escolhido (planning: sugestão opcional).
+      .map((x) => (x.stay_alt && !stayAltSaving(x, style, nightFor(style)) ? { ...x, stay_alt: null } : x));
     if (!stops.length) return null;
     const flight = splitFlights(d.flights ?? null, d.outbound ?? null, d.return ?? null);
     return {

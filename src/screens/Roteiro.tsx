@@ -237,7 +237,7 @@ function StopCompact({ b, stop, onFocus, onMenu }: { b: TripBundle; stop: Stop; 
         <Photo photo={stop.photo?.url ? (stop.photo as PhotoData) : null} place={stop.name} alt="" height={52} radius="14px" caption={false} className={s.compactThumb} />
         <span className={s.compactText}>
           <span className={s.compactName}>{stop.name}</span>
-          <span className={s.compactSub}>{[dateSpan(stop.arrival_date, stop.departure_date), stopNights(stop), stop.area].filter(Boolean).join(' · ')}</span>
+          <span className={s.compactSub}>{[dateSpan(stop.arrival_date, stop.departure_date), stopNights(stop), stop.stay_base?.name ? `dorme em ${stop.stay_base.name}` : stop.area].filter(Boolean).join(' · ')}</span>
         </span>
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </button>
@@ -258,7 +258,7 @@ function StopFocus({ b, stop, base, canEdit, setOpen }: { b: TripBundle; stop: S
             <span className={s.coverLine}>{dateSpan(stop.arrival_date, stop.departure_date)} · {stopNights(stop)}</span>
             <h2 className={s.coverName}>{stop.name}</h2>
             <span className={s.coverChips}>
-              {stop.area ? <span className={s.chipLight}>Fiquem em {stop.area}</span> : null}
+              {stop.stay_base?.name ? <span className={s.chipLight}>Dormem em {stop.stay_base.name}</span> : stop.area ? <span className={s.chipLight}>Fiquem em {stop.area}</span> : null}
               <span className={s.chipDark}>Ver a cidade →</span>
             </span>
           </div>

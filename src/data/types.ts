@@ -171,6 +171,10 @@ export interface RouteStop {
   day_trips: RouteDayTrip[];
   /** desejo do passo 3 que fez a parada entrar (ex.: cidade de onde sai o Bernina Express) */
   wish?: string | null;
+  /** cidade vizinha mais barata para dormir, sugerida pela IA só quando a economia é considerável */
+  stay_alt?: StayBase | null;
+  /** a pessoa escolheu dormir na `stay_alt` */
+  stay_at_alt?: boolean;
   /** diária por pessoa, por estilo (centavos) */
   stay_pp_night?: Partial<Record<BudgetStyle, { low: number; high: number }>>;
 }
@@ -225,6 +229,8 @@ export interface OnboardingPrefs {
   stay: BudgetStyle;
   /** teto por pessoa, em unidades da moeda base */
   budget?: number | null;
+  /** sugerir cidade vizinha mais barata para dormir (padrão: sim) */
+  stay_nearby?: boolean;
 }
 export type OnboardingStep = 2 | 3 | 4 | 5 | 6;
 export interface OnboardingState {
@@ -339,6 +345,26 @@ export interface Stop extends Versioned {
   /** bairro escolhido para ficar */
   area?: string | null;
   photo?: PhotoRef | null;
+  // Migration 20261108000011.
+  /** dormir numa cidade vizinha mais barata (null = dorme na própria cidade) */
+  stay_base?: StayBase | null;
+}
+
+/** Cidade vizinha mais barata para dormir, de onde se vai e volta todo dia (valores em centavos, por pessoa). */
+export interface StayBase {
+  name: string;
+  country?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  /** por que muita gente dorme lá */
+  why?: string | null;
+  mode: TransportMode;
+  /** minutos de cada ida */
+  minutes: number;
+  /** ida e volta por pessoa, por dia */
+  commute_pp_day: number;
+  /** diária por pessoa na base, por estilo */
+  stay_pp_night?: Partial<Record<BudgetStyle, { low: number; high: number }>>;
 }
 
 export interface Transport extends Versioned {

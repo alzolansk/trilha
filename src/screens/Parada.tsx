@@ -19,6 +19,7 @@ import { Sheet } from '../components/ui/Sheet';
 import { useAuth } from '../data/AuthContext';
 import { acceptSuggestion, voteSuggestions } from '../data/suggestionActions';
 import { useBundle } from '../data/TripContext';
+import { parseOnboarding, placeKey } from '../lib/onboarding';
 import type { PhotoRef, Stop, Suggestion, TripBundle } from '../data/types';
 import { useResolvedPhoto } from '../data/usePhoto';
 import { callAi } from '../lib/ai/client';
@@ -328,14 +329,41 @@ function StayCard({ b, stop, area, canEdit, onEditStay, onFilters, onPaste, filt
   const cur = b.trip.base_currency;
   const [link, setLink] = useState('');
   const linkOk = /^https?:\/\/\S+$/i.test(link.trim());
-  const place = [stop.name, stop.country].filter(Boolean).join(', ');
+  // Dormindo numa cidade vizinha mais barata (escolhido no Montar a viagem): a busca vai para lá, sem o bairro da cidade.
+  const sleep = stop.stay_base?.name ? stop.stay_base : null;
+  const place = sleep ? [sleep.name, sleep.country ?? stop.country].filter(Boolean).join(', ') : [stop.name, stop.country].filter(Boolean).join(', ');
+  const where = sleep ? null : area;
   // O filtro do Booking/Airbnb usa o teto global; os chips leem o mesmo estado (vale para todas as paradas na sessão).
-  const links = staySearchLinks(place, stop.arrival_date, stop.departure_date, filters.adults, { area, maxNightCents: filters.capCents, currency: cur });
+  const links = staySearchLinks(place, stop.arrival_date, stop.departure_date, filters.adults, { area: where, maxNightCents: filters.capCents, currency: cur });
+  const { source, reload } = useBundle();
+  const [undoing, setUndoing] = useState(false);
+  const sleepHere = async () => {
+    setUndoing(true);
+    try {
+      await source.update('stops', stop.id, { stay_base: null }, stop.version);
+      // A diária estimada no Orçamento volta a ser a da própria cidade (a rota sugerida guarda as duas).
+      const plan = b.trip.budget_plan;
+      if (plan?.stay_estimates?.[stop.id]) {
+        const own = parseOnboarding(b.trip.onboarding)?.route?.stops.find((x) => placeKey(x.name) === placeKey(stop.name))?.stay_pp_night;
+        const next = { ...plan.stay_estimates };
+        if (own && Object.keys(own).length) next[stop.id] = own; else delete next[stop.id];
+        await source.update('trips', b.trip.id, { budget_plan: { ...plan, stay_estimates: next } });
+      }
+      await reload();
+    } catch { /* conflito: a tela recarrega com o valor atual */ await reload(); } finally { setUndoing(false); }
+  };
   const doc = stay?.document_id ? b.documents.find((d) => d.id === stay.document_id) : null;
   const openPoll = (b.polls ?? []).find((p) => p.stop_id === stop.id && p.target === 'stay' && p.status === 'open');
   return (
     <section className={s.stay} aria-labelledby="hosp">
-      <h3 id="hosp" className={s.stayLabel}>Hospedagem em {area ?? stop.name}</h3>
+      <h3 id="hosp" className={s.stayLabel}>Hospedagem em {sleep ? sleep.name : area ?? stop.name}</h3>
+      {sleep ? (
+        <p className={s.sleepBase}>
+          Vocês escolheram dormir em <b>{sleep.name}</b>, mais barato: {sleep.minutes < 60 ? `${Math.round(sleep.minutes)} min` : `${String(Math.round(sleep.minutes / 6) / 10).replace('.', ',')}h`} até {stop.name}
+          {sleep.commute_pp_day ? `, ida e volta ≈ ${formatMoney(sleep.commute_pp_day, cur, { compact: true })} por pessoa por dia` : ''}.{sleep.why ? ` ${sleep.why}` : ''}
+          {canEdit ? <> <button type="button" className={s.textBtn} disabled={undoing} onClick={() => void sleepHere()}>Dormir em {stop.name}</button></> : null}
+        </p>
+      ) : null}
       {stay ? (
         <div className={s.stayNow}>
           <div className={s.stayNowHead}>
@@ -357,7 +385,7 @@ function StayCard({ b, stop, area, canEdit, onEditStay, onFilters, onPaste, filt
       <>
           <span className={s.stayLead}>{stay?.status === 'booked' ? 'Já está reservado. Quer comparar? A busca vai pronta.' : 'A busca já vai pronta: só escolher o quarto.'}</span>
           <div className={s.stayChips} role="group" aria-label="Filtros da busca">
-            <button type="button" className={s.dchip} onClick={onFilters}>{area ? `${area}, ${stop.name}` : stop.name}</button>
+            <button type="button" className={s.dchip} onClick={onFilters}>{sleep ? sleep.name : area ? `${area}, ${stop.name}` : stop.name}</button>
             <button type="button" className={s.dchip} onClick={onFilters}>{dayMonth(stop.arrival_date)} → {dayMonth(stop.departure_date)}</button>
             <button type="button" className={s.dchip} onClick={onFilters}>{filters.adults} {filters.adults === 1 ? 'adulto' : 'adultos'} · 1 quarto</button>
             <button type="button" className={s.dchip} onClick={onFilters}>{filters.capCents ? `até ${formatMoney(Math.round(filters.capCents / 100) * 100, cur, { compact: true })} / noite` : 'sem teto por noite'}</button>
@@ -370,7 +398,7 @@ function StayCard({ b, stop, area, canEdit, onEditStay, onFilters, onPaste, filt
             ))}
           </div>
           <span className={s.stayNote}>
-            {l10nFilterNote(area, filters.capCents)} A Trilha não reserva nada.
+            {l10nFilterNote(where, filters.capCents)} A Trilha não reserva nada.
           </span>
           {canEdit ? (
             <form className={s.paste} onSubmit={(e) => { e.preventDefault(); if (linkOk) { onPaste(link.trim()); setLink(''); } }}>

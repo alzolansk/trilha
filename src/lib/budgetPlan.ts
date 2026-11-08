@@ -43,6 +43,21 @@ export function foodLevels(range?: { low: number; high: number } | null): Record
   return Object.fromEntries(FOODS.map((f) => [f.key, Math.round(DEFAULTS.foodPerDay * f.factor)])) as Record<BudgetFood, number>;
 }
 
+/** Trajeto da cidade-dormitório: uma ida e volta por noite (no dia da chegada já se dorme lá). Centavos por pessoa. */
+export const commuteCost = (base: { commute_pp_day: number }, nights: number) => Math.max(0, Math.round(base.commute_pp_day)) * Math.max(1, nights);
+
+/** Id do trajeto diário de uma parada nos trechos do Orçamento (`transport_cents` aceita um valor digitado). */
+export const commuteId = (stopId: string) => `cm:${stopId}`;
+
+/** Paradas que dormem numa cidade vizinha: o trajeto diário entra no transporte, como estimativa. */
+export function commuteLegs(b: Pick<TripBundle, 'stops'>, plan: Pick<BudgetPlan, 'transport_cents'> | null | undefined): { id: string; stopId: string; title: string; perPersonCents: number }[] {
+  return [...b.stops].sort((x, y) => x.position - y.position).filter((s) => s.stay_base?.name).map((s) => {
+    const n = Math.max(0, daysBetween(s.arrival_date, s.departure_date));
+    const id = commuteId(s.id);
+    return { id, stopId: s.id, title: `Trajeto diário ${s.stay_base!.name} ↔ ${s.name}`, perPersonCents: plan?.transport_cents?.[id] ?? commuteCost(s.stay_base!, n) };
+  });
+}
+
 /** Valor da noite por pessoa de cada estilo, para paradas sem hospedagem com preço. */
 export const nightFor = (style: BudgetStyle) => Math.round(DEFAULTS.nightPerPerson * (STYLE_FACTOR[style] ?? 1));
 
@@ -119,6 +134,9 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
     const o = plan.transport_cents?.[v.key];
     if (o != null) { tr += o; trEst += o; } else pendingVirtual++;
   }
+
+  // Trajeto diário de quem dorme numa cidade vizinha (estimativa, ou o valor digitado no Orçamento).
+  for (const c of commuteLegs(b, plan)) { tr += c.perPersonCents; trEst += c.perPersonCents; }
 
   // Hospedagem: preço por noite da casa ÷ pessoas; parada com noites e sem preço → referência × estilo.
   let st = 0;
@@ -266,6 +284,8 @@ export interface TransportLeg {
   /** 'roteiro' = preço gravado no trecho; 'trilha' = aceito no Orçamento (estimativa) */
   from: 'roteiro' | 'trilha' | null;
   isEstimate: boolean;
+  /** trajeto diário da cidade-dormitório até a parada */
+  commute?: boolean;
 }
 
 const LEG_MODE: Record<string, string> = { plane: 'Voo', bus: 'Ônibus', train: 'Trem', car: 'Carro', boat: 'Barco', walk: 'A pé', other: 'Trecho' };
@@ -296,7 +316,8 @@ export function transportLegs(b: TripBundle, plan: Pick<BudgetPlan, 'transport_c
       if (o != null) return { id: t.id, title: legTitle(b, t), perPersonCents: o, from: 'trilha' as const, isEstimate: true };
       return { id: t.id, title: legTitle(b, t), perPersonCents: null, from: null, isEstimate: false };
     });
-  return [...virtual.filter((v) => v.id === 'ida'), ...real, ...virtual.filter((v) => v.id === 'volta')];
+  const commute = commuteLegs(b, plan).map((c): TransportLeg => ({ id: c.id, title: c.title, perPersonCents: c.perPersonCents, from: 'trilha', isEstimate: true, commute: true }));
+  return [...virtual.filter((v) => v.id === 'ida'), ...real, ...commute, ...virtual.filter((v) => v.id === 'volta')];
 }
 
 export interface StayOption {

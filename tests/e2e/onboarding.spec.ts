@@ -220,6 +220,40 @@ test.describe('Onboarding roteirizado', () => {
     expect(calls.filter((c) => c === 'route')).toHaveLength(2);
   });
 
+  test('dormir numa cidade vizinha mais barata é opcional e vai para a parada', async ({ page }) => {
+    const base = { name: 'Djúpivogur', country: 'Islândia', lat: 64.66, lng: -14.28, why: 'Vila de pescadores com pousadas mais baratas.', mode: 'car', minutes: 40, commute_pp_day: 8000, stay_pp_night: { equilibrado: { low: 15000, high: 20000 } } };
+    const r = { ...route, stops: route.stops.map((x) => (x.name === 'Höfn' ? { ...x, stay_alt: base } : x)) };
+    await mockAi(page, { route: r });
+    await page.goto('/demo/islandia/montar?passo=4');
+    const card = page.locator('[data-stop="Höfn"]');
+    // (375 − 175) × 3 − 80 × 3 = R$ 360 de economia, já com o trajeto
+    await expect(card.getByRole('group', { name: 'Onde dormir em Höfn' })).toContainText('Dormir em Djúpivogur economiza ≈ R$ 360 por pessoa');
+    await expect(card.getByRole('radio', { name: 'Dormir em Höfn' })).toHaveAttribute('aria-checked', 'true');
+    // Outras cidades não ganham sugestão
+    await expect(page.locator('[data-stop="Vík"]').getByRole('group', { name: /Onde dormir/ })).toHaveCount(0);
+    const before = await page.getByTestId('route-total').innerText();
+    await card.getByRole('radio', { name: 'Dormir em Djúpivogur' }).click();
+    await expect(card).toContainText('dormindo em Djúpivogur');
+    await expect(card).toContainText('trajeto R$ 240');
+    await expect(page.getByTestId('route-total')).not.toHaveText(before);
+    await expect(page.locator('.leaflet-marker-icon[title="Djúpivogur"]')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Gostei, ver passeios' }).click();
+    await page.getByRole('button', { name: 'Substituir' }).click();
+    await expect(page.getByText('Passo 5 de 6')).toBeVisible();
+    // Custo: o trajeto diário vira uma linha própria
+    await page.getByRole('button', { name: 'Passo 6: Custo' }).click();
+    await expect(page.getByRole('region', { name: 'Quanto custa' })).toContainText('Trajeto diário da cidade onde dormem · 1');
+    // Roteiro e página da parada: a busca de hospedagem vai para a cidade vizinha
+    await page.getByRole('link', { name: 'Roteiro', exact: true }).first().click();
+    await expect(page.getByText(/dorme em Djúpivogur/).first()).toBeVisible();
+    await page.getByRole('button', { name: /^Höfn .*dorme em Djúpivogur/ }).click();
+    await expect(page.getByText('Dormem em Djúpivogur').first()).toBeVisible();
+    await page.getByRole('link', { name: /Ver a cidade: Höfn/ }).first().click();
+    await expect(page.getByRole('heading', { name: 'Hospedagem em Djúpivogur' })).toBeVisible();
+    await expect(page.getByText('Vocês escolheram dormir em')).toBeVisible();
+  });
+
   test('sem IA, vai direto para o roteiro manual', async ({ page }) => {
     await mockAi(page, { placesStatus: 503 });
     await page.goto('/demo/marrocos/montar?passo=3');

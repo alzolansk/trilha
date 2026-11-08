@@ -2,10 +2,11 @@
 // Sem rede e sem React; usado pela tela /montar, pela rota de IA e pelos testes.
 import type {
   BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, OnboardingState, OnboardingStep, PlaceIdea, PlaceInfo, PlaceMark, RouteLeg,
-  RouteProposal, RouteStop, RouteWish, TourIdea, TransportMode, Trip, TripStyle,
+  RouteProposal, RouteStop, RouteWish, StayBase, TourIdea, TransportMode, Trip, TripStyle,
 } from '../data/types';
 import { haversineKm } from './derive';
-import { PACE_PER_DAY } from './budgetPlan';
+import { commuteCost, PACE_PER_DAY } from './budgetPlan';
+export { commuteCost };
 import { addDays, daysBetween } from './time';
 
 /** Chave estável de um lugar (sem acento, minúsculas). */
@@ -246,7 +247,7 @@ const mid = (l: { cost_low: number | null; cost_high: number | null }) => (l.cos
 const minutes = (h: number | null) => (h != null && h > 0 ? Math.min(10080, Math.round(h * 60)) : null);
 
 export interface RouteRows {
-  stops: { id: string; name: string; country: string | null; lat: number | null; lng: number | null; arrival_date: string; departure_date: string; arrival_mode: TransportMode }[];
+  stops: { id: string; name: string; country: string | null; lat: number | null; lng: number | null; arrival_date: string; departure_date: string; arrival_mode: TransportMode; stay_base?: StayBase | null }[];
   legs: { stop_index: number; mode: TransportMode; origin_name: string | null; dest_name: string; depart_date: string; duration_min: number | null; price_cents: number | null; is_return?: boolean }[];
   suggestions: never[];
 }
@@ -263,6 +264,7 @@ export function routeToRows(route: RouteProposal, trip: Pick<Trip, 'start_date' 
     arrival_date: dates[i].arrival,
     departure_date: dates[i].departure,
     arrival_mode: (i === 0 ? route.outbound?.mode : route.legs[i - 1]?.mode) ?? 'other',
+    stay_base: s.stay_at_alt && s.stay_alt ? s.stay_alt : null,
   }));
   const legs: RouteRows['legs'] = [];
   const origin = trip.origin?.trim() || null;
@@ -283,7 +285,10 @@ export function routeToRows(route: RouteProposal, trip: Pick<Trip, 'start_date' 
 /** Diária de hospedagem por parada (ids reais) para `budget_plan.stay_estimates`. */
 export function stayEstimatesOf(route: RouteProposal, stopIds: string[]): NonNullable<BudgetPlan['stay_estimates']> {
   const out: NonNullable<BudgetPlan['stay_estimates']> = {};
-  route.stops.forEach((s, i) => { if (stopIds[i] && s.stay_pp_night) out[stopIds[i]] = s.stay_pp_night; });
+  route.stops.forEach((s, i) => {
+    const night = s.stay_at_alt && s.stay_alt?.stay_pp_night ? s.stay_alt.stay_pp_night : s.stay_pp_night;
+    if (stopIds[i] && night) out[stopIds[i]] = night;
+  });
   return out;
 }
 
@@ -317,6 +322,8 @@ export interface StopCost {
   food: number;
   /** bate-voltas da parada, por pessoa */
   trips: number;
+  /** ida e volta diária da cidade-dormitório (0 = dorme na própria cidade) */
+  commute: number;
   total: number;
   /** a diária veio da referência geral (a IA não deu faixa para o estilo) */
   stayIsReference: boolean;
@@ -329,13 +336,46 @@ const midOf = (r: { low: number; high: number } | undefined | null) => (r ? Math
  * e bate-voltas. Sem faixa da IA, usa a referência do estilo (`nightFor`) e a diária média de comida.
  */
 export function stopCost(stop: RouteStop, style: BudgetStyle, food: RouteProposal['food_pp_day'], fallbackNight: number, fallbackFood: number): StopCost {
-  const nightRange = midOf(stop.stay_pp_night?.[style] ?? null);
+  const alt = stop.stay_at_alt && stop.stay_alt ? stop.stay_alt : null;
+  const altNight = alt ? midOf(alt.stay_pp_night?.[style] ?? null) : null;
+  const nightRange = altNight ?? midOf(stop.stay_pp_night?.[style] ?? null);
   const stay = (nightRange ?? fallbackNight) * Math.max(0, stop.nights);
+  const commute = alt ? commuteCost(alt, stop.nights) : 0;
   const country = food.find((f) => placeKey(f.country) === placeKey(stop.country)) ?? null;
   const day = country ? Math.round((country.low + country.high) / 2) : food.length ? Math.round(food.reduce((a, f) => a + (f.low + f.high) / 2, 0) / food.length) : fallbackFood;
   const foodTotal = day * Math.max(1, stop.nights);
   const trips = stop.day_trips.reduce((a, d) => a + Math.round((d.cost_low + d.cost_high) / 2), 0);
-  return { stay, food: foodTotal, trips, total: stay + foodTotal + trips, stayIsReference: nightRange == null };
+  return { stay, food: foodTotal, trips, commute, total: stay + foodTotal + trips + commute, stayIsReference: nightRange == null };
+}
+
+/** Só vale sugerir dormir fora quando economiza pelo menos isto da hospedagem na cidade, já contando o trajeto. */
+export const STAY_ALT_MIN_SHARE = 0.2;
+export const STAY_ALT_MAX_MINUTES = 60;
+
+/**
+ * Quanto se economiza (por pessoa, na parada toda) dormindo na cidade vizinha, já descontado o trajeto diário.
+ * null quando não há base, a base não tem diária no estilo, o trajeto é longo demais ou a economia não é
+ * considerável (menos de 20% da hospedagem na cidade). A sugestão é opcional: só aparece quando vale.
+ */
+export function stayAltSaving(stop: RouteStop, style: BudgetStyle, fallbackNight: number): { saves: number; share: number } | null {
+  const alt = stop.stay_alt;
+  if (!alt || !(alt.minutes > 0) || alt.minutes > STAY_ALT_MAX_MINUTES) return null;
+  const altNight = midOf(alt.stay_pp_night?.[style] ?? null);
+  if (altNight == null) return null;
+  const nights = Math.max(1, stop.nights);
+  const here = (midOf(stop.stay_pp_night?.[style] ?? null) ?? fallbackNight) * nights;
+  if (here <= 0) return null;
+  const saves = here - altNight * nights - commuteCost(alt, nights);
+  const share = saves / here;
+  return share >= STAY_ALT_MIN_SHARE ? { saves, share } : null;
+}
+
+/** Ao refazer a rota, quem já escolheu dormir na mesma cidade vizinha continua com a escolha. */
+export function keepStayChoices(next: RouteProposal, prev: RouteProposal | null | undefined): RouteProposal {
+  if (!prev) return next;
+  const chosen = new Map(prev.stops.filter((s) => s.stay_at_alt && s.stay_alt).map((s) => [placeKey(s.name), placeKey(s.stay_alt!.name)]));
+  if (!chosen.size) return next;
+  return { ...next, stops: next.stops.map((s) => (s.stay_alt && chosen.get(placeKey(s.name)) === placeKey(s.stay_alt.name) ? { ...s, stay_at_alt: true } : s)) };
 }
 
 /** Total por pessoa da rota proposta: ida, trechos, volta e o custo de cada parada. */
