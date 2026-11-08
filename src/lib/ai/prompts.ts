@@ -158,14 +158,45 @@ export const exploreRouteSchema = z.object({
     lat, lng,
     nights: z.number().int().min(1).max(60),
     why: z.string().max(220).nullable().optional(),
-    day_trips: z.array(z.object({ name: z.string().min(2).max(80), day_offset: z.number().int().min(0).max(60), cost_low: money, cost_high: money })).max(4).default([]),
+    day_trips: z.array(z.object({
+      name: z.string().min(2).max(80), day_offset: z.number().int().min(0).max(60), cost_low: money, cost_high: money,
+      why: z.string().max(220).nullable().optional(), lat: lat.nullable().optional(), lng: lng.nullable().optional(), wish: z.string().max(80).nullable().optional(),
+    })).max(4).default([]),
+    wish: z.string().max(80).nullable().optional(),
     stay_pp_night: z.object({ economico: pair.optional(), equilibrado: pair.optional(), conforto: pair.optional() }).partial().optional(),
   })).min(1).max(12),
   legs: z.array(legSchema).max(12).default([]),
   return: z.object({ from: z.string().min(2).max(80), mode, hours: z.number().min(0.1).max(48), cost_low: money, cost_high: money }).nullable().optional(),
   food_pp_day: z.array(z.object({ country: z.string().min(2).max(60), low: money, high: money })).max(6).default([]),
-  left_out: z.array(z.object({ name: z.string().min(2).max(80), reason: z.string().min(2).max(160) })).max(12).default([]),
-  wishes: z.array(z.object({ wish: z.string().max(80), stop: z.string().max(80).nullable() })).max(5).default([]),
+  left_out: z.array(z.object({
+    name: z.string().min(2).max(80), reason: z.string().min(2).max(160),
+    sacrifice: z.string().max(200).nullable().optional(), lat: lat.nullable().optional(), lng: lng.nullable().optional(),
+  })).max(12).default([]),
+  wishes: z.array(z.object({
+    wish: z.string().max(80), stop: z.string().max(80).nullable(),
+    how: z.string().max(220).nullable().optional(), reason: z.string().max(200).nullable().optional(), sacrifice: z.string().max(200).nullable().optional(),
+  })).max(5).default([]),
+});
+
+/** Resumo de lugares pedidos sob demanda: adicionados à mão, paradas sugeridas, bate-voltas e "ficou de fora". */
+export const placeInfoSchema = z.object({
+  items: z.array(z.object({
+    asked: z.string().min(1).max(80),
+    name: z.string().min(2).max(80),
+    kind: z.enum(['lugar', 'experiencia']).default('lugar'),
+    base: z.string().max(80).nullable().optional(),
+    region: z.string().max(80).nullable().optional(),
+    country: z.string().min(2).max(60),
+    lat, lng,
+    why: z.string().min(8).max(260),
+    nights_min: z.number().int().min(0).max(30).default(1),
+    nights_max: z.number().int().min(0).max(30).default(2),
+    highlights: z.array(z.string().min(2).max(80)).max(3).default([]),
+    photo_query: z.string().max(80).nullable().optional(),
+    tags: z.array(z.string().max(20)).max(6).default([]),
+    attractions: z.array(z.object({ name: z.string().min(2).max(80), why: z.string().max(200).nullable().optional() })).max(6).default([]),
+    tip: z.string().max(220).nullable().optional(),
+  })).min(1).max(8),
 });
 
 export const exploreStaySchema = z.object({

@@ -1,8 +1,8 @@
 // Onboarding roteirizado (planning §10.12): regras puras dos passos 3 a 6.
 // Sem rede e sem React; usado pela tela /montar, pela rota de IA e pelos testes.
 import type {
-  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, OnboardingState, OnboardingStep, PlaceIdea, PlaceMark, RouteLeg,
-  RouteProposal, RouteStop, TourIdea, TransportMode, Trip, TripStyle,
+  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, OnboardingState, OnboardingStep, PlaceIdea, PlaceInfo, PlaceMark, RouteLeg,
+  RouteProposal, RouteStop, RouteWish, TourIdea, TransportMode, Trip, TripStyle,
 } from '../data/types';
 import { haversineKm } from './derive';
 import { PACE_PER_DAY } from './budgetPlan';
@@ -83,6 +83,70 @@ export function filterNearby(nearby: NearbyIdea[], items: Pick<PlaceIdea, 'name'
     seen.add(k);
     return true;
   });
+}
+
+/** Lugares do passo 3 que ainda pedem resumo da IA (adicionados à mão ou vindos do Descobrir). */
+export const needsInfo = (items: PlaceIdea[]) => items.filter((p) => (p.added || p.from_discover) && !p.enriched).map((p) => p.name);
+
+/**
+ * Junta o resumo da IA aos lugares do passo 3. A IA pode corrigir o nome ("Costa Malfitana" → "Costa Amalfitana"):
+ * a marcação vai junto. Se o nome corrigido já está na lista, o lugar repetido sai e a marcação mais forte fica.
+ */
+export function applyPlaceInfo(
+  items: PlaceIdea[], marks: Record<string, PlaceMark>, found: (PlaceInfo & { asked: string })[],
+): { items: PlaceIdea[]; marks: Record<string, PlaceMark> } {
+  let list = [...items];
+  const nextMarks = { ...marks };
+  const rank: Record<PlaceMark, number> = { must: 3, maybe: 2, skip: 1 };
+  for (const f of found) {
+    const ask = placeKey(f.asked);
+    const i = list.findIndex((p) => placeKey(p.name) === ask);
+    if (i < 0) continue;
+    const old = list[i];
+    const name = f.name?.trim() || old.name;
+    const k = placeKey(name);
+    const merged: PlaceIdea = {
+      ...old, name, country: f.country || old.country, region: f.region ?? old.region ?? null,
+      lat: f.lat ?? old.lat ?? null, lng: f.lng ?? old.lng ?? null, why: f.why || old.why,
+      nights_min: Math.max(1, Math.min(f.nights_min ?? old.nights_min, f.nights_max ?? old.nights_max)),
+      nights_max: Math.max(1, f.nights_min ?? old.nights_min, f.nights_max ?? old.nights_max),
+      highlights: f.highlights ?? old.highlights, photo_query: f.photo_query ?? old.photo_query ?? null, tags: f.tags ?? old.tags,
+      attractions: f.attractions ?? old.attractions, tip: f.tip ?? old.tip ?? null, kind: f.kind ?? 'lugar', base: f.base ?? null, enriched: true,
+    };
+    if (k !== ask) {
+      const dup = list.findIndex((p, j) => j !== i && placeKey(p.name) === k);
+      const m = nextMarks[ask];
+      delete nextMarks[ask];
+      if (dup >= 0) {
+        const keep = nextMarks[k];
+        if (m && (!keep || rank[m] > rank[keep])) nextMarks[k] = m;
+        list = list.filter((_, j) => j !== i);
+        continue;
+      }
+      if (m) nextMarks[k] = m;
+    }
+    list[i] = merged;
+  }
+  return { items: list, marks: nextMarks };
+}
+
+/**
+ * O que se sabe de um lugar para a janela de detalhes: lista do passo 3, "perto daqui" ou o cache `info`.
+ * `detailed` = já tem o que ver (senão vale buscar na IA).
+ */
+export function infoOf(
+  name: string, places: { items: PlaceIdea[]; nearby: NearbyIdea[] } | null | undefined, info: Record<string, PlaceInfo> | null | undefined,
+): { info: PlaceInfo | null; detailed: boolean } {
+  const k = placeKey(name);
+  const item = places?.items.find((p) => placeKey(p.name) === k);
+  const near = places?.nearby.find((n) => placeKey(n.name) === k);
+  const cached = info?.[k] ?? null;
+  const from: PlaceInfo | null = item
+    ? { ...item }
+    : near ? { name: near.name, country: near.country, lat: near.lat, lng: near.lng, why: near.why, photo_query: near.photo_query, attractions: near.attractions, tip: near.tip } : null;
+  const best = from && (from.attractions?.length || !cached) ? from : cached ?? from;
+  const placeholder = !!item && (item.added || item.from_discover) && !item.enriched;
+  return { info: best, detailed: !!best?.attractions?.length && !(placeholder && !cached) };
 }
 
 // ───────────── Passo 4 ─────────────
@@ -336,12 +400,12 @@ export function dayTripTours(stop: RouteStop): TourIdea[] {
   return stop.day_trips.map((d) => ({
     id: `bv-${placeKey(stop.name)}-${placeKey(d.name)}`.replace(/[^a-z0-9-]/g, '-'),
     title: `Bate-volta: ${d.name}`.slice(0, 80),
-    why: `Saindo de ${stop.name}.`,
+    why: d.why ? `${d.why} Saindo de ${stop.name}.`.slice(0, 200) : `Saindo de ${stop.name}.`,
     duration: 'dia inteiro',
     cost_low: d.cost_low,
     cost_high: d.cost_high,
     day_fit: 'dia_todo',
-    wish: null,
+    wish: d.wish ?? null,
   }));
 }
 
@@ -385,7 +449,7 @@ export function cutSuggestions(
  * Normaliza a rota da IA: noites somando o total da viagem, trechos ligando as paradas em ordem
  * e todo "não pode faltar" incluído ou explicado em `left_out`.
  */
-export function normalizeRoute(raw: RouteProposal, totalNights: number, must: string[]): RouteProposal {
+export function normalizeRoute(raw: RouteProposal, totalNights: number, must: string[], wishes: string[] = []): RouteProposal {
   const { stops, dropped } = fitNights(raw.stops.filter((s) => s.name?.trim()), Math.max(1, totalNights));
   const left = [...raw.left_out, ...dropped.map((d) => ({ name: d.name, reason: 'Não coube nas noites da viagem.' }))];
   const inRoute = new Set(stops.flatMap((s) => [placeKey(s.name), ...s.day_trips.map((d) => placeKey(d.name))]));
@@ -394,7 +458,43 @@ export function normalizeRoute(raw: RouteProposal, totalNights: number, must: st
     if (!inRoute.has(k) && !left.some((l) => placeKey(l.name) === k)) left.push({ name: m, reason: 'A Trilha não conseguiu encaixar.' });
   }
   const base: RouteProposal = { ...raw, stops, left_out: left.filter((l, i, a) => !inRoute.has(placeKey(l.name)) && a.findIndex((x) => placeKey(x.name) === placeKey(l.name)) === i) };
-  return relink(base, raw);
+  const linked = relink(base, raw);
+  return { ...linked, wishes: normalizeWishes(linked, wishes) };
+}
+
+/**
+ * Cada desejo do passo 3 com um lugar no roteiro, ou explicitamente "não coube" (planning: a Trilha encaixa os
+ * desejos ou diz que não deu e o que sacrificar). O nome que a IA deu como parada precisa existir na rota; um
+ * bate-volta conta pela parada de onde sai. Parada ou bate-volta marcados com o desejo valem mesmo se a IA
+ * esqueceu de citar em `wishes`.
+ */
+export function normalizeWishes(route: Pick<RouteProposal, 'stops' | 'wishes'>, asked: string[]): RouteWish[] {
+  const stopOf = (name: string | null | undefined): string | null => {
+    if (!name) return null;
+    const k = placeKey(name);
+    const st = route.stops.find((s) => placeKey(s.name) === k) ?? route.stops.find((s) => s.day_trips.some((d) => placeKey(d.name) === k));
+    return st?.name ?? null;
+  };
+  const markedAt = (w: string): string | null => {
+    const k = placeKey(w);
+    return route.stops.find((s) => placeKey(s.wish ?? '') === k || s.day_trips.some((d) => placeKey(d.wish ?? '') === k))?.name ?? null;
+  };
+  const list = asked.length ? asked : route.wishes.map((w) => w.wish);
+  return list.filter((w, i, a) => w.trim() && a.findIndex((x) => placeKey(x) === placeKey(w)) === i).map((w): RouteWish => {
+    const ai = route.wishes.find((x) => placeKey(x.wish) === placeKey(w));
+    const stop = stopOf(ai?.stop) ?? markedAt(w);
+    if (stop) return { wish: w, stop, how: ai?.how ?? null, reason: null, sacrifice: null };
+    return { wish: w, stop: null, how: ai?.how ?? null, reason: ai?.reason || 'A Trilha não achou onde encaixar nas noites da viagem.', sacrifice: ai?.sacrifice ?? null };
+  });
+}
+
+/** Desejos que acontecem nesta parada (nela mesma ou num bate-volta que sai dela). */
+export function wishesAt(route: Pick<RouteProposal, 'stops' | 'wishes'>, stop: RouteStop): { wish: string; how: string | null; dayTrip: string | null }[] {
+  const k = placeKey(stop.name);
+  return route.wishes.filter((w) => w.stop && placeKey(w.stop) === k).map((w) => {
+    const d = stop.day_trips.find((x) => placeKey(x.wish ?? '') === placeKey(w.wish));
+    return { wish: w.wish, how: w.how ?? null, dayTrip: d?.name ?? null };
+  });
 }
 
 /** "Não pode faltar" que não entraram na rota nem foram explicados (para pedir uma nova tentativa). */

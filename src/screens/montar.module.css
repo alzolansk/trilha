@@ -160,3 +160,49 @@
 
 /* No baralho, os botões quero/pular são a ação principal: o rodapé não fica por cima deles */
 .foot[data-static='true'] { position: static; box-shadow: none; }
+
+/* Passos navegáveis (dá pra voltar a qualquer passo já feito) */
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.stepBtn { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--mute); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; min-width: 0; }
+.stepBtn i { display: block; height: 6px; border-radius: 3px; background: var(--line); transition: background var(--dur) var(--ease); }
+.stepBtn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepBtn[data-done='true'] i { background: var(--brand-soft); }
+.stepBtn[data-done='true'] { color: var(--ink-2); }
+.stepBtn[data-done='true']:hover:not(:disabled) span { color: var(--brand); text-decoration: underline; }
+.stepBtn[aria-current='step'] i { background: var(--brand); }
+.stepBtn[aria-current='step'] { color: var(--brand); cursor: default; }
+.stepBtn:disabled { cursor: default; opacity: .55; }
+.stepBtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+/* Passo 4: resumo da parada, bate-voltas clicáveis, desejos e mapa */
+.stopWhy { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.stopSights { margin: -4px 0 0; display: flex; gap: 6px; align-items: baseline; color: var(--mute); font-size: 13px; overflow-wrap: anywhere; }
+.more { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: -6px; padding: 0; border: 0; background: none; color: var(--brand); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.more:focus-visible, .linkBtn:focus-visible, .tripChip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.tripChip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 999px; background: var(--field); color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.tripChip:hover { background: var(--brand-soft); color: var(--brand-ink); }
+.tripChip[data-wish='true'] { background: var(--ok-soft); color: var(--ok-ink); }
+.wishHere { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: var(--ok-soft); color: var(--ok-ink); font-size: 13.5px; }
+.wishHere span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wishHere small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.wishRowCard { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: var(--surface); flex-wrap: wrap; }
+.wishRowCard[data-fits='false'] { background: var(--sun-soft); }
+.wishIcon { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--ok-soft); color: var(--ok-ink); }
+.wishRowCard[data-fits='false'] .wishIcon { background: var(--surface); color: var(--sun-ink); }
+.wishText { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.wishText small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.cut { flex-wrap: wrap; }
+.cut[data-focus='true'] { box-shadow: inset 0 0 0 2px var(--sun); }
+.cutActions { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.sacrifice { color: var(--sun-ink); font-size: 13px; overflow-wrap: anywhere; }
+.linkBtn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; text-align: left; }
+.linkBtn:hover { color: var(--brand); }
+.outWhy { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--sun-soft); color: var(--sun-ink); font-size: 14px; }
+.outWhy p { margin: 0; overflow-wrap: anywhere; }
+.mapBox { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 80px; }
+.mapLegend { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.mapLegend span { display: inline-flex; align-items: center; gap: 6px; }
+.mapLegend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-sizing: border-box; }
+.mapLegend i[data-k='stop'] { background: var(--trip-accent, var(--brand)); }
+.mapLegend i[data-k='trip'] { background: var(--surface); border: 2.5px solid var(--trip-accent, var(--brand)); }
+.mapLegend i[data-k='out'] { background: var(--surface); border: 2px dashed var(--sun); }

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { aiConfigured, runWithFallback } from '@/lib/ai/providers';
-import { claimsAction, EXPLORE_RULES, exploreActivitySchema, exploreDestSchema, explorePlacesSchema, exploreRouteSchema, exploreStaySchema } from '@/lib/ai/prompts';
-import type { NearbyIdea, PlaceIdea, RouteProposal } from '@/data/types';
+import { claimsAction, EXPLORE_RULES, exploreActivitySchema, exploreDestSchema, explorePlacesSchema, exploreRouteSchema, exploreStaySchema, placeInfoSchema } from '@/lib/ai/prompts';
+import type { NearbyIdea, PlaceIdea, PlaceInfo, RouteProposal } from '@/data/types';
 import { filterNearby, missingMust, nightsOf, normalizeRoute, parseOnboarding, splitFlights } from '@/lib/onboarding';
 import { headcount } from '@/lib/people';
 import { consumeQuota, handle, HttpError, loadTripForUser, readJson, requireUser, tripBrief } from '@/lib/ai/server';
@@ -34,6 +34,11 @@ const input = z.discriminatedUnion('kind', [
     feedback: z.string().trim().max(300).optional(),
     current: z.array(z.object({ name: z.string().max(80), nights: z.number().int().min(1).max(60) })).max(12).optional(),
   }),
+  // Resumo, foto e o que ver de lugares que a IA ainda não descreveu (adicionados à mão, bate-voltas, "ficou de fora").
+  z.object({
+    kind: z.literal('place_info'), tripId: z.string().uuid(),
+    items: z.array(z.object({ name: z.string().trim().min(1).max(80), near: z.string().max(80).nullable().optional() })).min(1).max(8),
+  }),
   z.object({ kind: z.literal('stays'), tripId: z.string().uuid(), stopId: z.string().uuid(), nightlyCap: reais, budgetStyle: z.enum(['economico', 'equilibrado', 'conforto']).optional() }),
 ]);
 
@@ -58,6 +63,7 @@ export async function POST(req: Request) {
     await consumeQuota(sb);
 
     if (q.kind === 'places' || q.kind === 'route') return onboardingAi(q, bundle, ctx, cur);
+    if (q.kind === 'place_info') return placeInfo(q, bundle, ctx);
 
     if (q.kind === 'destinations') {
       const stops = bundle.stops ?? [];
@@ -210,6 +216,9 @@ JSON: {"items":[{"name":"...","region":"...","country":"...","lat":0,"lng":0,"wh
     return NextResponse.json({ data: { ...res.data, currency: cur }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });
   }
 
+  // Itens marcados que a IA já descreveu como experiência (não cidade): ajudam a encaixar como bate-volta.
+  const wanted = new Set([...q.must, ...q.maybe, ...(q.force ?? [])].map((n) => n.toLowerCase()));
+  const experiences = (ob?.places?.items ?? []).filter((p) => p.kind === 'experiencia' && wanted.has(p.name.toLowerCase()));
   const ask = (strict: boolean) => `${about}
 Monte o roteiro de ${nights} noites.
 NÃO PODE FALTAR: ${JSON.stringify(q.must)}${strict ? ' (OBRIGATÓRIO: inclua todos como parada ou bate-volta; se for impossível, explique em left_out)' : ''}.
@@ -218,16 +227,23 @@ ${q.force?.length ? `Inclua também, obrigatoriamente: ${JSON.stringify(q.force)
 ${q.current?.length ? `Roteiro atual (com as edições da pessoa): ${q.current.map((c) => `${c.name} ${c.nights} noite(s)`).join(' → ')}.` : ''}
 ${q.feedback ? `PEDIDO DE AJUSTE da pessoa (prioridade máxima): "${q.feedback.replace(/"/g, "'")}". Refaça o roteiro atendendo o pedido e mantendo o resto do roteiro atual o mais parecido possível. Se o pedido for impossível, faça o mais próximo e explique em left_out.` : ''}
 ${q.variant === 'calmo' ? 'Versão MAIS CALMA: menos cidades, mais noites em cada.' : q.variant === 'mais_lugares' ? 'Versão com MAIS LUGARES: mais paradas e bate-voltas, sem passar das noites.' : ''}
-${q.wishes.length ? `Desejos da turma: ${JSON.stringify(q.wishes)}. Em "wishes", diga em qual parada cada um cabe (ou null).` : ''}
+${experiences.length ? `Destes, não são cidades (entram como bate-volta ou como parada na cidade de onde saem): ${experiences.map((e) => `${e.name}${e.base ? ` (sai de ${e.base})` : ''}`).join('; ')}.` : ''}
+${q.wishes.length ? `DESEJOS da turma: ${JSON.stringify(q.wishes)}. Seu trabalho é ENCAIXAR cada desejo no roteiro, e ele precisa aparecer em algum lugar:
+ (a) numa parada que já está na rota (ex.: aula de massa em Bolonha), com "wish" preenchido na parada;
+ (b) como bate-volta em "day_trips" com "wish" preenchido (ex.: {"name":"Bernina Express (Tirano → St. Moritz)","wish":"Bernina Express"} saindo de Milão);
+ (c) se o desejo é uma experiência que sai de uma cidade fora da rota e não cabe em bate-volta, inclua essa cidade como PARADA com "wish" preenchido.
+ Em "wishes", para cada desejo: "stop" = a parada onde acontece ou de onde sai o bate-volta; "how" = uma frase de como fazer (de onde sai, quanto tempo leva).
+ Se for impossível caber nas noites, "stop" = null, "reason" = por que não coube e "sacrifice" = o que tirar para caber (ex.: "1 noite a menos em Roma e tirar Bolonha").` : ''}
 Regras: a soma de "nights" das paradas deve ser exatamente ${nights}. Ordem geográfica que evite voltar caminho; entrar por uma cidade e sair por outra é normal.
 "outbound" = chegada a partir de ${trip.origin || 'origem (se não souber, null)'} até a primeira parada; "return" = da última parada de volta para a origem (null se não houver origem). Nesses dois, só modo e horas: deixe cost_low e cost_high em 0.
 "flights" = faixa do preço de UM bilhete de IDA E VOLTA por pessoa (ou multitrecho, entrando por uma cidade e saindo por outra), em ${cur}. É o valor total das duas viagens juntas, não de cada uma.
 "legs" = trechos entre paradas consecutivas, em ordem (from = parada atual, to = próxima), com preço por pessoa em ${cur}.
-"day_trips" = bate-voltas a partir da parada ("day_offset" = dia dentro da parada, 0 = chegada; custo por pessoa).
+"why" da parada = uma frase do que é o lugar e por que está no roteiro.
+"day_trips" = bate-voltas a partir da parada ("day_offset" = dia dentro da parada, 0 = chegada; custo por pessoa; "why" = uma frase do que é o lugar; "lat"/"lng" do lugar).
 "stay_pp_night" = faixa [mín, máx] da diária POR PESSOA (quarto dividido entre a turma) em cada estilo, em ${cur}.
 "food_pp_day" = faixa de comida por pessoa por dia em cada país da rota, em ${cur}.
-"left_out" = lugares pedidos que não couberam e o motivo curto.
-JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"flights":{"cost_low":0,"cost_high":0},"stops":[{"name":"...","country":"...","lat":0,"lng":0,"nights":2,"why":"...","day_trips":[{"name":"...","day_offset":1,"cost_low":0,"cost_high":0}],"stay_pp_night":{"economico":[0,0],"equilibrado":[0,0],"conforto":[0,0]}}],"legs":[{"from":"...","to":"...","mode":"train","hours":0,"cost_low":0,"cost_high":0}],"return":{"from":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"food_pp_day":[{"country":"...","low":0,"high":0}],"left_out":[{"name":"...","reason":"..."}],"wishes":[{"wish":"...","stop":"..."}]}`;
+"left_out" = lugares pedidos que não couberam: "reason" = o motivo curto, "sacrifice" = o que tirar ou encurtar para ele caber, "lat"/"lng" do lugar.
+JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"flights":{"cost_low":0,"cost_high":0},"stops":[{"name":"...","country":"...","lat":0,"lng":0,"nights":2,"why":"...","wish":null,"day_trips":[{"name":"...","day_offset":1,"cost_low":0,"cost_high":0,"why":"...","lat":0,"lng":0,"wish":null}],"stay_pp_night":{"economico":[0,0],"equilibrado":[0,0],"conforto":[0,0]}}],"legs":[{"from":"...","to":"...","mode":"train","hours":0,"cost_low":0,"cost_high":0}],"return":{"from":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":0},"food_pp_day":[{"country":"...","low":0,"high":0}],"left_out":[{"name":"...","reason":"...","sacrifice":"...","lat":0,"lng":0}],"wishes":[{"wish":"...","stop":"...","how":"...","reason":null,"sacrifice":null}]}`;
 
   const parse = (raw: unknown): RouteProposal | null => {
     const v = exploreRouteSchema.safeParse(raw);
@@ -236,8 +252,11 @@ JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":
     const range = (lo: number, hi: number) => ({ cost_low: cents(Math.min(lo, hi)), cost_high: cents(Math.max(lo, hi)) });
     const origin = trip.origin?.trim() || null;
     const stops = d.stops.filter((x) => fair(x.why ?? '')).map((x) => ({
-      name: x.name, country: x.country, lat: x.lat, lng: x.lng, nights: x.nights, why: x.why ?? null,
-      day_trips: x.day_trips.filter((t) => fair(t.name)).map((t) => ({ name: t.name, day_offset: t.day_offset, ...range(t.cost_low, t.cost_high) })),
+      name: x.name, country: x.country, lat: x.lat, lng: x.lng, nights: x.nights, why: x.why ?? null, wish: x.wish ?? null,
+      day_trips: x.day_trips.filter((t) => fair(t.name)).map((t) => ({
+        name: t.name, day_offset: t.day_offset, ...range(t.cost_low, t.cost_high),
+        why: t.why && fair(t.why) ? t.why : null, lat: t.lat ?? null, lng: t.lng ?? null, wish: t.wish ?? null,
+      })),
       stay_pp_night: Object.fromEntries(Object.entries(x.stay_pp_night ?? {}).filter(([, p]) => !!p).map(([k, p]) => [k, { low: cents(Math.min(p![0], p![1])), high: cents(Math.max(p![0], p![1])) }])),
     }));
     if (!stops.length) return null;
@@ -248,19 +267,56 @@ JSON: {"outbound":{"to":"...","mode":"plane","hours":0,"cost_low":0,"cost_high":
       legs: d.legs.map((l) => ({ from: l.from, to: l.to, mode: l.mode, hours: l.hours, ...range(l.cost_low, l.cost_high) })),
       return: d.return && origin ? { from: d.return.from, to: origin, mode: d.return.mode, hours: d.return.hours, ...flight.back } : null,
       food_pp_day: d.food_pp_day.map((f) => ({ country: f.country, low: cents(Math.min(f.low, f.high)), high: cents(Math.max(f.low, f.high)) })),
-      left_out: d.left_out.filter((l) => fair(l.reason)),
-      wishes: d.wishes,
+      left_out: d.left_out.filter((l) => fair(l.reason)).map((l) => ({ ...l, sacrifice: l.sacrifice && fair(l.sacrifice) ? l.sacrifice : null })),
+      wishes: d.wishes.map((w) => ({ ...w, how: w.how && fair(w.how) ? w.how : null })),
       generated_at: new Date().toISOString(),
     };
   };
 
   const must = [...q.must, ...(q.force ?? [])];
-  const call = (strict: boolean) => runWithFallback('explore', EXPLORE_RULES, ask(strict), parse, { maxTokens: 2400, temperature: 0.5 });
+  const call = (strict: boolean) => runWithFallback('explore', EXPLORE_RULES, ask(strict), parse, { maxTokens: 3200, temperature: 0.5 });
   let res = await call(false);
   // Um "não pode faltar" sumiu sem explicação: uma nova tentativa, mais firme.
   if (res && missingMust(res.data, must).length) res = (await call(true)) ?? res;
   if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
-  const route = normalizeRoute(res.data, nights, must);
+  const route = normalizeRoute(res.data, nights, must, q.wishes);
   return NextResponse.json({ data: { route, currency: cur }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });
 }
 
+
+type PlaceInfoQ = { kind: 'place_info'; tripId: string; items: { name: string; near?: string | null }[] };
+
+/** Resumo de lugares sob demanda (pedido 1, 2 e 5 do ajuste de 08/11): mesmo formato dos lugares do passo 3. */
+async function placeInfo(q: PlaceInfoQ, bundle: Brief, ctx: string) {
+  const trip = bundle.trip;
+  const dest = trip.destinations.filter((d) => d.trim()).join(', ') || trip.title;
+  const ask = q.items.map((i) => (i.near ? `"${i.name}" (perto de ${i.near})` : `"${i.name}"`)).join(', ');
+  const res = await runWithFallback(
+    'explore',
+    EXPLORE_RULES,
+    `${ctx}
+Viagem para: ${dest}.
+Descreva estes lugares que a turma quer conhecer: ${ask}.
+Para cada um: "asked" = o nome exatamente como pedido; "name" = o nome correto e oficial curto (corrija erros de digitação, ex.: "Costa Malfitana" → "Costa Amalfitana").
+"kind" = "lugar" se é cidade ou região onde se dorme; "experiencia" se é um trem panorâmico, trilha, parque, show ou passeio que sai de algum lugar. Em "experiencia", "base" = a cidade de onde costuma sair (senão null).
+"why" = uma ou duas frases do que é o lugar e por que vale ir. "nights_min"/"nights_max" = noites que costuma pedir (0 se é passeio de um dia).
+"highlights" = até 3 destaques curtos. "attractions" = 4 a 6 principais pontos turísticos ou experiências, com nome oficial curto e uma frase do que tem de legal. "tip" = dica prática curta.
+"lat"/"lng" = coordenadas aproximadas. "photo_query" = nome do lugar + uma palavra-chave. "tags" só entre: natureza, cidade, praia, cultura, arte, comida, aventura, noturna, compras. Nada de nomes de hotel ou restaurante.
+JSON: {"items":[{"asked":"...","name":"...","kind":"lugar","base":null,"region":"...","country":"...","lat":0,"lng":0,"why":"...","nights_min":1,"nights_max":2,"highlights":["..."],"photo_query":"...","tags":["..."],"attractions":[{"name":"...","why":"..."}],"tip":"..."}]}`,
+    (raw) => {
+      const v = placeInfoSchema.safeParse(raw);
+      if (!v.success) return null;
+      const items = v.data.items.filter((i) => fair(i.why)).map((i): PlaceInfo & { asked: string } => ({
+        ...i, region: i.region ?? null, base: i.base ?? null, photo_query: i.photo_query ?? null,
+        nights_min: Math.min(i.nights_min, i.nights_max), nights_max: Math.max(i.nights_min, i.nights_max),
+        highlights: i.highlights.filter(fair),
+        attractions: i.attractions.filter((x) => fair(x.why ?? '')).map((x) => ({ name: x.name, why: x.why ?? null })),
+        tip: i.tip && fair(i.tip) ? i.tip : null,
+      }));
+      return items.length ? items : null;
+    },
+    { maxTokens: Math.min(4000, 700 + q.items.length * 520), temperature: 0.4 },
+  );
+  if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
+  return NextResponse.json({ data: { items: res.data }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });
+}

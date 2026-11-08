@@ -91,6 +91,30 @@ export interface PlaceIdea {
   added?: boolean;
   /** veio do Descobrir */
   from_discover?: boolean;
+  /** 'experiencia' = não é cidade (trem panorâmico, trilha, parque): acontece a partir de `base` */
+  kind?: 'lugar' | 'experiencia';
+  /** cidade de onde a experiência sai (ex.: Bernina Express → Tirano) */
+  base?: string | null;
+  /** a IA já completou resumo, foto e passeios (lugar adicionado à mão ou vindo do Descobrir) */
+  enriched?: boolean;
+}
+/** Resumo de um lugar buscado sob demanda (parada sugerida, bate-volta, "ficou de fora"). Cache em onboarding.info. */
+export interface PlaceInfo {
+  name: string;
+  country: string;
+  region?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  why: string;
+  kind?: 'lugar' | 'experiencia';
+  base?: string | null;
+  nights_min?: number;
+  nights_max?: number;
+  highlights?: string[];
+  photo_query?: string | null;
+  tags?: string[];
+  attractions?: PlaceAttraction[];
+  tip?: string | null;
 }
 export interface PlaceAttraction {
   name: string;
@@ -130,6 +154,12 @@ export interface RouteDayTrip {
   day_offset: number;
   cost_low: number;
   cost_high: number;
+  /** uma frase do que é o lugar */
+  why?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  /** desejo do passo 3 que este bate-volta atende */
+  wish?: string | null;
 }
 export interface RouteStop {
   name: string;
@@ -139,8 +169,30 @@ export interface RouteStop {
   nights: number;
   why?: string | null;
   day_trips: RouteDayTrip[];
+  /** desejo do passo 3 que fez a parada entrar (ex.: cidade de onde sai o Bernina Express) */
+  wish?: string | null;
   /** diária por pessoa, por estilo (centavos) */
   stay_pp_night?: Partial<Record<BudgetStyle, { low: number; high: number }>>;
+}
+/** Lugar pedido que não entrou: o motivo e o que dá pra sacrificar para caber. */
+export interface RouteLeftOut {
+  name: string;
+  reason: string;
+  /** o que tirar para caber (ex.: "1 noite a menos em Roma") */
+  sacrifice?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}
+/** Onde cada desejo do passo 3 entrou. `stop` null = não coube. */
+export interface RouteWish {
+  wish: string;
+  stop: string | null;
+  /** como fazer (de onde sai, quanto tempo leva) */
+  how?: string | null;
+  /** por que não coube */
+  reason?: string | null;
+  /** o que tirar para caber */
+  sacrifice?: string | null;
 }
 export interface RouteProposal {
   outbound: RouteLeg | null;
@@ -149,8 +201,8 @@ export interface RouteProposal {
   legs: RouteLeg[];
   return: RouteLeg | null;
   food_pp_day: { country: string; low: number; high: number }[];
-  left_out: { name: string; reason: string }[];
-  wishes: { wish: string; stop: string | null }[];
+  left_out: RouteLeftOut[];
+  wishes: RouteWish[];
   generated_at: string;
 }
 /** Passeio sugerido no passo 5 (centavos da moeda base). */
@@ -197,6 +249,8 @@ export interface OnboardingState {
   discover_stops?: string[];
   /** passeios do passo 5 já gravados no roteiro (evita gravar duas vezes) */
   tours_applied?: boolean;
+  /** resumos buscados sob demanda (chave = placeKey do nome) */
+  info?: Record<string, PlaceInfo>;
 }
 
 /** Foto escolhida: Wikimedia (com crédito) ou upload próprio (`path` no bucket covers). */

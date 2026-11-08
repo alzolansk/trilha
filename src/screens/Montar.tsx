@@ -2,10 +2,11 @@
 // Onboarding roteirizado (planning §10): passos 2 a 6 depois de criar a trilha em /nova-trilha.
 // A Trilha propõe lugares, rota, passeios e custo; a pessoa ajusta. O rascunho fica em trips.onboarding.
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, PlaceAttraction, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceIdea, PlaceMark,
+  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, PlaceAttraction, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceIdea, PlaceInfo, PlaceMark,
   RouteLeg, RouteStop, RouteProposal, TourIdea, TransportMode,
 } from '../data/types';
 import { useBundle } from '../data/TripContext';
@@ -19,8 +20,8 @@ import { VIBES } from '../lib/discover';
 import { MODE_LABEL } from '../lib/format';
 import { formatMoney } from '../lib/money';
 import {
-  adjustNights, assignTourDays, markOf, routeCost, stopCost, type StopCost, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry, MAX_ROUTE_CALLS, minNightsOfMust,
-  moveStop, namesBy, nightsOf, parseOnboarding, placeKey, preselectTours, removeStop, routeToRows, stayEstimatesOf, TRIP_STYLE_OF,
+  adjustNights, applyPlaceInfo, assignTourDays, infoOf, markOf, needsInfo, routeCost, stopCost, type StopCost, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry,
+  MAX_ROUTE_CALLS, minNightsOfMust, moveStop, namesBy, nightsOf, parseOnboarding, placeKey, preselectTours, removeStop, routeToRows, stayEstimatesOf, TRIP_STYLE_OF, wishesAt,
 } from '../lib/onboarding';
 import { headcount } from '../lib/people';
 import { dayMonth } from '../lib/format';
@@ -34,6 +35,9 @@ import { InviteSheet } from './Turma';
 import { DeckSummary, TourDeck, type Decision, type DeckGroup } from './TourDeck';
 import s from './montar.module.css';
 import m from '../components/money/money.module.css';
+import type { MapExtra, MapStop } from '../components/map/RouteMap';
+
+const RouteMap = dynamic(() => import('../components/map/RouteMap'), { ssr: false, loading: () => <div className="skel" style={{ height: 320, borderRadius: 22 }} /> });
 
 const PACES: { value: BudgetPace; label: string }[] = [
   { value: 'leve', label: 'Calmo · poucas cidades' },
@@ -50,6 +54,7 @@ const MARKS: { value: PlaceMark; label: string; icon: IconName }[] = [
   { value: 'maybe', label: 'Talvez', icon: 'sparkle' },
   { value: 'skip', label: 'Pular', icon: 'close' },
 ];
+const STEP_NAMES: Record<OnboardingStep, string> = { 2: 'Gostos', 3: 'Lugares', 4: 'Roteiro', 5: 'Passeios', 6: 'Custo' };
 const DEFAULT_PREFS: OnboardingPrefs = { vibes: ['cidade', 'comida', 'cultura'], pace: 'moderado', stay: 'equilibrado', budget: null };
 
 type AiFail = { unavailable: boolean; error: string } | null;
@@ -96,6 +101,9 @@ export default function Montar() {
 
   if (!canEdit) return null;
 
+  // Navegação livre: qualquer passo já alcançado (e Passeios/Custo quando o roteiro já existe) pode ser reaberto.
+  const reached = Math.max(ob.step, step);
+  const canGo = (n: OnboardingStep) => n !== step && (n <= reached || (n >= 5 && b.stops.length > 0));
   const common = { b, ob, persist, go, busy, run, money, online, manual };
   return (
     <div className="wrap">
@@ -103,7 +111,16 @@ export default function Montar() {
         <ScreenHeader back={base || '/'} title="Montar a viagem" subtitle={`${b.trip.destinations.join(', ') || b.trip.title} · ${nightsOf(b.trip) + 1} dias`} />
         <div className={s.top}>
           <div className={s.topRow}><span>Passo {step} de 6</span><button type="button" className={s.skip} onClick={later} disabled={busy}>Montar depois</button></div>
-          <div className={s.bar} aria-hidden="true"><i style={{ width: `${(step / 6) * 100}%` }} /></div>
+          <nav className={s.steps} aria-label="Passos da montagem">
+            {([2, 3, 4, 5, 6] as const).map((n) => (
+              <button
+                key={n} type="button" className={s.stepBtn} aria-current={n === step ? 'step' : undefined} data-done={n < reached || (n >= 5 && b.stops.length > 0 && n !== step) ? 'true' : undefined}
+                disabled={busy || (!canGo(n) && n !== step)} onClick={() => canGo(n) && go(n)} aria-label={`Passo ${n}: ${STEP_NAMES[n]}`}
+              >
+                <i aria-hidden="true" /><span>{STEP_NAMES[n]}</span>
+              </button>
+            ))}
+          </nav>
         </div>
         {step === 2 ? <StepPrefs {...common} me={me} /> : null}
         {step === 3 ? <StepPlaces {...common} /> : null}
@@ -221,18 +238,20 @@ function Attraction({ a, place, photo }: { a: PlaceAttraction; place: string; ph
   );
 }
 
-/** Janela dedicada ao lugar: foto grande, por que ir, o que ver, dica e a escolha. */
-function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, tags, facts, mark, onMark }: {
+/** Janela dedicada ao lugar: foto grande, por que ir, o que ver, dica e (no rodapé) a escolha ou as ações. */
+function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, tags, facts, footer, loading, children }: {
   open: boolean; onClose: () => void; name: string; sub: string; query: string[]; why: string; attractions: PlaceAttraction[];
-  tip?: string | null; tags?: string[]; facts: React.ReactNode; mark: PlaceMark; onMark: (m: PlaceMark) => void;
+  tip?: string | null; tags?: string[]; facts: React.ReactNode; footer?: React.ReactNode; loading?: boolean; children?: React.ReactNode;
 }) {
   const photo = useResolvedPhoto(null, open ? query : null, open);
   return (
-    <Sheet open={open} onClose={onClose} title={name} description={sub} size="lg" footer={<MarkPicker label={`${name}: quanto quer ir`} value={mark} onChange={onMark} />}>
+    <Sheet open={open} onClose={onClose} title={name} description={sub} size="lg" footer={footer}>
       <div className={s.sheetBody}>
         <Photo photo={photo as PhotoData | null} place={name} alt={`Foto de ${name}`} height={240} />
         <div className={s.facts}>{facts}</div>
-        <p className={s.why}>{why}</p>
+        {why ? <p className={s.why}>{why}</p> : null}
+        {children}
+        {loading ? <p className={s.muted} role="status"><Busy>A Trilha está buscando o resumo e o que ver</Busy></p> : null}
         {tags?.length ? <div className={s.chips}>{tags.map((t) => <Badge key={t}>{tagLabel(t)}</Badge>)}</div> : null}
         {attractions.length ? (
           <section aria-label={`O que ver em ${name}`} className={s.stack}>
@@ -247,7 +266,7 @@ function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, ta
   );
 }
 
-function PlaceCard({ p, mark, onMark }: { p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void }) {
+function PlaceCard({ p, mark, onMark, loading = false }: { p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; loading?: boolean }) {
   const [open, setOpen] = useState(false);
   // "Nara, Japão" ajuda a busca a achar a cidade (e não a cantora); o termo da IA fica de reserva.
   const query = [p.country ? `${p.name}, ${p.country}` : p.name, p.name, p.photo_query ?? ''];
@@ -262,14 +281,15 @@ function PlaceCard({ p, mark, onMark }: { p: PlaceIdea; mark: PlaceMark; onMark:
         <h3>{p.name}</h3>
         <IconButton icon="info" label={`Mais sobre ${p.name}`} size={40} variant="ghost" onClick={() => setOpen(true)} />
       </div>
-      <small className={s.muted}>{[p.region, nightsText(p.nights_min, p.nights_max)].filter(Boolean).join(' · ')}</small>
-      <p className={s.why}>{p.why}</p>
+      <small className={s.muted}>{[p.kind === 'experiencia' ? `Experiência${p.base ? ` · sai de ${p.base}` : ''}` : p.region, p.kind === 'experiencia' ? null : nightsText(p.nights_min, p.nights_max)].filter(Boolean).join(' · ')}</small>
+      {loading ? <p className={s.muted} role="status"><Busy>Buscando resumo, foto e o que ver</Busy></p> : <p className={s.why}>{p.why}</p>}
       {sights.length ? <ul className={s.highlights}>{sights.slice(0, 3).map((h) => <li key={h.name}>{h.name}</li>)}</ul> : null}
       <MarkPicker label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} />
       <PlaceSheet
         open={open} onClose={() => setOpen(false)} name={p.name} sub={[p.region, p.country].filter(Boolean).join(', ')} query={query}
-        why={p.why} attractions={sights} tip={p.tip} tags={p.tags} mark={mark} onMark={onMark}
-        facts={<><Badge>{nightsText(p.nights_min, p.nights_max)}</Badge>{p.country ? <Badge>{p.country}</Badge> : null}</>}
+        why={p.why} attractions={sights} tip={p.tip} tags={p.tags} loading={loading}
+        footer={<MarkPicker label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} />}
+        facts={<>{p.kind === 'experiencia' ? <Badge>experiência{p.base ? ` · sai de ${p.base}` : ''}</Badge> : <Badge>{nightsText(p.nights_min, p.nights_max)}</Badge>}{p.country ? <Badge>{p.country}</Badge> : null}</>}
       />
     </article>
   );
@@ -294,7 +314,8 @@ function NearbyCard({ n, mark, onMark, money }: { n: NearbyIdea; mark: PlaceMark
       <MarkPicker label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} />
       <PlaceSheet
         open={open} onClose={() => setOpen(false)} name={n.name} sub={`${n.country} · perto de ${n.from}`} query={query}
-        why={n.why} attractions={n.attractions ?? []} tip={n.tip} mark={mark} onMark={onMark}
+        why={n.why} attractions={n.attractions ?? []} tip={n.tip}
+        footer={<MarkPicker label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} />}
         facts={<><Badge>{n.kind === 'bate_volta' ? 'bate-volta' : 'pede 1 noite'}</Badge><Badge>{how}</Badge><Badge>≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa</Badge></>}
       />
     </article>
@@ -310,6 +331,30 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
   const [extra, setExtra] = useState('');
   const asked = useRef(false);
   const places = ob.places;
+  // Lugares adicionados à mão (e os que vieram do Descobrir) ganham resumo, foto e o que ver, como as sugestões.
+  const [enriching, setEnriching] = useState<Set<string>>(new Set());
+  const tried = useRef(new Set<string>());
+  const obRef = useRef(ob);
+  obRef.current = ob;
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
+  const enrich = async (names: string[]) => {
+    const todo = names.filter((n) => !tried.current.has(placeKey(n))).slice(0, 8);
+    if (!todo.length) return;
+    for (const n of todo) tried.current.add(placeKey(n));
+    setEnriching((e) => new Set([...e, ...todo.map(placeKey)]));
+    const r = await callAi<{ items: (PlaceInfo & { asked: string })[] }>('explore', { kind: 'place_info', tripId: b.trip.id, items: todo.map((name) => ({ name })) });
+    setEnriching((e) => { const n = new Set(e); for (const x of todo) n.delete(placeKey(x)); return n; });
+    const cur = obRef.current;
+    if (!r?.data.items.length || !cur.places) return;
+    const next = applyPlaceInfo(cur.places.items, marksRef.current, r.data.items);
+    marksRef.current = next.marks;
+    setMarks(next.marks);
+    await persist({ ...cur, places: { ...cur.places, items: next.items }, marks: next.marks }).catch(() => undefined);
+  };
+  useEffect(() => {
+    if (places && online) void enrich(needsInfo(places.items));
+  }, [places, online]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchPlaces = async () => {
     setFail(null);
@@ -321,7 +366,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
     const items: PlaceIdea[] = [...r.res.data.items, ...preset.map((n) => ({ name: n, country: '', why: 'Estava no roteiro sugerido pelo Descobrir.', nights_min: 1, nights_max: 3, from_discover: true }))];
     const nextMarks = defaultMarks(items, r.res.data.nearby, marks);
     setMarks(nextMarks);
-    await persist({ ...ob, places: { items, nearby: r.res.data.nearby, fetched_at: new Date().toISOString() }, marks: nextMarks, step: 3 }).catch(() => undefined);
+    await persist({ ...ob, places: { items, nearby: r.res.data.nearby, fetched_at: new Date().toISOString() }, marks: nextMarks, step: Math.max(3, ob.step) as OnboardingStep }).catch(() => undefined);
   };
   useEffect(() => {
     if (!places && !asked.current && online) { asked.current = true; void fetchPlaces(); }
@@ -357,7 +402,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
   };
   const next = () => run(async () => {
     const changed = JSON.stringify(marks) !== JSON.stringify(ob.marks ?? {}) || JSON.stringify(wishes) !== JSON.stringify(ob.wishes ?? []);
-    await persist({ ...ob, marks, wishes, step: 4, stale: changed && ob.route ? [...new Set([...(ob.stale ?? []), 'route' as const])] : ob.stale });
+    await persist({ ...ob, marks, wishes, step: Math.max(4, ob.step) as OnboardingStep, stale: changed && ob.route ? [...new Set([...(ob.stale ?? []), 'route' as const])] : ob.stale });
     go(4);
   });
 
@@ -365,7 +410,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
     <StepChat label="O que não pode faltar">
       <TrilhaBubble step="3 · Lugares">Separei lugares que combinam com vocês. <b>O que não pode faltar?</b></TrilhaBubble>
       <ChatOptions>
-        <div className={s.grid}>{items.map((p) => <PlaceCard key={p.name} p={p} mark={marks[placeKey(p.name)] ?? 'maybe'} onMark={mark(p.name)} />)}</div>
+        <div className={s.grid}>{items.map((p) => <PlaceCard key={p.name} p={p} mark={marks[placeKey(p.name)] ?? 'maybe'} onMark={mark(p.name)} loading={enriching.has(placeKey(p.name))} />)}</div>
         <div className={s.wishRow}>
           <Field label="Adicionar um lugar"><input value={extra} maxLength={80} placeholder="Ex.: Lucca" onChange={(e) => setExtra(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlace(); } }} /></Field>
           <Button variant="secondary" onClick={addPlace} disabled={!extra.trim()}>Adicionar</Button>
@@ -424,16 +469,76 @@ function OriginBadge({ name, places, marks }: { name: string; places: Onboarding
   return <span className={s.origin} data-tone={v.tone}><Icon name={v.icon} size={13} />{v.label}</span>;
 }
 
-function StopCard({ st, i, count, dates, cost, money, places, marks, onNights, onMove, onRemove }: {
+type InfoMap = Record<string, PlaceInfo>;
+const stopId = (name: string) => `s:${placeKey(name)}`;
+const tripMark = (stop: string, name: string) => `t:${placeKey(stop)}:${placeKey(name)}`;
+const outId = (name: string) => `o:${placeKey(name)}`;
+const photoQuery = (name: string, info: PlaceInfo | null, country?: string | null) => {
+  const c = info?.country || country;
+  return [c ? `${info?.name ?? name}, ${c}` : info?.name ?? name, info?.name ?? name, info?.photo_query ?? ''];
+};
+const scrollToStop = (name: string) => {
+  if (typeof document === 'undefined') return;
+  const el = [...document.querySelectorAll<HTMLElement>('[data-stop]')].find((x) => placeKey(x.dataset.stop ?? '') === placeKey(name));
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+/**
+ * Resumos sob demanda (paradas sugeridas, bate-voltas, "ficou de fora"): uma chamada `place_info` por lote,
+ * guardada em `onboarding.info` para não pedir de novo.
+ */
+function usePlaceInfo(tripIdValue: string, ob: OnboardingState, persist: StepProps['persist'], online: boolean) {
+  const [info, setInfo] = useState<InfoMap>(ob.info ?? {});
+  const [loading, setLoading] = useState<Set<string>>(new Set());
+  const infoRef = useRef(info);
+  const obRef = useRef(ob);
+  obRef.current = ob;
+  const tried = useRef(new Set<string>());
+  const load = async (items: { name: string; near?: string | null }[]) => {
+    const todo = items.filter((i) => !tried.current.has(placeKey(i.name))).slice(0, 8);
+    if (!todo.length || !online) return;
+    for (const i of todo) tried.current.add(placeKey(i.name));
+    setLoading((l) => new Set([...l, ...todo.map((i) => placeKey(i.name))]));
+    const r = await callAi<{ items: (PlaceInfo & { asked: string })[] }>('explore', { kind: 'place_info', tripId: tripIdValue, items: todo });
+    setLoading((l) => { const n = new Set(l); for (const i of todo) n.delete(placeKey(i.name)); return n; });
+    if (!r?.data.items.length) return;
+    const next = { ...infoRef.current };
+    for (const { asked, ...rest } of r.data.items) {
+      next[placeKey(asked)] = rest;
+      next[placeKey(rest.name)] = rest;
+    }
+    infoRef.current = next;
+    setInfo(next);
+    await persist({ ...obRef.current, info: next }).catch(() => undefined);
+  };
+  return { info, loading, load };
+}
+
+/** Selo "Seu pedido": o desejo do passo 3 que a Trilha encaixou nesta parada. */
+function WishHere({ wish, how, dayTrip }: { wish: string; how: string | null; dayTrip: string | null }) {
+  return (
+    <div className={s.wishHere}>
+      <Icon name="heart" size={15} />
+      <span><b>{wish} · você escolheu</b>{how || dayTrip ? <small>{how ?? `Bate-volta: ${dayTrip}`}</small> : null}</span>
+    </div>
+  );
+}
+
+function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishes, onNights, onMove, onRemove, onOpen, onTrip }: {
   st: RouteStop; i: number; count: number; dates: { arrival: string; departure: string }; cost: StopCost; money: (v: number) => string;
-  places: OnboardingState['places']; marks: Record<string, PlaceMark>;
-  onNights: (d: 1 | -1) => void; onMove: (d: 1 | -1) => void; onRemove: () => void;
+  places: OnboardingState['places']; marks: Record<string, PlaceMark>; info: PlaceInfo | null;
+  wishes: { wish: string; how: string | null; dayTrip: string | null }[];
+  onNights: (d: 1 | -1) => void; onMove: (d: 1 | -1) => void; onRemove: () => void; onOpen: () => void; onTrip: (name: string) => void;
 }) {
-  const photo = useResolvedPhoto(null, [st.country ? `${st.name}, ${st.country}` : st.name, st.name], true);
+  const photo = useResolvedPhoto(null, photoQuery(st.name, info, st.country), true);
+  const summary = info?.why && !/^Você adicionou\.?$|^Estava no roteiro/.test(info.why) ? info.why : st.why;
+  const sights = (info?.attractions?.length ? info.attractions.map((a) => a.name) : info?.highlights ?? []).slice(0, 3);
   return (
     <article className={s.stopCard} data-stop={st.name}>
       <div className={s.stopTop}>
-        <Photo photo={photo as PhotoData | null} place={st.name} alt="" height={84} caption={false} className={s.stopPhoto} />
+        <button type="button" className={s.photoBtn} onClick={onOpen} aria-label={`Ver detalhes de ${st.name}`}>
+          <Photo photo={photo as PhotoData | null} place={st.name} alt="" height={84} caption={false} className={s.stopPhoto} />
+        </button>
         <div className={s.stopInfo}>
           <span className={s.stopNum}>{i + 1}</span>
           <h3>{st.name}</h3>
@@ -441,6 +546,10 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, onNights, o
           <OriginBadge name={st.name} places={places} marks={marks} />
         </div>
       </div>
+      {summary ? <p className={s.stopWhy}>{summary}</p> : null}
+      {sights.length ? <p className={s.stopSights}><Icon name="sparkle" size={13} /> {sights.join(' · ')}</p> : null}
+      <button type="button" className={s.more} onClick={onOpen}>Ver mais sobre {st.name} <Icon name="next" size={14} /></button>
+      {wishes.map((w) => <WishHere key={w.wish} {...w} />)}
       <div className={s.stopRow}>
         <div className={s.stepper} role="group" aria-label={`Noites em ${st.name}`}>
           <button type="button" className={s.ctl} aria-label={`Uma noite a menos em ${st.name}`} disabled={st.nights <= 1} onClick={() => onNights(-1)}>−</button>
@@ -461,13 +570,23 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, onNights, o
           {cost.trips ? <span><Icon name="route" size={14} />bate-volta {money(cost.trips)}</span> : null}
         </span>
       </div>
-      {st.day_trips.length ? <div className={s.chips}>{st.day_trips.map((d) => <Badge key={d.name}>Bate-volta: {d.name} · dia {d.day_offset + 1}</Badge>)}</div> : null}
+      {st.day_trips.length ? (
+        <div className={s.chips}>
+          {st.day_trips.map((d) => (
+            <button key={d.name} type="button" className={s.tripChip} data-wish={d.wish ? 'true' : undefined} onClick={() => onTrip(d.name)} aria-label={`O que é ${d.name} (bate-volta, dia ${d.day_offset + 1})`}>
+              {d.wish ? <Icon name="heart" size={13} /> : null}Bate-volta: {d.name} · dia {d.day_offset + 1}<Icon name="info" size={14} />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
 
+type RouteSheetState = { type: 'stop'; name: string } | { type: 'trip'; stop: string; name: string } | { type: 'out'; name: string } | null;
+
 function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: StepProps) {
-  const { source } = useBundle();
+  const { source, accent } = useBundle();
   const confirm = useConfirm();
   const [fail, setFail] = useState<AiFail>(null);
   const [loading, setLoading] = useState(false);
@@ -475,6 +594,9 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   const [replace, setReplace] = useState(false);
   const [err, setErr] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [sheet, setSheet] = useState<RouteSheetState>(null);
+  const [focus, setFocus] = useState<string | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
   const asked = useRef(false);
   const nights = nightsOf(b.trip);
   const places = ob.places ?? { items: [], nearby: [] };
@@ -482,11 +604,39 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   const stale = ob.stale?.includes('route');
   const calls = ob.route_calls ?? 0;
   const style = ob.prefs?.stay ?? b.trip.budget_plan?.style ?? 'equilibrado';
+  const { info, loading: infoLoading, load } = usePlaceInfo(b.trip.id, ob, persist, online);
+  const about = (name: string) => infoOf(name, places, info);
+  const coordOf = (name: string, lat?: number | null, lng?: number | null): [number, number] | null => {
+    if (lat != null && lng != null && (lat !== 0 || lng !== 0)) return [lat, lng];
+    const i = about(name).info;
+    return i?.lat != null && i.lng != null && (i.lat !== 0 || i.lng !== 0) ? [i.lat, i.lng] : null;
+  };
+
+  // Mapa: paradas em ordem, bate-voltas ligados à parada e o que ficou de fora (tracejado).
+  const mapKey = JSON.stringify([route?.stops.map((x) => [x.name, x.lat, x.lng, x.day_trips.map((d) => [d.name, d.lat, d.lng])]), route?.left_out.map((l) => [l.name, l.lat, l.lng, l.reason]), Object.keys(info).length]);
+  const { mapStops, extras } = useMemo(() => {
+    if (!route) return { mapStops: [] as MapStop[], extras: [] as MapExtra[] };
+    const mapStops: MapStop[] = route.stops.map((x) => { const c = coordOf(x.name, x.lat, x.lng); return { id: stopId(x.name), name: x.name, lat: c?.[0] ?? null, lng: c?.[1] ?? null }; });
+    const extras: MapExtra[] = [];
+    for (const x of route.stops) {
+      for (const d of x.day_trips) {
+        const c = coordOf(d.name, d.lat, d.lng);
+        if (c) extras.push({ id: tripMark(x.name, d.name), name: d.name, lat: c[0], lng: c[1], kind: 'trip', from: stopId(x.name), note: `Bate-volta saindo de ${x.name}` });
+      }
+    }
+    for (const l of route.left_out) {
+      const c = coordOf(l.name, l.lat, l.lng);
+      if (c) extras.push({ id: outId(l.name), name: l.name, lat: c[0], lng: c[1], kind: 'out', note: `Ficou de fora: ${l.reason}` });
+    }
+    return { mapStops, extras };
+  }, [mapKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRoute = async (opts: { variant?: 'calmo' | 'mais_lugares'; force?: string[]; feedback?: string } = {}) => {
     if (calls >= MAX_ROUTE_CALLS) return;
     setFail(null);
     setLoading(true);
+    setSheet(null);
+    setFocus(null);
     const body = {
       kind: 'route', tripId: b.trip.id,
       must: namesBy('must', places.items, places.nearby, marks), maybe: namesBy('maybe', places.items, places.nearby, marks),
@@ -505,6 +655,16 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   useEffect(() => {
     if ((!route || stale) && !asked.current && online) { asked.current = true; void fetchRoute(); }
   }, [route, stale, online]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Uma vez por rota: busca as coordenadas dos bate-voltas e dos que ficaram de fora que a IA não mandou (para o mapa).
+  useEffect(() => {
+    if (!route) return;
+    const want = [
+      ...route.stops.flatMap((x) => x.day_trips.filter((d) => !coordOf(d.name, d.lat, d.lng)).map((d) => ({ name: d.name, near: x.name }))),
+      ...route.left_out.filter((l) => !coordOf(l.name, l.lat, l.lng)).map((l) => ({ name: l.name })),
+    ];
+    if (want.length) void load(want);
+  }, [route?.generated_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (fail) return <AiFailed fail={fail} retry={() => void fetchRoute()} manual={manual} />;
   if (!route || loading) {
@@ -533,6 +693,25 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   };
   const canAsk = calls < MAX_ROUTE_CALLS && online;
   const sendFeedback = () => { const f = feedback.trim(); if (f && canAsk) void fetchRoute({ feedback: f }); };
+  const missingWishes = route.wishes.filter((w) => !w.stop);
+  const missingMust = route.left_out.filter((l) => mustNames.has(placeKey(l.name)) || markOf(l.name, places, marks).added);
+  const notFit = missingWishes.length + missingMust.length;
+
+  const openSheet = (x: NonNullable<RouteSheetState>, near?: string) => {
+    setSheet(x);
+    if (!about(x.name).detailed) void load([{ name: x.name, near: near ?? null }]);
+  };
+  const showOnMap = (id: string, name: string) => {
+    setFocus(id);
+    if (!coordOf(name)) void load([{ name }]);
+    mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  const openExtra = (id: string) => {
+    for (const x of route.stops) for (const d of x.day_trips) if (tripMark(x.name, d.name) === id) return openSheet({ type: 'trip', stop: x.name, name: d.name }, x.name);
+    const l = route.left_out.find((o) => outId(o.name) === id);
+    if (l) openSheet({ type: 'out', name: l.name });
+  };
+  const fitWish = (w: { wish: string; sacrifice?: string | null }) => fetchRoute({ feedback: `Encaixe o desejo "${w.wish}" no roteiro${w.sacrifice ? `, sacrificando: ${w.sacrifice}` : ', tirando o que for preciso'}.` });
 
   const apply = (force = false) => run(async () => {
     setErr('');
@@ -550,7 +729,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
       transport_cents: {},
       activities: undefined,
     };
-    const next: OnboardingState = { ...ob, route, step: 5, tours: {}, tour_pick: [], tours_applied: false, stale: [] };
+    const next: OnboardingState = { ...ob, info, route, step: 5, tours: {}, tour_pick: [], tours_applied: false, stale: [] };
     try {
       await source.rpc('apply_onboarding_route', {
         p_trip: b.trip.id, p_version: b.trip.version, p_replace: force,
@@ -567,9 +746,77 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
     go(5);
   });
 
+  // Janela do lugar aberto (parada, bate-volta ou "ficou de fora").
+  const sheetView = (() => {
+    if (!sheet) return null;
+    const a = about(sheet.name);
+    const i = a.info;
+    const isLoading = infoLoading.has(placeKey(sheet.name)) && !a.detailed;
+    const why = i?.why && !/^Você adicionou\.?$|^Estava no roteiro/.test(i.why) ? i.why : '';
+    const base = { open: true, onClose: () => setSheet(null), name: i?.name ?? sheet.name, query: photoQuery(sheet.name, i), attractions: i?.attractions ?? [], tip: i?.tip ?? null, tags: i?.tags, loading: isLoading };
+    if (sheet.type === 'stop') {
+      const idx = route.stops.findIndex((x) => x.name === sheet.name);
+      const st = route.stops[idx];
+      if (!st) return null;
+      const here = wishesAt(route, st);
+      return (
+        <PlaceSheet
+          {...base} sub={[i?.region, st.country].filter(Boolean).join(', ')} why={why || st.why || ''}
+          facts={<><Badge>parada {idx + 1}</Badge><Badge>{nightsText(st.nights, st.nights)}</Badge><Badge>{dayMonth(dates[idx].arrival)} a {dayMonth(dates[idx].departure)}</Badge></>}
+          footer={<div className={s.actions}><Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(stopId(st.name), st.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button></div>}
+        >
+          {here.map((w) => <WishHere key={w.wish} {...w} />)}
+          {st.day_trips.length ? (
+            <section className={s.stack} aria-label={`Bate-voltas saindo de ${st.name}`}>
+              <h3 className={s.label}>Bate-voltas daqui</h3>
+              <div className={s.chips}>{st.day_trips.map((d) => <button key={d.name} type="button" className={s.tripChip} onClick={() => openSheet({ type: 'trip', stop: st.name, name: d.name }, st.name)}>{d.name} · dia {d.day_offset + 1}<Icon name="info" size={14} /></button>)}</div>
+            </section>
+          ) : null}
+        </PlaceSheet>
+      );
+    }
+    if (sheet.type === 'trip') {
+      const st = route.stops.find((x) => x.name === sheet.stop);
+      const d = st?.day_trips.find((x) => x.name === sheet.name);
+      if (!st || !d) return null;
+      const price = Math.round((d.cost_low + d.cost_high) / 2);
+      return (
+        <PlaceSheet
+          {...base} sub={`Bate-volta saindo de ${st.name}`} why={d.why || why}
+          facts={<><Badge>bate-volta · dia {d.day_offset + 1} em {st.name}</Badge>{price ? <Badge>≈ {money(price)} por pessoa</Badge> : null}{i?.country ? <Badge>{i.country}</Badge> : null}</>}
+          footer={<div className={s.actions}><Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(tripMark(st.name, d.name), d.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button></div>}
+        >
+          {d.wish ? <WishHere wish={d.wish} how={route.wishes.find((w) => placeKey(w.wish) === placeKey(d.wish ?? ''))?.how ?? null} dayTrip={null} /> : null}
+        </PlaceSheet>
+      );
+    }
+    const l = route.left_out.find((x) => x.name === sheet.name);
+    if (!l) return null;
+    return (
+      <PlaceSheet
+        {...base} sub={[i?.region, i?.country].filter(Boolean).join(', ') || 'Ficou de fora do roteiro'} why={why}
+        facts={<><OriginBadge name={l.name} places={ob.places} marks={marks} />{i?.nights_max ? <Badge>{nightsText(Math.max(1, i.nights_min ?? 1), i.nights_max)}</Badge> : null}</>}
+        footer={(
+          <div className={s.actions}>
+            <Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(outId(l.name), l.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button>
+            {canAsk ? <Button size="sm" disabled={busy} onClick={() => void fetchRoute({ force: [l.name] })}>Incluir no roteiro</Button> : null}
+          </div>
+        )}
+      >
+        <div className={s.outWhy}>
+          <p><b>Por que ficou de fora:</b> {l.reason}</p>
+          {l.sacrifice ? <p><b>Pra caber:</b> {l.sacrifice}</p> : null}
+        </div>
+      </PlaceSheet>
+    );
+  })();
+
   return (
     <StepChat label="Roteiro sugerido">
-      <TrilhaBubble step="4 · Roteiro">Montei {nights} noites com os seus indispensáveis. <b>Mexa no que quiser</b>, ou peça um ajuste lá embaixo.</TrilhaBubble>
+      <TrilhaBubble step="4 · Roteiro">
+        Montei {nights} noites com os seus indispensáveis. <b>Mexa no que quiser</b>, ou peça um ajuste lá embaixo.
+        {notFit ? <> <b>{notFit === 1 ? '1 pedido seu não coube' : `${notFit} pedidos seus não couberam`}</b>: veja abaixo o motivo e o que dá pra trocar.</> : null}
+      </TrilhaBubble>
       <ChatOptions>
         <section className={m.summary} aria-label="Resumo do roteiro">
           <div className={m.row}>
@@ -584,6 +831,21 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
           {total.pendingLegs ? <small>{total.pendingLegs} trecho(s) sem preço ainda: entram no Orçamento.</small> : null}
         </section>
 
+        <section className={s.mapBox} aria-labelledby="route-map" ref={mapRef}>
+          <h2 id="route-map" className={s.label}>A rota no mapa</h2>
+          <RouteMap
+            stops={mapStops} extras={extras} accent={accent} height="min(52vh, 380px)" focusId={focus} label="Mapa da rota sugerida"
+            onOpen={(id) => { const st = route.stops.find((x) => stopId(x.name) === id); if (st) openSheet({ type: 'stop', name: st.name }); }}
+            onOpenExtra={openExtra}
+          />
+          <p className={s.mapLegend}>
+            <span><i data-k="stop" /> paradas em ordem</span>
+            {extras.some((x) => x.kind === 'trip') ? <span><i data-k="trip" /> bate-voltas</span> : null}
+            {extras.some((x) => x.kind === 'out') ? <span><i data-k="out" /> ficou de fora</span> : null}
+            <span className={s.muted}>A linha liga as paradas, não é o caminho real.</span>
+          </p>
+        </section>
+
         <div className={s.timeline} data-testid="route-timeline">
           <LegLine leg={route.outbound} money={money} />
           {route.stops.map((st, i) => (
@@ -591,29 +853,53 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
               {i > 0 ? <LegLine leg={route.legs[i - 1] ?? null} money={money} /> : null}
               <StopCard
                 st={st} i={i} count={route.stops.length} dates={dates[i]} cost={costs[i]} money={money} places={ob.places} marks={marks}
+                info={about(st.name).info} wishes={wishesAt(route, st)}
                 onNights={(d) => edit(adjustNights(route, i, d))} onMove={(d) => edit(moveStop(route, i, i + d))} onRemove={() => void remove(i)}
+                onOpen={() => openSheet({ type: 'stop', name: st.name })} onTrip={(name) => openSheet({ type: 'trip', stop: st.name, name }, st.name)}
               />
             </div>
           ))}
           <LegLine leg={route.return} money={money} />
         </div>
 
-        {route.left_out.length ? (
-          <section aria-labelledby="left-out" className={s.stack}>
-            <h2 id="left-out" className={s.label}>Ficou de fora</h2>
-            {route.left_out.map((l) => (
-              <div key={l.name} className={s.cut}>
-                <span className={s.stack} style={{ gap: 4 }}><b>{l.name}</b><OriginBadge name={l.name} places={ob.places} marks={marks} /><small className={s.muted}>{l.reason}</small></span>
-                {canAsk ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => void fetchRoute({ force: [l.name] })}>Incluir</Button> : null}
+        {route.wishes.length ? (
+          <section aria-labelledby="wishes" className={s.stack}>
+            <h2 id="wishes" className={s.label}>Seus pedidos</h2>
+            {route.wishes.map((w) => (
+              <div key={w.wish} className={s.wishRowCard} data-fits={w.stop ? 'true' : 'false'}>
+                <span className={s.wishIcon} aria-hidden="true"><Icon name={w.stop ? 'check' : 'alert'} size={16} /></span>
+                <span className={s.wishText}>
+                  <b>{w.wish}</b>
+                  {w.stop
+                    ? <small>Entrou em <b>{w.stop}</b>{w.how ? `: ${w.how}` : '.'}</small>
+                    : <small><b>Não coube.</b> {w.reason}</small>}
+                  {!w.stop && w.sacrifice ? <small><b>Pra caber:</b> {w.sacrifice}</small> : null}
+                </span>
+                {w.stop
+                  ? <Button size="sm" variant="ghost" onClick={() => scrollToStop(w.stop!)}>Ver no roteiro</Button>
+                  : canAsk ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => void fitWish(w)}>{w.sacrifice ? 'Trocar e encaixar' : 'Tentar encaixar'}</Button> : null}
               </div>
             ))}
           </section>
         ) : null}
 
-        {route.wishes.length ? (
-          <section aria-labelledby="wishes" className={s.stack}>
-            <h2 id="wishes" className={s.label}>Seus pedidos</h2>
-            <div className={s.chips}>{route.wishes.map((w) => <span key={w.wish} className={s.origin} data-tone={w.stop ? 'ok' : 'neutral'}><Icon name={w.stop ? 'check' : 'alert'} size={13} />{w.wish} → {w.stop ?? 'não coube'}</span>)}</div>
+        {route.left_out.length ? (
+          <section aria-labelledby="left-out" className={s.stack}>
+            <h2 id="left-out" className={s.label}>Ficou de fora</h2>
+            {route.left_out.map((l) => (
+              <div key={l.name} className={s.cut} data-left-out={l.name} data-focus={focus === outId(l.name) ? 'true' : undefined}>
+                <span className={s.stack} style={{ gap: 4, minWidth: 0 }}>
+                  <button type="button" className={s.linkBtn} onClick={() => openSheet({ type: 'out', name: l.name })}>{l.name} <Icon name="info" size={14} /></button>
+                  <OriginBadge name={l.name} places={ob.places} marks={marks} />
+                  <small className={s.muted}>{l.reason}</small>
+                  {l.sacrifice ? <small className={s.sacrifice}><b>Pra caber:</b> {l.sacrifice}</small> : null}
+                </span>
+                <span className={s.cutActions}>
+                  <Button size="sm" variant="ghost" onClick={() => showOnMap(outId(l.name), l.name)}><Icon name="pin" size={15} /> Ver no mapa</Button>
+                  {canAsk ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => void fetchRoute({ force: [l.name] })}>Incluir</Button> : null}
+                </span>
+              </div>
+            ))}
           </section>
         ) : null}
 
@@ -642,8 +928,12 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
           </div>
         ) : null}
         {err ? <p className={s.note} role="alert">{err}</p> : null}
-        <Button disabled={busy || !online} onClick={() => apply(false)}>{busy ? <Busy>Salvando</Busy> : 'Gostei, ver passeios'}</Button>
+        <div className={s.actions}>
+          <Button disabled={busy || !online} onClick={() => apply(false)}>{busy ? <Busy>Salvando</Busy> : 'Gostei, ver passeios'}</Button>
+          {ob.step >= 5 && b.stops.length ? <Button variant="secondary" disabled={busy} onClick={() => go(5)}>Seguir sem mudar o roteiro salvo</Button> : null}
+        </div>
       </ChatOptions>
+      {sheetView}
     </StepChat>
   );
 }
