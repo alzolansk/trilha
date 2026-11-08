@@ -42,8 +42,13 @@ Este plano implementa esse design **no app Next.js atual**:
 | 0 — Preparação | ✅ concluída | nota de precedência no `ref/SPEC.md`, link no README, linha de base registrada |
 | 1 — Fundação visual | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
 | 2 — Shell e navegação | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
-| 3 — Dados e serviços base | ⏳ não iniciada | — |
-| 4 a 9 | ⏳ não iniciadas | — |
+| 3 — Dados e serviços base | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
+| 4 — Início | ✅ concluída (com ressalvas abaixo) | branch `docs/planning-redesign` |
+| 5 a 9 | ⏳ não iniciadas | — |
+
+**Verificação ao fim da Fase 4:** `npm run typecheck` ok; `npm test` com 181 testes verdes (eram 143: entraram 18 de banco em `tests/db/redesign.test.ts` e 20 unitários em `tests/unit/redesign.test.ts`); `npm run build` ok; `npx playwright test` com 27 de 27 verdes contra o build de produção (saíram os 2 testes da história de scroll e entraram 5 da Início); `/demo/andes` conferida em 390 e 1280 px contra `Inicio.dc.html`, sem rolagem horizontal. As Fases 3 e 4 também foram feitas juntas, na mesma branch das anteriores.
+
+**Para testar com dados reais é obrigatório aplicar a migration `supabase/migrations/20261108000008_redesign.sql`** no projeto Supabase (SQL Editor ou `supabase db push`). Sem ela, a leitura continua funcionando (colunas novas são opcionais e as tabelas novas estão marcadas `optional`), mas estas escritas falham com erro de coluna: escolher a cor em Ajustes e "Adicionar ao roteiro" no `StopSuggestions` (que agora grava `cost_cents`).
 
 **Verificação ao fim da Fase 2:** `npm run typecheck` ok; `npm test` com 143 testes verdes (a linha de base era 139; entraram 4 de accent); `npm run build` ok; `npx playwright test` com 24 de 24 verdes contra o build de produção; conferência manual em `/demo/andes` com 360, 390, 768, 1280 e 1440 px, sem rolagem horizontal. As Fases 1 e 2 foram feitas juntas na mesma branch, a pedido; não houve um PR por fase.
 
@@ -64,16 +69,53 @@ Este plano implementa esse design **no app Next.js atual**:
 - **`/roteiro/[stopId]` é temporária.** Hoje ela redireciona para `/roteiro?parada=X` (`screens/Parada.tsx`), o contrário do que pede a §4.3. Na **Fase 5**, a `Parada` real ocupa a rota e o `Roteiro` passa a fazer `router.replace` de `?parada=X` para `/roteiro/X`.
 - **Telas temporárias nas rotas novas.** `Dinheiro`, `Orcamento`, `Extrato`, `Acerto` e `Votos` (em `src/screens/`) só embrulham pedaços que agora são exportados de `Mala.tsx` (`Budget`, `Pool`, `StopSpend`, `Converter`, `Debts`, `ExpenseList`) e de `Turma.tsx` (`Decisions`). Cada arquivo tem o comentário "TEMPORÁRIO (Fase 2)". A **Fase 6** reescreve os de dinheiro e tira esses pedaços de `Mala.tsx`; a **Fase 7** faz `TurmaHub` e `Votos`.
 - **`/turma` ainda é a tela Turma antiga**, agora com uma lista de atalhos para Votos, Documentos, Mala, Diário, Ajustes e Conta, que saíram da navegação principal. `Decisions` continua em `/turma`, porque links existentes (`plan.ts`, push de `polls.ts`) usam `/turma#decisoes` e `#nova-votacao`. A Fase 7 precisa migrar esses links para `/turma/votos`.
-- **Topo da Início no celular.** O botão "Minhas trilhas" (abre o seletor em Sheet) e a `AvatarStack` ficam sobrepostos ao hero da Home antiga pelo `TripShell`. Na **Fase 4**, eles vão para dentro do hero de `Inicio.tsx`, e o bloco `homeTop` sai do shell.
+- **Topo da Início no celular.** ✅ Resolvido na Fase 4: o seletor e a `AvatarStack` estão dentro do hero de `Inicio.tsx`, e o bloco `homeTop` saiu do shell.
 - **`OfflineBanner`** continua em `AppProviders`, que é global e cobre também `/entrar`, `/conta` etc. Não foi para o `TripShell`.
 - **Sheet e o botão Voltar.** O Sheet empurra uma entrada no histórico (`history.pushState`, integrado ao router do Next 16) e a remove ao fechar. Um clique em link interno dentro do Sheet é detectado e não chama `back()`. Se uma ação chamar `router.push` logo depois de fechar o Sheet, sobra uma entrada extra no histórico: inofensiva, mas pede um Voltar a mais. O diálogo de confirmação usa `closeOnBack={false}`. Ainda não existe fechar o Sheet arrastando para baixo.
 - **TabBar.** A lista `HIDE_TABBAR` em `TripShell.tsx` já esconde a barra em `/dinheiro/orcamento`; cada subtela com CTA fixa deve entrar nessa lista. A posição de rolagem de cada aba fica guardada em memória por rota e se perde ao recarregar a página.
 - **SideNav.** Além de Conta e Nova trilha, o rodapé tem "Ajustes da trilha", que não está na §4.2. Na demo, mostra "Criar trilha real", "Entrar" e o selo de demonstração.
 - **Redirects** em `next.config.ts` usam 307 de propósito, porque as rotas ainda podem mudar até a Fase 9. Trocar para 308 no fim.
 - **Faixa de cópia salva.** Ela mostra a hora: `saveBundle` agora grava `saved-at:<tripId>` no IndexedDB, e `TripContext` expõe `staleSince`.
-- **`sw.js` está em `v2`** e já usa as rotas novas no `warmTripPages`. O cache da Wikimedia (`upload.wikimedia.org`) entra na Fase 3. Os comentários do arquivo tinham caracteres corrompidos (texto em UTF-8 lido como cp1252) e foram corrigidos.
-- **Testes e2e.** Os testes de tokens por identidade viraram testes de accent; entraram testes de abas, redirects e Voltar fechando o Sheet; as rotas foram atualizadas. Os testes da "história de scroll do Início" ainda passam, mas devem sair na Fase 4. No `next dev`, o teste de reduced motion falha por tempo de hidratação; no build de produção ele passa.
+- **`sw.js`** usa as rotas novas no `warmTripPages`. Na Fase 3 foi para `v3`, com o cache da Wikimedia. Os comentários do arquivo tinham caracteres corrompidos (texto em UTF-8 lido como cp1252) e foram corrigidos.
+- **Testes e2e.** Os testes de tokens por identidade viraram testes de accent; entraram testes de abas, redirects e Voltar fechando o Sheet; as rotas foram atualizadas. Os testes da "história de scroll do Início" saíram na Fase 4. No `next dev`, o teste de reduced motion falha por tempo de hidratação; no build de produção ele passa.
 - **Ambiente.** Neste sandbox, `/api/fx` (conversor) responde 502 por falta de rede externa. Isso já acontecia antes destas fases.
+
+### Ressalvas de handoff: Fase 3
+
+- **Migration `20261108000008_redesign.sql`.** Tudo da §7, aditivo. Decisões tomadas na implementação:
+  - **`trips.accent`:** o backfill usa a cor curada para as identidades do dicionário (andes, japão, marrocos, islândia) e o `identity->palette->acc` só quando ele passa 3:1 com branco (função `hex_luminance`). O resto fica `null`, que significa "automática": o app calcula com `tripAccent()`/`safeAccent()`, escurecendo em OKLCH. Não força `#2B3FF5`.
+  - **`budget_categories.kind`:** backfill pelo nome (`budget_kind_of`) e um gatilho `default_budget_kind` que preenche o tipo pelo nome quando o insert não manda `kind`. Assim `/nova-trilha` e o app atual continuam criando categorias certas sem mudar o código. No app, `categoryKind()` também cai no nome quando `kind` falta ou é `outro`.
+  - **Vínculo gasto ↔ item:** `unique (id, trip_id)` novos em `activities`, `stays` e `transports`; FKs compostas com `on delete set null`; check de no máximo um vínculo. `save_expense` aceita `activity_id`/`stay_id`/`transport_id` e recusa item de outra trilha com mensagem humana.
+  - **`suggestions`:** membros leem; **só organizador/editor muda status, inclusive dispensar**. O leitor não dispensa, nem só para si: isso exigiria uma tabela por pessoa e foi deixado de fora. `acted_by`/`acted_at` são carimbados pelo gatilho `stamp_suggestion` (o cliente não escolhe). Ao apagar a parada, as sugestões dela saem em cascata.
+  - **`trip_preferences`:** todos da trilha leem (o Descobrir mostra o que a turma quer); cada um grava só a própria linha; sai junto quando a pessoa deixa a trilha.
+  - **`trip_members.pool_target_cents`:** segue a política atual de `trip_members`, então só o organizador edita.
+  - **`packing_items.assignee_id`:** precisa ser da trilha (gatilho `check_expense_people`, ampliado).
+- **Testes de banco.** `tests/db/harness.ts` ganhou `createDb({ before })` e `applyMigrations(from)`, para semear dados antigos e testar os backfills de verdade.
+- **Tipos.** Os campos novos em `types.ts` são **opcionais** (`?:`), porque cópias offline antigas e projetos com a migration pendente não os têm. `upgradeBundle` preenche `suggestions` e `tripPreferences` com listas vazias. Quem ler `cost_cents`, `price_cents`, `kind` etc. trata `undefined` como `null`.
+- **Demo.** A Andes bate com o canvas: R$ 6.470 por pessoa, R$ 19.410 planejados para 3 e R$ 9.360 juntados (48%), mais custos em BRL nos trechos, diárias e passeios, bairros (Miraflores, San Blas, Sopocachi), 4 sugestões (3 passeios e 1 bairro), preferências, quem leva 4 itens da mala, e 3 gastos ligados (voo e hostel pagos pelo caixa, ingresso de Machu Picchu pelo Léo). Para sobrar um dia vazio para a sugestão, a demo tira "Montanha Colorida" do plano de Cusco (`DROP_PLAN` em `lib/demo/build.ts`); ela volta como sugestão "cabe no dia 6". As outras 3 demos só ganharam `accent`, `kind` e listas vazias. **As fotos da demo continuam `null` (placeholder):** este ambiente não conseguiu resolver fotos reais da Wikimedia (ver abaixo), e não inventei URLs.
+- **`lib/money.ts`:** entraram `budgetOverview`, `categoryStatus` (itens por tipo, pagos/não pagos pelos vínculos), `memberPoolStatus` (status `completo | em_dia | atrasado | sem_meta`; "em dia" compara com uma meta linear entre a criação da trilha e o embarque), `expenseImpact` (considera edição), `categoryKind`, `toBaseCents` e `itemCost`. Preço em moeda diferente da base só entra com uma taxa (`rates`); sem ela vira `null`, e a UI mostra como "sem preço". A Fase 6 precisa passar as taxas do conversor.
+- **`lib/budgetPlan.ts`:** `budgetFromPlan` (estilo multiplica hospedagem sem preço e comida; ritmo define passeios por dia livre), `plannedUpdates` (casa por tipo), `snapshotOf` e `diffSince`. As referências de preço (`DEFAULTS`) são chutes conservadores em centavos de BRL. A Fase 6 deve trocá-las pelo `/api/ai/estimate` (diária) quando houver IA, sempre como estimativa.
+- **`lib/suggestions.ts`:** `rankForHome`, `slotsForDay`/`stopSlots` (estados `vazio | folga | cheio | aclimatar | viagem`; acima de 2.500 m o dia da chegada fica para aclimatar), `bestDayFor`, `suggestionsForDay`, `stopsNeedingSuggestions` e `estimateCents`. **Lembretes de regra não são gravados com `source:'rules'`:** saem na hora de `ruleAlerts`, `myPendingVotes` e `memberPoolStatus`, então nunca ficam velhos. A coluna `source` continua aceitando `rules` para uso futuro. "Documento faltando para alguém" usa só os alertas de validade e de seguro: documentos privados não são visíveis para a turma, então não dá para saber, de forma honesta, quem está sem documento. A matriz de documentos da Fase 7 decide isso.
+- **Ações:** `data/suggestionActions.ts` (`acceptSuggestion`, `voteSuggestions`, `dismissSuggestion`). Com 2 ou mais sugestões da mesma parada, a votação vira uma enquete `activity` com preço por opção, e a vencedora entra no roteiro ao decidir. Com 1 só, vira uma enquete livre "Bora: X?" (Topo/Passo), que não mexe no roteiro. A atividade aceita grava `cost_cents` com a média da faixa, `cost_is_estimate = true`.
+- **`/api/ai/suggest`:** só editor; no máximo 1 chamada por parada por dia (confere `suggestions.created_at` no banco); respeita `consumeQuota`; grava passeios e até 2 bairros, com `day_fit`, `effort` e `photo_query`. A Início chama para a próxima parada sem sugestão ou com sugestões de mais de 14 dias, uma vez por dia por parada neste aparelho (`sessionStorage`). Sem IA, a rota responde 503 e a Início segue só com as regras.
+- **`/api/ai/estimate`:** `transport` (faixa por pessoa para trechos sem preço) e `daily` (comida por dia). Só devolve faixas, não grava nada e ainda não tem tela: a Fase 6 usa.
+- **`/api/photos` e `lib/photos.ts`:** usam a Action API (`generator=search` + `pageimages`, depois `imageinfo` com `extmetadata`) e não a REST `page/summary`, porque a REST devolvia brasões e mapas como imagem principal. Descartam SVG, bandeira, brasão, mapa e logo; **só aceitam a página se o título bater com o lugar pedido** (nunca foto de outro lugar); exigem licença; tentam pt e depois en. `User-Agent` sem e-mail. Cache de 30 dias no `fetch` da rota e `cache-first` no `sw.js` (agora **`v3`**, cache `trilha-photos`, ~300 entradas). **Não foi possível conferir o aceite "`/api/photos?q=Cusco` devolve foto" neste ambiente:** a Wikipedia respondeu 429 (limite de requisições) para o IP compartilhado do sandbox, mesmo depois de liberada na rede. O parse está coberto por testes com respostas reais de exemplo; falta a conferência ao vivo no Vercel.
+- **Ajustes.** A seção "Aparência" agora tem o seletor das 8 cores e a opção "Automática" (grava `trips.accent`, ou `null`).
+- **`StopSuggestions`** grava o custo em `cost_cents`/`cost_currency`/`cost_is_estimate`, e a nota fica só com a duração.
+- **README.** Entrou a migration 0008 e a frase "só os documentos são cifrados ponta a ponta; caixa, gastos e orçamento ficam protegidos pelo RLS". Não havia frase dizendo que o caixa era criptografado; a frase nova deixa isso explícito.
+- **Ambiente de desenvolvimento.** Foi criado um ambiente de nuvem pessoal "trilha", com acesso a `pt/en.wikipedia.org`, `commons.wikimedia.org` e `upload.wikimedia.org`, para testar as fotos.
+
+### Ressalvas de handoff: Fase 4
+
+- **`screens/Inicio.tsx`** substitui a Home antiga nas duas árvores de rota. `Home.tsx` e `home.module.css` foram apagados, junto com a história de scroll. O bloco `homeTop` saiu do `TripShell`: o seletor de trilhas (botão novo `TripSwitcherButton variant="photo"`) e a `AvatarStack` estão dentro do hero. No desktop o seletor do hero some, porque já está na SideNav.
+- **Ordem dos cartões.** `rankForHome` define *quais* entram (os 3 primeiros por prioridade). O cartão grande com foto aparece **primeiro**, como no canvas, mesmo que um voto tenha prioridade maior; os demais seguem a ordem. "3 de N · ver todas" abre um Sheet com todos.
+- **Foto do hero:** capa da turma (`cover_path`) → `stops.photo` da primeira parada → placeholder. A foto da Wikimedia da primeira parada só aparece quando `stops.photo` já estiver gravado: ainda não há quem resolva e grave a foto das paradas (a Fase 5, na Parada, deve fazer isso com `fetchPhoto` e gravar em `stops.photo`). A foto do cartão grande é resolvida na hora para editor em conta real e gravada em `suggestions.payload.photo`.
+- **Variações do hero:** antes (N dias), menos de 48 h (`31h20`), "É hoje.", durante ("5 / dia de 15 / Cusco" + seção "Hoje em Cusco" com as atividades do dia) e depois ("Como foi?", que leva ao Diário). As variações durante e depois não têm teste e2e, porque as demos são todas futuras.
+- **Leitor (viewer):** vê as sugestões, sem os botões aceitar/votar/dispensar.
+- **Próximo passo** aparece como faixa tracejada abaixo do Dinheiro enquanto `planStage` não for "viajar". Os links de `plan.ts` ainda usam `/turma#decisoes` (ver Fase 2/7).
+- **`PlanningHome`** foi reestilizado com `Button`, `ListRow` e `Stat`; a CTA principal é "Descobrir destino", que leva a `/descobrir` (ainda o Explorar antigo até a Fase 8). Não tem teste e2e (as demos têm destino).
+- **Identidade antiga.** Com a Home antiga fora, `lib/identity/render.ts` e `fontmap.ts` não são mais usados pelo app (só pelos testes de identidade); `shapes.ts`, `generate.ts` e `validate.ts` continuam por causa de `/nova-trilha` e `api/ai/identity`. Tudo sai na Fase 8/9.
+- **Testes e2e.** Saíram os 2 da história de scroll. Entraram: hero e números do Dinheiro, 3 visíveis + "ver todas", "Pôr no dia 6" cria a atividade e o cartão some (conferido na Parada Cusco do Roteiro), dispensar, e reduced motion. O teste de lembrete de voto agora vai para `/turma/votos`.
 
 ---
 
@@ -656,14 +698,14 @@ Cada fase termina com `npm run typecheck`, `npm test` e o app rodando em `/demo/
 - Mover as telas existentes para as rotas novas sem redesenhá-las ainda (Documentos, Mala e Diário vão para `/turma/*`; gastos para `/dinheiro`).
 - **Aceite:** navegar pelas 4 abas no celular e no desktop; links antigos redirecionam; sem rolagem horizontal entre 360 e 1440 px; Voltar do Android fecha o Sheet.
 
-### Fase 3 — Dados e serviços base
+### Fase 3 — Dados e serviços base · ✅ concluída (ver ressalvas no topo)
 
 - Migração da seção 7, com testes em `tests/db` (RLS das tabelas novas, `save_expense` com vínculos, backfills).
 - Atualizar `types.ts`, as sources, `offline.ts` e a demo.
 - `lib/money.ts` (funções novas), `lib/photos.ts` + `/api/photos`, `lib/suggestions.ts` + `/api/ai/suggest`, `/api/ai/estimate`, `lib/budgetPlan.ts`.
 - **Aceite:** testes unitários novos verdes; a demo carrega com os campos novos; `/api/photos?q=Cusco` devolve foto com autor e licença.
 
-### Fase 4 — Início
+### Fase 4 — Início · ✅ concluída (ver ressalvas no topo)
 
 - `screens/Inicio.tsx` conforme 5.1, incluindo as variações de fase (antes, é hoje, durante, depois) e o `PlanningHome` restilizado.
 - **Aceite:** comparar com `Inicio.dc.html` em 390 px; sem IA, as sugestões mostram só regras; "Pôr no dia 4" cria a atividade e o cartão some.

@@ -3,12 +3,13 @@
  * - NÃO cacheia dados nem arquivos de usuário (Supabase/API): esses ficam no IndexedDB por conta.
  * - Ao sair da conta, apaga as páginas cacheadas.
  */
-const VERSION = 'v2'; // Trilha 2.0: rotas novas e visual novo (planning §4.3)
+const VERSION = 'v3'; // Trilha 2.0: fotos da Wikimedia em cache (planning §8.1)
 const STATIC = `trilha-static-${VERSION}`;
 const PAGES = `trilha-pages-${VERSION}`;
 const FONTS = `trilha-fonts-${VERSION}`;
 const TILES = `trilha-tiles-${VERSION}`;
-const KEEP = [STATIC, PAGES, FONTS, TILES];
+const PHOTOS = `trilha-photos-${VERSION}`;
+const KEEP = [STATIC, PAGES, FONTS, TILES, PHOTOS];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -82,6 +83,11 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.hostname.endsWith('tile.openstreetmap.org')) {
     event.respondWith(cacheFirst(req, TILES, 400));
+    return;
+  }
+  // Fotos públicas da Wikimedia (crédito vai junto no dado): cache-first, ~300 entradas.
+  if (url.hostname === 'upload.wikimedia.org') {
+    event.respondWith(cacheFirst(req, PHOTOS, 300));
   }
   // Supabase e demais origens: rede direta (dados de usuário não passam pelo cache do SW).
 });

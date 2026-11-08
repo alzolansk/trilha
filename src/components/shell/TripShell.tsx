@@ -8,7 +8,6 @@ import { grantMissingKeys } from '../../data/docKeys';
 import { syncOffline } from '../../data/offlineSync';
 import { useVault } from '../../data/VaultContext';
 import { track } from '../../lib/analytics';
-import { AvatarStack } from '../ui/Avatar';
 import { ErrorBox } from '../ui/ErrorBox';
 import { SideNav, SideNavLink } from '../ui/SideNav';
 import { ScreenSkeleton } from '../ui/Skeleton';
@@ -56,7 +55,7 @@ function useTabScroll(path: string) {
 }
 
 export function TripShell({ children }: { children: React.ReactNode }) {
-  const { base, bundle, accent, loading, error, reload, stale, staleSince, source, me } = useTrip();
+  const { base, bundle, accent, loading, error, reload, stale, staleSince, source } = useTrip();
   const { online, user } = useAuth();
   const vault = useVault();
   const path = usePathname();
@@ -95,13 +94,6 @@ export function TripShell({ children }: { children: React.ReactNode }) {
   }, [isHome, rel]);
 
   const items: NavItem[] = TABS.map((t, i) => ({ href: base + t.path, label: t.label, icon: t.icon, active: i === tab }));
-  const people = bundle
-    ? bundle.members.map((m) => {
-        const p = bundle.profiles.find((x) => x.id === m.user_id);
-        return { id: m.user_id, name: p?.display_name ?? 'Pessoa', color: p?.color, me: m.user_id === me };
-      })
-    : [];
-
   return (
     <div className={s.shell}>
       <ThemeApplier accent={bundle ? accent : null} />
@@ -132,16 +124,6 @@ export function TripShell({ children }: { children: React.ReactNode }) {
         {stale && bundle ? (
           <div className={s.notice} role="status">
             <span>{staleSince ? `Mostrando cópia salva de ${new Date(staleSince).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Mostrando a cópia salva neste aparelho'}{online ? '. Atualizando…' : '.'}</span>
-          </div>
-        ) : null}
-
-        {/* Celular: sem header global. Na Início, o seletor de trilha e a turma ficam no topo (canvas Inicio). */}
-        {isHome && bundle ? (
-          <div className={s.homeTop}>
-            <TripSwitcherButton variant="hero" />
-            <Link href={`${base}/turma`} className={s.homeTurma} aria-label="Abrir a turma">
-              <AvatarStack people={people} max={3} size={32} />
-            </Link>
           </div>
         ) : null}
 

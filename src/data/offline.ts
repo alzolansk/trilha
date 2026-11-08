@@ -73,6 +73,8 @@ function upgradeBundle(b: TripBundle): TripBundle {
   b.polls ??= [];
   b.pollOptions ??= [];
   b.pollVotes ??= [];
+  b.suggestions ??= [];
+  b.tripPreferences ??= [];
   return b;
 }
 export async function deleteBundle(userId: string, tripId: string) {

@@ -20,7 +20,17 @@ const fail = (message: string, code: string) => Object.assign(new Error(message)
 const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
   polls: { detail: null, target: 'free', stop_id: null, multi: false, closes_at: null, status: 'open', decided_option_id: null, decided_by: null, decided_at: null, created_by: DEMO_USER },
   poll_options: { detail: null, link_url: null, price: null, currency: null, address: null, position: 0, created_by: DEMO_USER },
+  suggestions: { stop_id: null, day: null, status: 'new', source: 'ai', acted_by: null, acted_at: null },
+  trip_preferences: { user_id: DEMO_USER, answers: {} },
 };
+
+// Mesmo carimbo que o gatilho stamp_suggestion faz no banco.
+function stampSuggestion(row: Record<string, unknown>, prev?: Record<string, unknown>) {
+  if (row.status !== undefined && row.status !== (prev?.status ?? 'new')) {
+    row.acted_by = DEMO_USER;
+    row.acted_at = new Date().toISOString();
+  }
+}
 
 export function createDemoSource(key: DemoKey): TripSource {
   if (!stores.has(key)) stores.set(key, buildDemoBundle(key));
@@ -44,6 +54,7 @@ export function createDemoSource(key: DemoKey): TripSource {
         if (b().pollOptions.filter((o) => o.poll_id === row.poll_id).length >= 6) throw fail('No máximo 6 opções por enquete', '22023');
       }
       const full = { id: crypto.randomUUID(), trip_id: b().trip.id, version: 1, created_at: stamp(), updated_at: stamp(), ...DEFAULTS[table], ...row };
+      if (table === 'suggestions') stampSuggestion(full);
       if (list) list.push(full);
       emit(table);
       return full as never;
@@ -59,6 +70,7 @@ export function createDemoSource(key: DemoKey): TripSource {
       const row = list.find((r) => r.id === id);
       if (!row) throw new Error('Item não encontrado.');
       if (version != null && row.version !== version) throw new ConflictError();
+      if (table === 'suggestions') stampSuggestion(patch, row);
       Object.assign(row, patch, { version: Number(row.version ?? 1) + 1, updated_at: stamp() });
       emit(table);
       return structuredClone(row) as never;
@@ -90,6 +102,13 @@ export function createDemoSource(key: DemoKey): TripSource {
         bb.pollOptions = bb.pollOptions.filter((o) => !gone.has(o.poll_id));
         bb.pollVotes = bb.pollVotes.filter((v) => !gone.has(v.poll_id));
       }
+      const LINK = { activities: 'activity_id', stays: 'stay_id', transports: 'transport_id' } as const;
+      if (table in LINK) {
+        // on delete set null: o gasto fica, só perde o vínculo
+        const col = LINK[table as keyof typeof LINK];
+        const gone = new Set((listFor(bb, table) ?? []).filter((r) => matches(r, m)).map((r) => r.id));
+        for (const e of bb.expenses) if (e[col] && gone.has(e[col]!)) e[col] = null;
+      }
       const list = listFor(b(), table);
       if (list) {
         for (let i = list.length - 1; i >= 0; i--) if (matches(list[i], m)) list.splice(i, 1);
@@ -101,6 +120,13 @@ export function createDemoSource(key: DemoKey): TripSource {
         const e = args.p_expense as Record<string, unknown>;
         const shares = args.p_shares as { user_id: string; share_cents: number }[];
         const bb = b();
+        // Mesmas regras de save_expense (…0008_redesign.sql): no máximo um item, e da mesma viagem.
+        const links = (['activity_id', 'stay_id', 'transport_id'] as const).filter((k) => e[k]);
+        if (links.length > 1) throw fail('Um gasto paga no máximo um item do roteiro', '22023');
+        const exists = (k: (typeof links)[number]) =>
+          (k === 'activity_id' ? bb.activities : k === 'stay_id' ? bb.stays : bb.transports).some((x) => x.id === e[k]);
+        if (links.length && !exists(links[0])) throw fail('O item ligado ao gasto não é desta viagem', '22023');
+        for (const k of ['activity_id', 'stay_id', 'transport_id'] as const) e[k] = e[k] || null;
         let eid = e.id as string | undefined;
         if (eid) {
           const row = bb.expenses.find((x) => x.id === eid);

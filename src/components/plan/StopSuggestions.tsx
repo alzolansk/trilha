@@ -59,7 +59,9 @@ export function StopSuggestions({ stop }: { stop: Stop }) {
     run(async () => {
       await source.insert('activities', {
         trip_id: b.trip.id, stop_id: stop.id, day, time: null, title: a.title.slice(0, 120), suggested_by: 'ai',
-        notes: `${a.duration ? `${a.duration} · ` : ''}${rangeLabel(a.cost_low * 100, a.cost_high * 100, cur)}/pessoa (estimativa)`,
+        // custo nos campos próprios (migration …0008); a nota fica só com a duração
+        notes: a.duration ? `${a.duration} · estimativa de ${rangeLabel(a.cost_low * 100, a.cost_high * 100, cur)}/pessoa` : null,
+        cost_cents: Math.round(((a.cost_low + a.cost_high) / 2) * 100), cost_currency: cur, cost_is_estimate: true,
         position: b.activities.filter((x) => x.stop_id === stop.id && x.day === day).length,
       });
       await reload();

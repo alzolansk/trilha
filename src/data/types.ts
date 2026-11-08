@@ -55,6 +55,43 @@ export interface Trip extends Versioned {
   return_at: string | null;
   identity: DestinationIdentity | null;
   identity_version: number;
+  // Campos da migration 20261108000008 (Trilha 2.0). Opcionais: cópias offline antigas e
+  // projetos com a migration pendente não os têm.
+  /** cor de destaque (#RRGGBB); null = automática (ver lib/identity/accent.ts) */
+  accent?: string | null;
+  /** respostas do Orçamento em conversa (lib/budgetPlan.ts) */
+  budget_plan?: BudgetPlan | null;
+}
+
+/** Foto escolhida: Wikimedia (com crédito) ou upload próprio (`path` no bucket covers). */
+export interface PhotoRef {
+  url?: string;
+  path?: string;
+  width?: number;
+  height?: number;
+  author?: string | null;
+  license?: string | null;
+  source_url?: string | null;
+}
+
+export type BudgetStyle = 'economico' | 'equilibrado' | 'conforto';
+export type BudgetPace = 'leve' | 'moderado' | 'intenso';
+/** Respostas do Orçamento em conversa, gravadas em trips.budget_plan. */
+export interface BudgetPlan {
+  style: BudgetStyle;
+  pace: BudgetPace;
+  /** ids de atividades/sugestões que entram na conta de passeios */
+  activities?: string[];
+  /** diária de comida por pessoa, em centavos (estimativa confirmada pela turma) */
+  daily_food_cents?: number | null;
+  /** foto do roteiro usada no cálculo, para avisar o que mudou depois (diffSince) */
+  snapshot?: BudgetSnapshot | null;
+  updated_at?: string;
+}
+export interface BudgetSnapshot {
+  stops: { id: string; nights: number }[];
+  people: number;
+  at: string;
 }
 
 export interface Member {
@@ -62,6 +99,8 @@ export interface Member {
   user_id: string;
   role: Role;
   joined_at: string;
+  /** cota individual no caixa, em centavos (null = planejado ÷ pessoas) */
+  pool_target_cents?: number | null;
 }
 
 export interface Invite {
@@ -93,6 +132,9 @@ export interface Stop extends Versioned {
   code: string | null;
   meta: string | null;
   tip: AiTip | null;
+  /** bairro escolhido para ficar */
+  area?: string | null;
+  photo?: PhotoRef | null;
 }
 
 export interface Transport extends Versioned {
@@ -114,6 +156,10 @@ export interface Transport extends Versioned {
   notes: string | null;
   duration_min: number | null;
   document_id: string | null;
+  /** por pessoa */
+  price_cents?: number | null;
+  price_currency?: string | null;
+  price_is_estimate?: boolean;
 }
 
 export interface Stay extends Versioned {
@@ -131,6 +177,11 @@ export interface Stay extends Versioned {
   suggested_by: Provenance | null;
   /** enquete cuja decisão criou/atualizou esta hospedagem */
   from_poll_id: string | null;
+  /** por noite, quarto/casa inteiro */
+  price_cents?: number | null;
+  price_currency?: string | null;
+  price_is_estimate?: boolean;
+  link_url?: string | null;
 }
 
 export interface Activity extends Versioned {
@@ -146,6 +197,11 @@ export interface Activity extends Versioned {
   from_entry_id: string | null;
   /** enquete cuja decisão criou esta atividade */
   from_poll_id: string | null;
+  /** por pessoa */
+  cost_cents?: number | null;
+  cost_currency?: string | null;
+  cost_is_estimate?: boolean;
+  photo?: PhotoRef | null;
 }
 
 export interface DocumentRow extends Versioned {
@@ -210,6 +266,8 @@ export interface PackingItem extends Versioned {
   suggestion_reason: string | null;
   position: number;
   suggested_by: Provenance | null;
+  /** quem leva */
+  assignee_id?: string | null;
 }
 
 export interface Task extends Versioned {
@@ -232,7 +290,10 @@ export interface BudgetCategory extends Versioned {
   color: string;
   planned: string | number;
   position: number;
+  /** tipo fixo da categoria (antes casava pelo nome); ausente em cópias antigas */
+  kind?: BudgetKind;
 }
+export type BudgetKind = 'transporte' | 'hospedagem' | 'passeios' | 'comida' | 'outro';
 
 export interface Expense extends Versioned {
   trip_id: string;
@@ -251,6 +312,10 @@ export interface Expense extends Versioned {
   /** pago com dinheiro do caixa da turma */
   paid_from_pool: boolean;
   created_by: string | null;
+  /** item do roteiro que este gasto paga (no máximo um) */
+  activity_id?: string | null;
+  stay_id?: string | null;
+  transport_id?: string | null;
 }
 
 /** Aporte no caixa da turma (deposit) ou devolução do caixa para a pessoa (refund). */
@@ -315,6 +380,45 @@ export interface PollOption {
 }
 export interface PollVote { poll_id: string; option_id: string; trip_id: string; user_id: string; created_at: string }
 
+export type SuggestionKind = 'destination' | 'activity' | 'area' | 'reminder';
+export type SuggestionStatus = 'new' | 'accepted' | 'voting' | 'dismissed';
+export type DayFit = 'manha' | 'tarde' | 'noite' | 'dia_todo';
+export interface SuggestionPayload {
+  title: string;
+  why?: string | null;
+  duration?: string | null;
+  day_fit?: DayFit | null;
+  effort?: 'leve' | 'moderado' | 'puxado' | null;
+  /** faixa estimada por pessoa, em centavos da moeda `currency` */
+  cost_low?: number | null;
+  cost_high?: number | null;
+  currency?: string | null;
+  photo_query?: string | null;
+  photo?: PhotoRef | null;
+  /** lembretes: para onde o cartão leva e de qual regra veio */
+  href?: string | null;
+  rule?: string | null;
+  label?: string | null;
+}
+export interface Suggestion extends Versioned {
+  trip_id: string;
+  stop_id: string | null;
+  kind: SuggestionKind;
+  /** dia da viagem (1 = primeiro dia) */
+  day: number | null;
+  payload: SuggestionPayload;
+  status: SuggestionStatus;
+  source: Provenance;
+  acted_by: string | null;
+  acted_at: string | null;
+}
+export interface TripPreference {
+  trip_id: string;
+  user_id: string;
+  answers: Record<string, unknown>;
+  updated_at: string;
+}
+
 export interface TripRetro {
   trip_id: string;
   content: RetroContent;
@@ -374,6 +478,8 @@ export interface TripBundle {
   polls: Poll[];
   pollOptions: PollOption[];
   pollVotes: PollVote[];
+  suggestions: Suggestion[];
+  tripPreferences: TripPreference[];
   offlinePrefs: OfflinePref[];
   retro: TripRetro | null;
   /** quando este pacote foi obtido do servidor (ISO) */
@@ -386,7 +492,7 @@ export type TableName =
   | 'tasks' | 'budget_categories' | 'expenses' | 'expense_shares' | 'settlements'
   | 'journal_entries' | 'journal_photos' | 'document_offline_prefs' | 'trip_retros'
   | 'notification_prefs' | 'push_subscriptions' | 'analytics_events' | 'document_keys' | 'user_keys' | 'pool_contributions'
-  | 'inspiration_votes' | 'polls' | 'poll_options' | 'poll_votes';
+  | 'inspiration_votes' | 'polls' | 'poll_options' | 'poll_votes' | 'suggestions' | 'trip_preferences';
 
 export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   trip_members: 'members',
@@ -412,6 +518,8 @@ export const BUNDLE_KEYS: Partial<Record<TableName, keyof TripBundle>> = {
   polls: 'polls',
   poll_options: 'pollOptions',
   poll_votes: 'pollVotes',
+  suggestions: 'suggestions',
+  trip_preferences: 'tripPreferences',
   document_offline_prefs: 'offlinePrefs',
 };
 

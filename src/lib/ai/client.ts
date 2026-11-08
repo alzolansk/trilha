@@ -1,7 +1,7 @@
 'use client';
 // Chamadas às rotas /api/ai/* a partir do navegador. Falhas nunca quebram a tela:
 // retornam null e o espaço da sugestão simplesmente não aparece (SPEC §9.1).
-export type AiTask = 'identity' | 'tips' | 'packing' | 'classify' | 'alerts' | 'retro' | 'explore';
+export type AiTask = 'identity' | 'tips' | 'packing' | 'classify' | 'alerts' | 'retro' | 'explore' | 'suggest' | 'estimate';
 
 export interface AiResponse<T> {
   data: T;

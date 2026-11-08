@@ -18,21 +18,16 @@
 @media (min-width: 821px) { .notice { padding-top: 8px; } }
 
 /* topo da Início no celular: logo + "Minhas trilhas" e a turma (canvas Inicio.dc.html) */
-.homeTop { display: none; }
-@media (max-width: 820px) {
-  .homeTop {
-    position: absolute; z-index: 40; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top));
-    display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: none;
-  }
-  .homeTop > * { pointer-events: auto; }
-  .notice ~ .homeTop { position: relative; top: 0; left: 0; right: 0; padding: 12px 12px 0; }
-}
 .heroSwitch {
   min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px 4px 6px; border: 0; border-radius: 999px;
   background: var(--surface); color: var(--ink); font: 700 15px/1 var(--font-body); box-shadow: var(--shadow-float);
 }
 .heroSwitch:active { transform: scale(.98); }
-.homeTurma { display: inline-flex; padding: 4px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-float); }
+.photoSwitch {
+  min-height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 0; border: 0; border-radius: 12px;
+  background: transparent; color: #FFFFFF; font: 700 15px/1 var(--font-body); text-shadow: 0 1px 8px rgba(13, 16, 23, 0.35);
+}
+.photoSwitch:active { transform: scale(.98); }
 
 /* seletor na SideNav */
 .sideSwitch {

@@ -106,3 +106,36 @@ export const exploreStaySchema = z.object({
     price_high: money,
   })).min(1).max(4),
 });
+
+// Trilha 2.0 (planning §8.2): sugestões persistidas. Mesmos campos do explore + encaixe no dia,
+// esforço e o termo de busca da foto (nome do lugar como está na Wikipedia).
+export const suggestActivitySchema = z.object({
+  items: z.array(z.object({
+    title: z.string().min(3).max(80),
+    why: z.string().min(8).max(200),
+    duration: z.string().max(30),
+    day_fit: z.enum(['manha', 'tarde', 'noite', 'dia_todo']),
+    effort: z.enum(['leve', 'moderado', 'puxado']),
+    cost_low: money,
+    cost_high: money,
+    photo_query: z.string().min(2).max(80),
+  })).min(1).max(6),
+  areas: z.array(z.object({
+    name: z.string().min(2).max(60),
+    why: z.string().min(8).max(200),
+    price_low: money,
+    price_high: money,
+    photo_query: z.string().min(2).max(80),
+  })).max(3).optional(),
+});
+
+// Estimativas do Orçamento (planning §8.3): sempre faixa, nunca valor exato.
+export const estimateTransportSchema = z.object({
+  items: z.array(z.object({
+    id: z.string().min(1).max(40),
+    mode: z.enum(['plane', 'bus', 'train', 'car', 'boat', 'other']),
+    cost_low: money,
+    cost_high: money,
+  })).max(30),
+});
+export const estimateDailySchema = z.object({ cost_low: money, cost_high: money });

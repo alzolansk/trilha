@@ -38,12 +38,21 @@ grant select, insert, update, delete on storage.objects to authenticated;
 
 export type Db = PGlite & { as<T = unknown>(uid: string | null, sql: string, params?: unknown[]): Promise<T[]> };
 
-export async function createDb(): Promise<Db> {
+const MIGRATIONS = join(process.cwd(), 'supabase', 'migrations');
+const migrationFiles = () => readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort();
+
+/** Aplica as migrations a partir de `from` (inclusive), em ordem. Útil para testar backfills. */
+export async function applyMigrations(db: PGlite, from: string) {
+  for (const file of migrationFiles().filter((f) => f >= from)) await db.exec(readFileSync(join(MIGRATIONS, file), 'utf8'));
+}
+
+/** `before`: para antes desta migration (prefixo do nome), para semear dados e testar o backfill dela. */
+export async function createDb(opts: { before?: string } = {}): Promise<Db> {
   const db = new PGlite();
   await db.exec(SUPABASE_STUBS);
-  const dir = join(process.cwd(), 'supabase', 'migrations');
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
-    await db.exec(readFileSync(join(dir, file), 'utf8'));
+  for (const file of migrationFiles()) {
+    if (opts.before && file >= opts.before) break;
+    await db.exec(readFileSync(join(MIGRATIONS, file), 'utf8'));
   }
   const anyDb = db as Db;
   // Executa uma consulta como um usuário autenticado (ou anon), dentro de uma transação.

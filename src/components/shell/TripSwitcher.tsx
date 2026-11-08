@@ -88,15 +88,18 @@ export function TripSwitcherSheet({ open, onClose }: { open: boolean; onClose: (
   );
 }
 
-/** Botão que abre o seletor. `hero`: logo + "Minhas trilhas" no topo da Início (celular). `side`: pill na SideNav. */
-export function TripSwitcherButton({ variant }: { variant: 'hero' | 'side' }) {
+/**
+ * Botão que abre o seletor. `hero`: pill branca; `photo`: logo + texto branco sobre a foto do hero
+ * da Início (canvas Inicio); `side`: pill na SideNav.
+ */
+export function TripSwitcherButton({ variant }: { variant: 'hero' | 'photo' | 'side' }) {
   const [open, setOpen] = useState(false);
   const { bundle, source } = useTrip();
   const demo = source.kind === 'demo';
   return (
     <>
-      {variant === 'hero' ? (
-        <button type="button" className={s.heroSwitch} onClick={() => setOpen(true)} aria-haspopup="dialog">
+      {variant === 'hero' || variant === 'photo' ? (
+        <button type="button" className={variant === 'photo' ? s.photoSwitch : s.heroSwitch} onClick={() => setOpen(true)} aria-haspopup="dialog">
           <LogoMark size={30} />
           {demo ? 'Demonstrações' : 'Minhas trilhas'}
         </button>

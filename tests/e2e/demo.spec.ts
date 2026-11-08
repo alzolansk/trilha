@@ -63,36 +63,58 @@ test.describe('shell e navegação (Fase 2)', () => {
   });
 });
 
-test.describe('história de scroll do Início', () => {
-  test('fenda abre conforme o scroll e rota acende em ordem', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+test.describe('Início (Fase 4)', () => {
+  test('hero com contagem para a primeira parada e cartão do dinheiro com os números da demo', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/demo/andes');
-    await page.waitForSelector('h1');
-    const clip = () => page.evaluate(() => (document.querySelector('[class*=photo]') as HTMLElement).style.clipPath);
-    expect(await clip()).toContain('polygon(50% 26%');
-    await page.evaluate(() => window.scrollTo(0, innerHeight * 0.8));
-    await page.waitForTimeout(400);
-    const mid = await clip();
-    expect(mid).not.toContain('50% 26%');
-    const route = await page.evaluate(() => (document.querySelector('[aria-label="A rota"]') as HTMLElement).offsetTop);
-    await page.evaluate((y) => window.scrollTo(0, y + innerHeight * 0.9), route);
-    await page.waitForTimeout(500);
-    const lit = await page.evaluate(() => Array.from(document.querySelectorAll('[data-rs]')).map((g) => (g as HTMLElement).style.opacity));
-    expect(lit[0]).toBe('1');
-    expect(lit.at(-1)).toBe('0.35');
-    expect(lit.indexOf('0.35')).toBeGreaterThan(0);
+    await expect(page.locator('[aria-label$="dias para Lima"]')).toBeVisible();
+    await expect(page.getByText('Peru + Bolívia · 15 → 31 jan')).toBeVisible();
+    const money = page.getByRole('region', { name: 'Dinheiro da turma' });
+    await expect(money.getByText('R$ 9.360')).toBeVisible();
+    await expect(money.getByText('juntados, de R$ 19.410 planejados')).toBeVisible();
+    await expect(money.getByText('48%')).toBeVisible();
   });
 
-  test('reduced motion: foto aberta, contagem e conteúdo sem scroll vazio', async ({ browser }) => {
+  test('sugestões: 3 visíveis, a grande primeiro, "ver todas" abre a lista no Sheet', async ({ page }) => {
+    await page.goto('/demo/andes');
+    const sec = page.getByRole('region', { name: 'Hoje a Trilha sugere' });
+    await expect(sec.locator('article h3').first()).toHaveText('Montanha Colorida, saindo de Cusco');
+    await expect(sec.getByText('Passeio · cabe no dia 6')).toBeVisible();
+    await expect(sec.getByText('ESTIMATIVA')).toBeVisible();
+    await sec.getByRole('button', { name: /ver todas/ }).click();
+    const dlg = page.getByRole('dialog', { name: 'Tudo que a Trilha sugere' });
+    await expect(dlg.getByRole('link')).toHaveCount(6);
+  });
+
+  test('"Pôr no dia 6" cria a atividade e o cartão some', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/demo/andes');
+    const sec = page.getByRole('region', { name: 'Hoje a Trilha sugere' });
+    await sec.getByRole('button', { name: 'Pôr no dia 6' }).click();
+    await expect(page.getByText('Montanha Colorida, saindo de Cusco entrou no dia 6.')).toBeVisible();
+    await expect(sec.getByRole('heading', { name: 'Montanha Colorida, saindo de Cusco' })).toHaveCount(0);
+    // o próximo passeio que cabe vira o cartão grande
+    await expect(sec.locator('article h3').first()).toHaveText('Circuito Mágico del Agua');
+    await page.getByRole('navigation', { name: 'Abas' }).getByRole('link', { name: 'Roteiro' }).click();
+    await page.waitForURL('**/demo/andes/roteiro');
+    await page.getByRole('button', { name: /^CUZ/ }).click();
+    await expect(page.getByRole('article', { name: 'Parada Cusco' }).getByText('Montanha Colorida, saindo de Cusco')).toBeVisible();
+  });
+
+  test('dispensar tira a sugestão', async ({ page }) => {
+    await page.goto('/demo/andes');
+    const sec = page.getByRole('region', { name: 'Hoje a Trilha sugere' });
+    await sec.getByRole('button', { name: 'Dispensar sugestão' }).click();
+    await expect(page.getByText('Sugestão dispensada.')).toBeVisible();
+    await expect(sec.getByRole('heading', { name: 'Montanha Colorida, saindo de Cusco' })).toHaveCount(0);
+  });
+
+  test('reduced motion: Início sem scroll vazio e com a contagem', async ({ browser }) => {
     const ctx = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
     await page.goto('/demo/islandia');
-    await page.waitForSelector('h1');
-    const r = await page.evaluate(() => ({ clip: (document.querySelector('[class*=photo]') as HTMLElement).style.clipPath, h: document.documentElement.scrollHeight, stats: document.querySelector('[data-stat] b')?.textContent }));
-    expect(r.clip).toBe('none');
-    expect(r.stats).not.toBe('0');
-    expect(r.h).toBeLessThan(844 * 9);
-    await expect(page.getByText(/Faltam \d+ dias para Islândia/)).toHaveCount(1);
+    await expect(page.locator('[aria-label*="dias para"]')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(844 * 4);
     await ctx.close();
   });
 });
@@ -113,7 +135,7 @@ test.describe('acessibilidade e teclado', () => {
   });
   test('roteiro: ?parada= seleciona a parada', async ({ page }) => {
     await page.goto('/demo/andes/roteiro');
-    await page.getByRole('button', { name: /Cusco/ }).first().click();
+    await page.getByRole('button', { name: /^CUZ/ }).click();
     await expect(page).toHaveURL(/parada=/);
     await expect(page.getByRole('heading', { level: 2, name: 'Cusco' })).toBeVisible();
   });
@@ -210,19 +232,18 @@ test.describe('votação da turma', () => {
 });
 
 test.describe('lembretes de votação', () => {
-  test('Início mostra "Falta seu voto" só enquanto não votei', async ({ page }) => {
+  test('Início mostra "Falta você votar" só enquanto não votei', async ({ page }) => {
     await page.goto('/demo/andes');
-    const pend = page.getByRole('region', { name: 'Antes de embarcar' });
-    const row = pend.getByText('Falta seu voto: Onde dormir em Aguas Calientes?');
-    await expect(row).toBeAttached();
-    await pend.locator('li', { hasText: 'Falta seu voto' }).getByRole('link', { name: /Votar/ }).click();
-    await expect(page).toHaveURL(/turma#decisoes/);
+    const sec = page.getByRole('region', { name: 'Hoje a Trilha sugere' });
+    await expect(sec.getByText('Falta você votar')).toBeVisible();
+    await sec.getByRole('link', { name: /Onde dormir em Aguas Calientes\?/ }).click();
+    await expect(page).toHaveURL(/turma\/votos$/);
     const card = page.locator('article', { has: page.getByRole('heading', { name: 'Onde dormir em Aguas Calientes?' }) });
     await card.locator('label', { hasText: 'Pousada Inti Wasi' }).click();
     await card.getByRole('button', { name: 'Votar' }).click();
     await expect(page.getByText('Voto registrado.')).toBeVisible();
     await page.getByRole('link', { name: 'Início' }).first().click();
-    await expect(pend.getByText('Pousada em Aguas Calientes sem reserva')).toBeAttached();
-    await expect(pend.getByText(/Falta seu voto/)).toHaveCount(0);
+    await expect(sec.getByText('Pousada em Aguas Calientes sem reserva')).toBeVisible();
+    await expect(sec.getByText('Falta você votar')).toHaveCount(0);
   });
 });

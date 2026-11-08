@@ -8,6 +8,7 @@ import { useAuth } from '../data/AuthContext';
 import { useBundle } from '../data/TripContext';
 import { deleteBundle } from '../data/offline';
 import type { TripStyle } from '../data/types';
+import { ACCENT_CHOICES } from '../lib/identity/accent';
 import { centsToDecimal, toCents } from '../lib/money';
 import { instantToWall, isValidTimeZone, listTimeZones, wallToInstant } from '../lib/time';
 
@@ -35,6 +36,12 @@ export default function EditTrip() {
   const ok = v.title.trim() && v.end >= v.start && isValidTimeZone(v.tz) && isValidTimeZone(v.home) && /^[A-Z]{3}$/.test(v.currency);
 
   if (!canEdit) return <div className="wrap"><PageTitle title="Dados da trilha" sub="Só organizador e editores alteram os dados da trilha." /></div>;
+
+  const pickAccent = (hex: string | null) =>
+    run(async () => {
+      await source.update('trips', t.id, { accent: hex });
+      await reload();
+    }, { success: hex ? 'Cor da trilha atualizada.' : 'A cor volta a ser automática.' });
 
   const save = () =>
     run(async () => {
@@ -91,13 +98,31 @@ export default function EditTrip() {
         </div>
         <div className="col-side" style={{ gap: 16 }}>
           <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Aparência</h2>
-          {/* Trilha 2.0: a identidade por destino virou uma cor só (accent). A escolha entre as
-              8 cores aprovadas chega junto com a coluna trips.accent (planning §6.7 / §7). */}
+          {/* Trilha 2.0: a identidade por destino virou uma cor só (trips.accent, planning §6.7 / §7). */}
           <div className="card" style={{ overflow: 'hidden' }}>
             <div style={{ position: 'relative', height: 120 }}><Placeholder label="Capa sem foto na cor da trilha" /></div>
-            <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 999, background: accent, flex: 'none' }} />
-              <span style={{ fontSize: 14, color: 'var(--mute)' }}>Cor da trilha, escolhida pelo destino. Aparece na capa sem foto e no mapa.</span>
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span style={{ fontSize: 14, color: 'var(--ink-2)' }}>Cor da trilha. Aparece na capa sem foto, no mapa e em pequenos detalhes.</span>
+              <div role="radiogroup" aria-label="Cor da trilha" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <button
+                  type="button" role="radio" aria-checked={!t.accent} className="tap" onClick={() => pickAccent(null)} disabled={busy}
+                  style={{ height: 36, padding: '0 12px', borderRadius: 999, border: !t.accent ? '2px solid var(--ink)' : '1px solid var(--line)', background: 'var(--surface)', fontSize: 13, fontWeight: 600 }}
+                >Automática</button>
+                {ACCENT_CHOICES.map((c) => {
+                  const on = t.accent?.toUpperCase() === c.hex;
+                  return (
+                    <button
+                      key={c.hex} type="button" role="radio" aria-checked={on} aria-label={c.name} title={c.name} className="tap" disabled={busy}
+                      onClick={() => pickAccent(c.hex)}
+                      style={{ width: 36, height: 36, borderRadius: 999, background: c.hex, border: on ? '3px solid var(--surface)' : 0, boxShadow: on ? '0 0 0 2px var(--ink)' : 'none' }}
+                    />
+                  );
+                })}
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--mute)' }}>
+                {t.accent ? `Escolhida: ${ACCENT_CHOICES.find((c) => c.hex === t.accent?.toUpperCase())?.name ?? t.accent}` : 'Automática: escolhida pelo destino.'}
+                {' '}<span aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 999, background: accent, verticalAlign: 'middle' }} />
+              </span>
             </div>
           </div>
           {isOrganizer ? <button className="btn btn-danger tap" style={{ marginTop: 32 }} onClick={del}>Excluir trilha</button> : null}

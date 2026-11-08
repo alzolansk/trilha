@@ -1,12 +1,13 @@
 // Converte os dados FICTÍCIOS do protótipo em TripBundle, para a área de demonstração/QA.
 // Nada daqui é gravado no banco nem misturado com viagens reais.
 import type {
-  Activity, BudgetCategory, DocCategory, DocumentRow, Expense, ExpenseShare, InspirationValue, InspirationVote, JournalEntry, Member,
-  PackingCategory, PackingItem, Poll, PollOption, PollVote, Profile, Stay, Stop, Task, Transport, TransportMode, Trip, TripBundle,
+  Activity, BudgetCategory, BudgetPlan, DocCategory, DocumentRow, Expense, ExpenseShare, InspirationValue, InspirationVote, JournalEntry, Member,
+  PackingCategory, PackingItem, Poll, PollOption, PollVote, PoolContribution, Profile, Stay, Stop, Suggestion, SuggestionPayload, Task, Transport,
+  TransportMode, Trip, TripBundle, TripPreference,
 } from '../../data/types';
 import { DICTIONARY } from '../identity/dictionary';
-import { PERSON_COLORS } from '../identity/accent';
-import { splitEqual } from '../money';
+import { DICTIONARY_ACCENT, PERSON_COLORS } from '../identity/accent';
+import { categoryKind, splitEqual } from '../money';
 import { addDays } from '../time';
 import { DEMO_RAW } from './demo.data';
 
@@ -76,6 +77,40 @@ const POLLS: Partial<Record<DemoKey, DemoPoll[]>> = {
   ],
 };
 
+// ───── Trilha 2.0: custos, bairros, sugestões e caixa (planning §7, "Demo") ─────
+// Valores FICTÍCIOS, em BRL e marcados como estimativa quando a turma não confirmou.
+// A Andes bate com o canvas: R$ 6.470 por pessoa (R$ 19.410 para 3) e R$ 9.360 juntados.
+const TRANSPORT_PRICE: Record<TransportMode, number> = { plane: 1450, train: 420, bus: 110, car: 150, boat: 90, walk: 0, other: 120 };
+const STAY_NIGHT: Partial<Record<DemoKey, number[]>> = { andes: [330, 290, 360, 240, 270, 300] };
+const AREA: Partial<Record<DemoKey, (string | null)[]>> = { andes: ['Miraflores', 'San Blas', null, null, 'Sopocachi', null] };
+// Custo por pessoa de atividades, casado pelo título.
+const ACTIVITY_COST: [RegExp, number][] = [
+  [/Machu Picchu na primeira/i, 320], [/Vale Sagrado/i, 180], [/Uros/i, 60], [/Taquile/i, 140], [/Teleférico/i, 25],
+  [/Salar, ilha/i, 650], [/Valle de la Luna|Estrada da Morte/i, 90], [/termas/i, 40],
+];
+// Atividades que a demo tira do plano para sobrar um dia vazio (a sugestão ocupa).
+const DROP_PLAN: Partial<Record<DemoKey, RegExp>> = { andes: /Montanha Colorida/i };
+// Previsto da turma toda por categoria (substitui o do protótipo).
+const PLANNED: Partial<Record<DemoKey, Record<string, number>>> = { andes: { Transporte: 6540, Hospedagem: 4950, Passeios: 3720, Comida: 4200 } };
+// Aportes no caixa: [pessoa, valor, data]
+const POOL: Partial<Record<DemoKey, [number, number, string][]>> = {
+  andes: [[0, 2000, '2026-09-10'], [1, 2000, '2026-09-12'], [2, 1500, '2026-09-20'], [0, 1900, '2026-10-10'], [1, 1240, '2026-10-15'], [2, 720, '2026-10-28']],
+};
+interface DemoSuggestion { stop: number; kind: Suggestion['kind']; payload: SuggestionPayload }
+const SUGGESTIONS: Partial<Record<DemoKey, DemoSuggestion[]>> = {
+  andes: [
+    { stop: 1, kind: 'activity', payload: { title: 'Montanha Colorida, saindo de Cusco', why: 'Dia inteiro, passa dos 5.000 m: melhor depois de aclimatar. A Bia já salvou no Diário.', duration: 'dia inteiro', day_fit: 'dia_todo', effort: 'puxado', cost_low: 12000, cost_high: 18000, currency: 'BRL', photo_query: 'Vinicunca' } },
+    { stop: 0, kind: 'activity', payload: { title: 'Circuito Mágico del Agua', why: 'Fontes iluminadas no Parque de la Reserva, bom pra uma noite leve em Lima.', duration: '2h', day_fit: 'noite', effort: 'leve', cost_low: 1000, cost_high: 1500, currency: 'BRL', photo_query: 'Circuito Mágico del Agua' } },
+    { stop: 4, kind: 'activity', payload: { title: 'Mirador Killi Killi', why: 'Vista da cidade inteira no fim da tarde, perto do centro.', duration: '1h30', day_fit: 'tarde', effort: 'leve', cost_low: 0, cost_high: 0, currency: 'BRL', photo_query: 'Killi Killi La Paz' } },
+    { stop: 2, kind: 'area', payload: { title: 'Ficar perto da estação em Aguas Calientes', why: 'O trem chega e o ônibus para as ruínas sai dali: dá pra fazer tudo a pé.', cost_low: 25000, cost_high: 40000, currency: 'BRL', photo_query: 'Aguas Calientes' } },
+  ],
+};
+const PREFERENCES: Partial<Record<DemoKey, Record<string, unknown>[]>> = {
+  andes: [{ vibe: ['natureza', 'história'], ritmo: 'moderado' }, { vibe: ['natureza', 'comida'], ritmo: 'intenso' }, { vibe: ['história'], ritmo: 'leve' }],
+};
+// Item da mala → índice da pessoa que leva.
+const ASSIGNEE: [RegExp, number][] = [[/Adaptador/i, 1], [/Kit primeiros/i, 2], [/Power bank/i, 0], [/Lanterna/i, 2]];
+
 const MODE: Record<string, TransportMode> = { VOO: 'plane', 'AVIÃO': 'plane', TREM: 'train', 'TREM-BALA': 'train', 'ÔNIBUS': 'bus', CARRO: 'car', BARCO: 'boat' };
 const CAT: Record<string, DocCategory> = { Passagens: 'passagem', Identidade: 'identidade', Reservas: 'reserva', Ingressos: 'ingresso', Seguro: 'seguro', Outros: 'outro' };
 
@@ -91,6 +126,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
     departure_at: raw.target, departure_tz: 'America/Sao_Paulo', home_tz: 'America/Sao_Paulo', base_currency: 'BRL',
     budget_total: raw.budget.prev, cover_path: null, created_by: DEMO_USER, origin: raw.dateLabel.split('·')[1]?.trim().split(' ')[0] ?? null,
     style: 'Mochilão', return_at: null, identity, identity_version: 1,
+    created_at: '2026-09-01T12:00:00.000Z', accent: DICTIONARY_ACCENT[key] ?? null, budget_plan: null,
   };
 
   const members: Member[] = people.map((p, i) => ({ trip_id: tripId, user_id: p.uid, role: i === 0 ? 'organizer' : 'editor', joined_at: now }));
@@ -100,8 +136,11 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
   const transports: Transport[] = [];
   const stays: Stay[] = [];
   const activities: Activity[] = [];
+  const drop = DROP_PLAN[key];
   raw.stops.forEach((s, i) => {
     const [a, b] = parseSpan(s.dates, year);
+    const mode = MODE[s.tmode] ?? 'other';
+    const night = STAY_NIGHT[key]?.[i];
     const sid = id(key, 'stop', i);
     const alt = s.meta.match(/altitude\s+([\d.]+)\s*m/i);
     const c = COORDS[s.city] ?? null;
@@ -110,6 +149,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
       altitude_m: alt ? Number(alt[1].replace(/\./g, '')) : null, lat: c?.[0] ?? null, lng: c?.[1] ?? null,
       arrival_mode: MODE[s.tmode] ?? 'other', color: null, notes: null, code: s.code, meta: s.meta,
       tip: s.tip ? { text: s.tip, kind: 'outro', by: 'ai', generated_at: now } : null,
+      area: AREA[key]?.[i] ?? null, photo: null,
     });
     const prevLeg = i > 0 ? raw.stops[i - 1].leg : '';
     const dur = prevLeg.match(/(\d+)h(\d+)?|(\d+)\s*min/);
@@ -118,17 +158,22 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
       dest_code: s.tto, dest_name: s.city, depart_date: a, depart_time: /^\d\d:\d\d$/.test(s.tdep) ? s.tdep : null, depart_tz: null,
       arrive_date: a, arrive_time: /^\d\d:\d\d$/.test(s.tarr) ? s.tarr : null, arrive_tz: null, booking_ref: null, seat: null, notes: null,
       duration_min: dur ? (dur[3] ? Number(dur[3]) : Number(dur[1]) * 60 + Number(dur[2] ?? 0)) : null, document_id: null,
+      price_cents: key === 'andes' ? TRANSPORT_PRICE[mode] * 100 : null, price_currency: key === 'andes' ? 'BRL' : null, price_is_estimate: mode !== 'plane',
     });
     stays.push({
       ...base, id: id(key, 'stay', i), trip_id: tripId, stop_id: sid, name: s.stay, address: null, checkin_date: a, checkin_time: null,
       checkout_date: b, checkout_time: null, status: s.stayStatus === 'Sem reserva' ? 'pending' : 'booked', notes: null, document_id: null, suggested_by: null, from_poll_id: null,
+      price_cents: night ? night * 100 : null, price_currency: night ? 'BRL' : null, price_is_estimate: s.stayStatus === 'Sem reserva', link_url: null,
     });
     s.plan.forEach((p, j) => {
+      if (drop?.test(p)) return;
       const m = p.match(/^(\d{1,2})\s+[A-ZÁ]{3}\s+·\s+(.*)$/);
+      const cost = key === 'andes' ? ACTIVITY_COST.find(([re]) => re.test(p))?.[1] : undefined;
       activities.push({
         ...base, id: id(key, 'act', `${i}${j}`), trip_id: tripId, stop_id: sid,
         day: m ? `${a.slice(0, 8)}${m[1].padStart(2, '0')}` : addDays(a, Math.min(j, Math.max(0, s.n - 1))),
         time: null, title: m ? m[2] : p, notes: null, position: j, suggested_by: null, from_entry_id: null, from_poll_id: null,
+        cost_cents: cost != null ? cost * 100 : null, cost_currency: cost != null ? 'BRL' : null, cost_is_estimate: true, photo: null,
       });
     });
   });
@@ -150,15 +195,38 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
     g.items.map((it, j) => ({
       ...base, id: id(key, 'pi', `${i}${j}`), trip_id: tripId, category_id: packingCategories[i].id, label: it.label, done: it.on,
       done_by: null, suggestion_reason: it.ai ? 'Sugerido para as paradas desta trilha (exemplo).' : null, position: j, suggested_by: it.ai ? ('ai' as const) : null,
+      assignee_id: (() => { const hit = ASSIGNEE.find(([re]) => re.test(it.label)); return hit ? people[hit[1]]?.uid ?? null : null; })(),
     })),
   );
 
   const budgetCategories: BudgetCategory[] = raw.budget.cats.map(([name, , planned], i) => ({
-    ...base, id: id(key, 'bc', i), trip_id: tripId, name, color: ['#8E9BFF', '#FF6B3D', '#4FC08D', '#E3E6EB'][i % 4], planned, position: i,
+    ...base, id: id(key, 'bc', i), trip_id: tripId, name, color: ['#8E9BFF', '#FF6B3D', '#4FC08D', '#E3E6EB'][i % 4],
+    planned: PLANNED[key]?.[name] ?? planned, position: i, kind: categoryKind({ name }),
   }));
+  if (PLANNED[key]) trip.budget_total = Object.values(PLANNED[key]!).reduce((a, v) => a + v, 0);
   const expenses: Expense[] = [];
   const expenseShares: ExpenseShare[] = [];
-  raw.budget.cats.forEach(([, spent], i) => {
+  const catOf = (kind: string) => budgetCategories.find((c) => c.kind === kind)?.id ?? null;
+  // Andes: gastos já feitos antes da viagem, ligados aos itens que pagam (a maioria pelo caixa).
+  const LINKED: { desc: string; cents: number; kind: string; link: Partial<Pick<Expense, 'activity_id' | 'stay_id' | 'transport_id'>>; pool: boolean; payer: number }[] = key === 'andes'
+    ? [
+      { desc: 'Voo GRU → LIM', cents: 435000, kind: 'transporte', link: { transport_id: transports[0]?.id }, pool: true, payer: 0 },
+      { desc: 'Hostel em San Blas', cents: 116000, kind: 'hospedagem', link: { stay_id: stays[1]?.id }, pool: true, payer: 1 },
+      { desc: 'Ingressos Machu Picchu', cents: 96000, kind: 'passeios', link: { activity_id: activities.find((a) => /Machu Picchu na primeira/.test(a.title))?.id }, pool: false, payer: 2 },
+    ]
+    : [];
+  LINKED.forEach((l, i) => {
+    const eid = id(key, 'lex', i);
+    const payer = people[l.payer].uid;
+    const amount = l.cents / 100;
+    expenses.push({
+      ...base, id: eid, trip_id: tripId, description: l.desc, category_id: catOf(l.kind), stop_id: null, payer_id: payer, paid_from_pool: l.pool,
+      amount, currency: 'BRL', rate_to_base: 1, rate_source: 'Mesma moeda', rate_date: '2026-10-20', rate_is_manual: false, base_amount: amount,
+      spent_on: '2026-10-20', created_by: payer, activity_id: null, stay_id: null, transport_id: null, ...l.link,
+    });
+    for (const sh of splitEqual(l.cents, people.map((p) => p.uid))) expenseShares.push({ expense_id: eid, trip_id: tripId, ...sh });
+  });
+  if (!LINKED.length) raw.budget.cats.forEach(([, spent], i) => {
     const eid = id(key, 'ex', i);
     const payer = people[i % people.length].uid;
     expenses.push({
@@ -168,6 +236,25 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
     });
     for (const sh of splitEqual(Math.round(spent * 100), people.map((p) => p.uid))) expenseShares.push({ expense_id: eid, trip_id: tripId, ...sh });
   });
+
+  const poolContributions: PoolContribution[] = (POOL[key] ?? []).map(([who, value, day], i) => ({
+    id: id(key, 'pool', i), trip_id: tripId, user_id: people[who].uid, kind: 'deposit', amount_cents: value * 100, contributed_on: day,
+    note: null, created_by: people[who].uid, created_at: `${day}T12:00:00.000Z`,
+  }));
+
+  const suggestions: Suggestion[] = (SUGGESTIONS[key] ?? []).map((sg, i) => ({
+    ...base, id: id(key, 'sug', i), trip_id: tripId, stop_id: stops[sg.stop]?.id ?? null, kind: sg.kind, day: null, payload: sg.payload,
+    status: 'new', source: 'ai', acted_by: null, acted_at: null,
+  }));
+  const tripPreferences: TripPreference[] = (PREFERENCES[key] ?? []).map((answers, i) => ({ trip_id: tripId, user_id: people[i]?.uid ?? DEMO_USER, answers, updated_at: now }));
+  if (key === 'andes') {
+    const plan: BudgetPlan = {
+      style: 'equilibrado', pace: 'moderado', daily_food_cents: 9000,
+      snapshot: { stops: stops.map((s) => ({ id: s.id, nights: Math.round((Date.parse(s.departure_date) - Date.parse(s.arrival_date)) / 86_400_000) })), people: people.length, at: now },
+      updated_at: now,
+    };
+    trip.budget_plan = plan;
+  }
 
   const LINK = { doc: 'documentos', alert: 'documentos', bag: 'mala', bed: 'roteiro', users: 'turma' } as const;
   const tasks: Task[] = raw.rows.map((r, i) => ({
@@ -221,7 +308,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
 
   return {
     trip, members, profiles, stops, transports, stays, activities, documents, documentShares: [], documentKeys: [], publicKeys: [], packingCategories, packingItems,
-    tasks, budgetCategories, expenses, expenseShares, settlements: [], poolContributions: [], journalEntries, journalPhotos: [], inspirationVotes, polls, pollOptions, pollVotes, offlinePrefs: [], retro: null,
+    tasks, budgetCategories, expenses, expenseShares, settlements: [], poolContributions, journalEntries, journalPhotos: [], inspirationVotes, polls, pollOptions, pollVotes, suggestions, tripPreferences, offlinePrefs: [], retro: null,
     fetchedAt: now,
   };
 }
