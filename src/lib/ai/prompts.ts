@@ -113,6 +113,7 @@ export const exploreActivitySchema = z.object({
 const lat = z.number().min(-90).max(90);
 const lng = z.number().min(-180).max(180);
 const mode = z.enum(['plane', 'bus', 'train', 'car', 'boat']);
+const placeType = z.enum(['cidade', 'regiao', 'bairro', 'atracao', 'experiencia']);
 
 export const explorePlacesSchema = z.object({
   items: z.array(z.object({
@@ -128,6 +129,10 @@ export const explorePlacesSchema = z.object({
     tags: z.array(z.string().max(20)).max(6).default([]),
     attractions: z.array(z.object({ name: z.string().min(2).max(80), why: z.string().max(200).nullable().optional() })).max(6).default([]),
     tip: z.string().max(220).nullable().optional(),
+    // Recomendações pessoais (opcionais: respostas antigas continuam válidas)
+    type: placeType.nullable().optional(),
+    parent: z.string().max(80).nullable().optional(),
+    fit: z.string().max(220).nullable().optional(),
   })).min(3).max(12),
   nearby: z.array(z.object({
     name: z.string().min(2).max(80),
@@ -207,7 +212,68 @@ export const placeInfoSchema = z.object({
     tags: z.array(z.string().max(20)).max(6).default([]),
     attractions: z.array(z.object({ name: z.string().min(2).max(80), why: z.string().max(200).nullable().optional() })).max(6).default([]),
     tip: z.string().max(220).nullable().optional(),
+    type: placeType.nullable().optional(),
+    parent: z.string().max(80).nullable().optional(),
   })).min(1).max(8),
+});
+
+/** Perfil da viagem a partir do texto livre do passo 2. */
+export const profileSchema = z.object({
+  summary: z.string().min(10).max(320),
+  traits: z.array(z.object({
+    label: z.string().min(2).max(40),
+    detail: z.string().max(160).nullable().optional(),
+    evidence: z.string().max(120).nullable().optional(),
+  })).max(6).default([]),
+  avoid: z.array(z.string().min(2).max(80)).max(4).default([]),
+  group: z.string().max(40).nullable().optional(),
+  vibes: z.array(z.string().max(20)).max(6).default([]),
+  pace: z.enum(['leve', 'moderado', 'intenso']).nullable().optional(),
+  stay: z.enum(['economico', 'equilibrado', 'conforto']).nullable().optional(),
+});
+
+/** Conteúdo da janela de um lugar (normalizado depois por lib/placeDetail.ts normalizeDetail). */
+export const placeDetailSchema = z.object({
+  name: z.string().min(2).max(80),
+  type: placeType,
+  parent: z.string().max(80).nullable().optional(),
+  country: z.string().min(2).max(60),
+  region: z.string().max(80).nullable().optional(),
+  lat: lat.nullable().optional(),
+  lng: lng.nullable().optional(),
+  summary: z.string().min(8).max(260),
+  why_go: z.array(z.string().min(20).max(600)).min(1).max(2),
+  fit: z.array(z.object({ trait: z.string().max(40), text: z.string().min(8).max(240) })).max(4).default([]),
+  for_whom: z.string().max(240).nullable().optional(),
+  caveats: z.array(z.string().min(6).max(200)).max(3).default([]),
+  time: z.object({
+    label: z.string().min(2).max(40),
+    options: z.array(z.object({ label: z.string().min(1).max(40), text: z.string().min(4).max(160), suggested: z.boolean().nullable().optional() })).max(3).default([]),
+    why: z.string().max(320),
+    stay_base: z.boolean().nullable().optional(),
+  }),
+  best_moment: z.string().max(60).nullable().optional(),
+  getting_around: z.string().max(60).nullable().optional(),
+  highlights: z.array(z.object({
+    name: z.string().min(2).max(80),
+    scope: z.enum(['especifico', 'amplo']).nullable().optional(),
+    what: z.string().min(6).max(220),
+    why: z.string().max(200).nullable().optional(),
+    duration: z.string().max(40).nullable().optional(),
+    cost: z.enum(['gratis', 'pago', 'varia']).nullable().optional(),
+    booking: z.string().max(80).nullable().optional(),
+    lat: lat.nullable().optional(),
+    lng: lng.nullable().optional(),
+  })).max(5).default([]),
+  visit: z.array(z.object({ when: z.string().min(2).max(30), text: z.string().min(4).max(180), refs: z.array(z.number().int()).max(5).default([]) })).max(5).default([]),
+  practical: z.object({
+    getting_there: z.string().max(320).nullable().optional(),
+    best_time: z.string().max(320).nullable().optional(),
+    costs: z.array(z.object({ item: z.string().min(2).max(60), low: money, high: money, unit: z.string().max(30) })).max(6).default([]),
+    cost_note: z.string().max(160).nullable().optional(),
+    limits: z.array(z.string().min(4).max(160)).max(4).default([]),
+    check_at: z.string().max(120).nullable().optional(),
+  }).default({ costs: [], limits: [] }),
 });
 
 export const exploreStaySchema = z.object({

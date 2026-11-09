@@ -8,6 +8,7 @@ import { haversineKm } from './derive';
 import { commuteCost, PACE_PER_DAY } from './budgetPlan';
 export { commuteCost };
 import { addDays, daysBetween } from './time';
+import { takesNights } from './placeDetail';
 
 /** Chave estável de um lugar (sem acento, minúsculas). */
 export const placeKey = (name: string) => name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -62,9 +63,9 @@ export function namesBy(mark: PlaceMark, items: PlaceIdea[], nearby: NearbyIdea[
   return [...items.map((p) => p.name), ...nearby.map((n) => n.name)].filter((n) => marks[placeKey(n)] === mark);
 }
 
-/** Noites mínimas que os "não pode faltar" pedem (bate-volta não conta). */
+/** Noites mínimas que os "não pode faltar" pedem (bate-volta, bairro e atração não contam: ficam nos dias da cidade). */
 export function minNightsOfMust(items: PlaceIdea[], nearby: NearbyIdea[], marks: Record<string, PlaceMark>): number {
-  const a = items.filter((p) => marks[placeKey(p.name)] === 'must').reduce((s, p) => s + Math.max(1, p.nights_min), 0);
+  const a = items.filter((p) => marks[placeKey(p.name)] === 'must' && takesNights(p.type)).reduce((s, p) => s + Math.max(1, p.nights_min), 0);
   const b = nearby.filter((n) => marks[placeKey(n.name)] === 'must' && n.kind === 'parada').length;
   return a + b;
 }
@@ -113,6 +114,7 @@ export function applyPlaceInfo(
       nights_max: Math.max(1, f.nights_min ?? old.nights_min, f.nights_max ?? old.nights_max),
       highlights: f.highlights ?? old.highlights, photo_query: f.photo_query ?? old.photo_query ?? null, tags: f.tags ?? old.tags,
       attractions: f.attractions ?? old.attractions, tip: f.tip ?? old.tip ?? null, kind: f.kind ?? 'lugar', base: f.base ?? null, enriched: true,
+      type: f.type ?? old.type ?? null, parent: f.parent ?? old.parent ?? null,
     };
     if (k !== ask) {
       const dup = list.findIndex((p, j) => j !== i && placeKey(p.name) === k);
@@ -144,10 +146,22 @@ export function infoOf(
   const cached = info?.[k] ?? null;
   const from: PlaceInfo | null = item
     ? { ...item }
-    : near ? { name: near.name, country: near.country, lat: near.lat, lng: near.lng, why: near.why, photo_query: near.photo_query, attractions: near.attractions, tip: near.tip } : null;
+    : near ? { name: near.name, country: near.country, lat: near.lat, lng: near.lng, why: near.why, photo_query: near.photo_query, attractions: near.attractions, tip: near.tip, type: 'cidade' } : null;
   const best = from && (from.attractions?.length || !cached) ? from : cached ?? from;
   const placeholder = !!item && (item.added || item.from_discover) && !item.enriched;
   return { info: best, detailed: !!best?.attractions?.length && !(placeholder && !cached) };
+}
+
+/**
+ * "Não pode faltar" como a rota entende: bairro e atração viram a cidade onde ficam (não são parada própria).
+ * Sem cidade conhecida, o nome fica como está.
+ */
+export function mustForRoute(items: Pick<PlaceIdea, 'name' | 'type' | 'parent'>[], must: string[]): string[] {
+  const out = must.map((m) => {
+    const p = items.find((x) => placeKey(x.name) === placeKey(m));
+    return p && (p.type === 'bairro' || p.type === 'atracao') && p.parent?.trim() ? p.parent.trim() : m;
+  });
+  return out.filter((n, i) => out.findIndex((x) => placeKey(x) === placeKey(n)) === i);
 }
 
 // ───────────── Passo 4 ─────────────

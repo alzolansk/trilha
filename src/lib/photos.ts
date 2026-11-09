@@ -143,7 +143,7 @@ export function photoSrcSet(url: string, widths: readonly number[] = PHOTO_WIDTH
 // servidor: com ~15 fotos por tela, todas saindo do mesmo IP, a Wikimedia limitava (429) e o app mostrava
 // placeholder. Fila de 3 por vez, nova tentativa em 429/erro de rede, e cache no aparelho.
 
-const MAX_PARALLEL = 3;
+const MAX_PARALLEL = 4;
 let active = 0;
 const waiting: (() => void)[] = [];
 async function inQueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -239,4 +239,135 @@ export async function fetchPhoto(q: string | string[], lang: WikiLang = 'pt', fe
     }));
   }
   return memory.get(key)!;
+}
+
+// ───────────── Foto de um lugar, conferida (ajuste de 09/11/2026) ─────────────
+// Reclamação: fotos demoravam e vários lugares vinham com a MESMA foto (um bairro pegava a foto da cidade,
+// porque a busca "Cambuí Campinas" casava com a página "Campinas"; e homônimos de outro estado passavam).
+// Agora: o título precisa ser o nome do lugar (o qualificador entre parênteses pode diferir), a página
+// precisa estar perto das coordenadas do lugar quando as duas têm coordenadas, e uma foto já mostrada para
+// um lugar não aparece em outro. Sem foto conferida, não há foto (a tela encolhe em vez de enfeitar).
+
+export interface PlacePhotoQuery {
+  name: string;
+  /** cidade, estado ou país (ajuda a busca; não precisa estar no título) */
+  context?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  /** distância máxima entre a página e o lugar: cidade ~40 km, bairro ~6 km, atração ~3 km */
+  radiusKm?: number;
+}
+
+/** Nome do lugar sem qualificadores que a Wikipedia não usa ("Rua X e arredores" → "Rua X"). */
+const bareName = (name: string) => fold(name.replace(/\s+e arredores$/i, '').replace(/\s*\(.*\)\s*$/, ''));
+
+/**
+ * O título é do lugar? Igual ao nome, ignorando o qualificador entre parênteses ("Cambuí (Campinas)") e um
+ * complemento depois da vírgula ("Cambuí, Campinas"). "Campinas" não serve para "Cambuí"; "Nara Leão" não serve para "Nara".
+ */
+export function nameMatches(name: string, title: string): boolean {
+  const n = bareName(name);
+  const t = fold(title.replace(/\s*\(.*\)\s*$/, '').split(',')[0]);
+  return !!n && n === t;
+}
+
+const R = 6371;
+const rad = (d: number) => (d * Math.PI) / 180;
+function distKm(a: [number, number], b: [number, number]): number {
+  const h = Math.sin(rad(b[0] - a[0]) / 2) ** 2 + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(rad(b[1] - a[1]) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Busca com imagem principal e coordenadas de cada página, numa chamada só. */
+export function placeSearchUrl(lang: WikiLang, q: string): string {
+  return api(lang, {
+    generator: 'search', gsrsearch: q, gsrlimit: '8', gsrnamespace: '0',
+    prop: 'pageimages|coordinates', piprop: 'name', coprimary: 'primary', colimit: 'max',
+  });
+}
+
+interface PlaceSearchJson {
+  query?: { pages?: { title: string; index?: number; pageimage?: string; missing?: boolean; coordinates?: { lat: number; lon: number }[] }[] };
+}
+
+/**
+ * Escolhe a página do lugar: título com o nome exato, foto aproveitável e, quando há coordenadas dos dois lados,
+ * a até `radiusKm` do lugar (a mais perto ganha). Uma página sem coordenadas só vale quando a busca não tem
+ * coordenadas ou quando ela é a única com o nome (evita o homônimo de outro estado).
+ */
+export function pickPlaceImage(json: PlaceSearchJson, q: PlacePhotoQuery): { title: string; file: string } | null {
+  const here = q.lat != null && q.lng != null ? ([q.lat, q.lng] as [number, number]) : null;
+  const radius = q.radiusKm ?? 40;
+  const named = [...(json.query?.pages ?? [])].filter((p) => !p.missing && nameMatches(q.name, p.title));
+  const withPhoto = named.filter((p) => p.pageimage && !isUnfitImage(p.pageimage));
+  const scored = withPhoto
+    .map((p) => {
+      const c = p.coordinates?.[0];
+      const d = here && c ? distKm(here, [c.lat, c.lon]) : null;
+      return { p, d };
+    })
+    .filter((x) => {
+      if (x.d != null) return x.d <= radius;
+      if (!here) return true;
+      // sem coordenadas na página: só se nenhuma outra página tem o mesmo nome (pode ser o homônimo)
+      return named.length === 1;
+    })
+    .sort((a, b) => (a.d ?? 1e6) - (b.d ?? 1e6) || (a.p.index ?? 0) - (b.p.index ?? 0));
+  const best = scored[0]?.p;
+  return best ? { title: best.title, file: best.pageimage! } : null;
+}
+
+export async function findPlacePhoto(search: string, q: PlacePhotoQuery, lang: WikiLang, fetcher: typeof fetch = fetch): Promise<PhotoRef | null | undefined> {
+  const res = await wikiJson<PlaceSearchJson>(placeSearchUrl(lang, search), fetcher);
+  if (res === undefined) return undefined;
+  const hit = res ? pickPlaceImage(res, q) : null;
+  if (!hit) return null;
+  const info = await wikiJson<Parameters<typeof parseImageInfo>[0]>(imageInfoUrl(lang, hit.file), fetcher);
+  if (info === undefined) return undefined;
+  return info ? parseImageInfo(info) : null;
+}
+
+const placeKeyOf = (q: PlacePhotoQuery) => [bareName(q.name), fold(q.context ?? ''), q.lat != null ? q.lat.toFixed(2) : '', q.lng != null ? q.lng.toFixed(2) : ''].join('|');
+
+/**
+ * Navegador: foto conferida de um lugar. Busca "nome + contexto" e depois só o nome, em português e em inglês,
+ * parando na primeira que passa na conferência. No máximo 4 buscas + 1 metadado (antes eram até 12 chamadas).
+ */
+export async function fetchPlacePhoto(q: PlacePhotoQuery, fetcher: typeof fetch = fetch): Promise<PhotoRef | null> {
+  if (bareName(q.name).length < 2) return null;
+  const key = `place|${placeKeyOf(q)}`;
+  const cached = readCache(key);
+  if (cached !== undefined) return cached;
+  if (!memory.has(key)) {
+    memory.set(key, inQueue(async () => {
+      const searches = [...new Set([q.context ? `${q.name} ${q.context}` : '', q.name].map((x) => x.trim()).filter(Boolean))];
+      let failed = false;
+      for (const lang of ['pt', 'en'] as const) {
+        for (const s of searches) {
+          const p = await findPlacePhoto(s, q, lang, fetcher);
+          if (p) { writeCache(key, p); return p; }
+          if (p === undefined) failed = true;
+        }
+      }
+      if (!failed) writeCache(key, null);
+      else memory.delete(key);
+      return null;
+    }));
+  }
+  return memory.get(key)!;
+}
+
+// Uma foto, um lugar: a primeira tela que mostra a foto para um lugar fica com ela; outro lugar não repete.
+const claims = new Map<string, string>();
+/** true quando a foto pode ser usada por `owner` (livre ou já dele). */
+export function claimPhoto(url: string, owner: string): boolean {
+  const base = url.replace(/\/\d+px-([^/]+)$/, '/$1');
+  const cur = claims.get(base);
+  if (cur && cur !== owner) return false;
+  claims.set(base, owner);
+  return true;
+}
+/** Só para testes. */
+export function resetPhotoClaims() {
+  claims.clear();
 }

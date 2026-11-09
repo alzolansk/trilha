@@ -6,12 +6,15 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, PlaceAttraction, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceIdea, PlaceInfo, PlaceMark,
-  RouteLeg, RouteStop, RouteProposal, TourIdea, TransportMode,
+  BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceDetail, PlaceIdea, PlaceInfo, PlaceMark,
+  PlaceType, RouteLeg, RouteStop, RouteProposal, TourIdea, TransportMode, TravelProfile,
 } from '../data/types';
 import { useBundle } from '../data/TripContext';
 import { useAuth } from '../data/AuthContext';
-import { useResolvedPhoto } from '../data/usePhoto';
+import { PHOTO_RADIUS, usePlacePhoto } from '../data/usePhoto';
+import { PlaceDetailSheet, TypeChip, type PlaceBase } from '../components/plan/PlaceDetailSheet';
+import { ProfileCard, StoryInput } from '../components/plan/TravelStory';
+import { parseProfile, placeLocation, takesNights } from '../lib/placeDetail';
 import { closeBudget } from '../data/budgetActions';
 import { humanError } from '../data/source';
 import { callAi, callAiOrError } from '../lib/ai/client';
@@ -26,7 +29,7 @@ import {
 import { headcount } from '../lib/people';
 import { dayMonth } from '../lib/format';
 import { daysBetween } from '../lib/time';
-import { Badge, Button, Checkbox, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, Sheet, type PhotoData } from '../components/ui';
+import { Badge, Button, Checkbox, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, type PhotoData } from '../components/ui';
 import type { IconName } from '../components/ui/icons.data';
 import { ChatOptions, StepChat, TrilhaBubble } from '../components/ui/StepChat';
 import { AI_STEPS, AiThinking, Busy } from '../components/ui/Loader';
@@ -54,7 +57,7 @@ const MARKS: { value: PlaceMark; label: string; icon: IconName }[] = [
   { value: 'maybe', label: 'Talvez', icon: 'sparkle' },
   { value: 'skip', label: 'Pular', icon: 'close' },
 ];
-const STEP_NAMES: Record<OnboardingStep, string> = { 2: 'Gostos', 3: 'Lugares', 4: 'Roteiro', 5: 'Passeios', 6: 'Custo' };
+const STEP_NAMES: Record<OnboardingStep, string> = { 2: 'Vocês', 3: 'Lugares', 4: 'Roteiro', 5: 'Passeios', 6: 'Custo' };
 const DEFAULT_PREFS: OnboardingPrefs = { vibes: ['cidade', 'comida', 'cultura'], pace: 'moderado', stay: 'equilibrado', budget: null };
 
 type AiFail = { unavailable: boolean; error: string } | null;
@@ -158,19 +161,47 @@ function AiFailed({ fail, retry, manual }: { fail: NonNullable<AiFail>; retry: (
 
 // ───────────── Passo 2 · Do que vocês gostam ─────────────
 
-function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: string }) {
+function StepPrefs({ b, ob, persist, go, busy, run, me, online }: StepProps & { me: string }) {
   const { source } = useBundle();
   const people = headcount(b);
   const [p, setP] = useState<OnboardingPrefs>(() => ob.prefs ?? {
     ...DEFAULT_PREFS,
     budget: b.trip.budget_total != null && Number(b.trip.budget_total) > 0 ? Math.round(Number(b.trip.budget_total) * 100 / people) / 100 : null,
   });
+  const [story, setStory] = useState(ob.prefs?.story ?? '');
+  const [profile, setProfile] = useState<TravelProfile | null>(() => parseProfile(ob.profile));
+  const [editing, setEditing] = useState(!parseProfile(ob.profile));
+  const [reading, setReading] = useState(false);
+  const [readErr, setReadErr] = useState('');
   const toggle = (id: string) => setP({ ...p, vibes: p.vibes.includes(id) ? p.vibes.filter((v) => v !== id) : [...p.vibes, id].slice(0, 6) });
+  const dest = b.trip.destinations.join(', ') || b.trip.title;
+
+  /** A Trilha lê o texto e devolve o que entendeu; gostos, ritmo e hospedagem ditos no texto já vêm marcados. */
+  const read = async () => {
+    setReadErr('');
+    setReading(true);
+    const r = await callAiOrError<{ profile: TravelProfile }>('explore', { kind: 'profile', tripId: b.trip.id, story: story.trim() });
+    setReading(false);
+    if (!r.ok) { setReadErr(r.status === 503 ? 'A leitura precisa da IA, que não está disponível agora. Dá pra seguir marcando as opções abaixo.' : r.error); return; }
+    const got = parseProfile(r.res.data.profile);
+    if (!got) { setReadErr('A Trilha não conseguiu entender agora. Tenta escrever de outro jeito ou siga pelas opções abaixo.'); return; }
+    setProfile(got);
+    setEditing(false);
+    setP((cur) => ({ ...cur, vibes: got.vibes.length ? got.vibes : cur.vibes, pace: got.pace ?? cur.pace, stay: got.stay ?? cur.stay }));
+  };
+
   const next = () => run(async () => {
-    const changed = !!ob.prefs && JSON.stringify(ob.prefs) !== JSON.stringify(p);
+    const finalStory = story.trim().slice(0, 1500) || null;
+    const prefs: OnboardingPrefs = { ...p, story: finalStory };
+    const changed = !!ob.prefs && JSON.stringify({ ...ob.prefs, story: ob.prefs.story ?? null }) !== JSON.stringify(prefs);
+    const profileChanged = JSON.stringify(parseProfile(ob.profile)) !== JSON.stringify(profile);
+    const stale = new Set(ob.stale ?? []);
+    if (changed && ob.route) stale.add('route');
+    // Perfil novo: as sugestões e os textos de "por que combina" foram feitos para o perfil antigo.
+    if (profileChanged && ob.places) stale.add('places');
     const plan: BudgetPlan = { ...(b.trip.budget_plan ?? {}), style: p.stay, pace: p.pace };
     await persist(
-      { ...ob, prefs: p, step: Math.max(3, ob.step) as OnboardingStep, stale: changed && ob.route ? [...new Set([...(ob.stale ?? []), 'route' as const])] : ob.stale },
+      { ...ob, prefs, profile, details: profileChanged ? {} : ob.details, step: Math.max(3, ob.step) as OnboardingStep, stale: [...stale] },
       { style: TRIP_STYLE_OF[p.stay], budget_plan: plan, ...(p.budget ? { budget_total: (p.budget * people).toFixed(2) } : {}) },
     );
     try {
@@ -183,9 +214,18 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
   });
 
   return (
-    <StepChat label="Do que vocês gostam">
-      <TrilhaBubble step="2 · Gostos">{nightsOf(b.trip) + 1} dias em {b.trip.destinations.join(', ') || b.trip.title}. <b>Do que vocês gostam</b> numa viagem?</TrilhaBubble>
+    <StepChat label="Como vocês imaginam a viagem">
+      <TrilhaBubble step="2 · Vocês">
+        {nightsOf(b.trip) + 1} dias em {dest}. Antes de sugerir qualquer lugar, <b>me conta como vocês imaginam essa viagem</b>: o clima, o que não pode faltar, o que querem evitar.
+      </TrilhaBubble>
       <ChatOptions>
+        {profile && !editing ? (
+          <ProfileCard profile={profile} onChange={setProfile} onRedo={() => setEditing(true)} />
+        ) : (
+          <StoryInput value={story} onChange={setStory} onRead={() => void read()} busy={reading} disabled={!online} error={readErr} />
+        )}
+        {profile && editing ? <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Manter o que a Trilha entendeu</Button> : null}
+        <p className={s.label}>{profile ? 'Confiram os detalhes' : 'Ou marquem do que gostam'}</p>
         <div className={s.chips} role="group" aria-label="Gostos">
           {VIBES.map((v) => <Chip key={v.id} selected={p.vibes.includes(v.id)} onClick={() => toggle(v.id)}>{v.label}</Chip>)}
         </div>
@@ -196,7 +236,8 @@ function StepPrefs({ b, ob, persist, go, busy, run, me }: StepProps & { me: stri
         <Checkbox label="Mostrar quando der pra dormir numa cidade vizinha bem mais barata" checked={p.stay_nearby !== false} onChange={(v) => setP({ ...p, stay_nearby: v })} />
         <p className={s.muted} style={{ marginTop: -6 }}>Ex.: dormir em Salerno e ir e voltar da Costa Amalfitana. A Trilha só sugere quando a economia vale a pena; você decide em cada cidade.</p>
         <MoneyInput label="Teto por pessoa (opcional)" currency={b.trip.base_currency} value={p.budget ? Math.round(p.budget * 100) : null} onChange={(c) => setP({ ...p, budget: c ? c / 100 : null })} hint="Com teto, a Trilha avisa quando a viagem passar dele." />
-        <Button disabled={busy || !p.vibes.length} onClick={next}>{busy ? <Busy>Salvando</Busy> : 'Continuar'}</Button>
+        {story.trim().length >= 12 && !profile ? <p className={s.muted}>Dica: toque em “Entender a nossa viagem” para a Trilha usar o seu texto nas sugestões.</p> : null}
+        <Button disabled={busy || reading || !p.vibes.length} onClick={next}>{busy ? <Busy>Salvando</Busy> : 'Continuar'}</Button>
       </ChatOptions>
     </StepChat>
   );
@@ -227,86 +268,122 @@ function MarkPicker({ value, onChange, label }: { value: PlaceMark; onChange: (m
 
 const nightsText = (a: number, b: number) => (a === b ? `${a} noite${a > 1 ? 's' : ''}` : `${a} a ${b} noites`);
 const hoursText = (h: number) => (h < 1 ? `${Math.round(h * 60)} min` : `${String(Math.round(h * 10) / 10).replace('.', ',')}h`);
-const tagLabel = (t: string) => VIBES.find((v) => v.id === t)?.label ?? t;
 
-/** Ponto turístico na janela de detalhes, com foto quando a Wikimedia tiver (busca "Atração, Cidade"). */
-function Attraction({ a, place, photo }: { a: PlaceAttraction; place: string; photo: boolean }) {
-  const resolved = useResolvedPhoto(null, photo ? `${a.name}, ${place}` : null, photo);
-  return (
-    <li className={s.attraction}>
-      <Photo photo={resolved as PhotoData | null} place={a.name} alt="" height={64} caption={false} className={s.attractionPhoto} />
-      <span><b>{a.name}</b>{a.why ? <small>{a.why}</small> : null}</span>
-    </li>
-  );
+type DetailReq = { name: string; type?: PlaceType | null; parent?: string | null; country?: string | null; near?: string | null };
+type Details = ReturnType<typeof usePlaceDetails>;
+
+/**
+ * Conteúdo da janela de cada lugar (planning: recomendações pessoais), pedido quando a janela abre e guardado em
+ * `onboarding.details` para a turma toda não pedir de novo.
+ */
+function usePlaceDetails(tripIdValue: string, ob: OnboardingState, persist: StepProps['persist'], online: boolean) {
+  const [details, setDetails] = useState<Record<string, PlaceDetail>>(ob.details ?? {});
+  const [loading, setLoading] = useState<Set<string>>(new Set());
+  const [failed, setFailed] = useState<Set<string>>(new Set());
+  const ref = useRef(details);
+  const busy = useRef(new Set<string>());
+  const obRef = useRef(ob);
+  obRef.current = ob;
+  const load = async (req: DetailReq) => {
+    const k = placeKey(req.name);
+    if (ref.current[k] || busy.current.has(k) || !online) return;
+    busy.current.add(k);
+    setLoading((l) => new Set([...l, k]));
+    setFailed((f) => { const n = new Set(f); n.delete(k); return n; });
+    const r = await callAi<{ detail: PlaceDetail }>('explore', { kind: 'place_detail', tripId: tripIdValue, ...req });
+    busy.current.delete(k);
+    setLoading((l) => { const n = new Set(l); n.delete(k); return n; });
+    if (!r?.data?.detail) { setFailed((f) => new Set([...f, k])); return; }
+    const next = { ...ref.current, [k]: r.data.detail };
+    ref.current = next;
+    setDetails(next);
+    await persist({ ...obRef.current, details: next }).catch(() => undefined);
+  };
+  return { details, loading, failed, load };
 }
 
-/** Janela dedicada ao lugar: foto grande, por que ir, o que ver, dica e (no rodapé) a escolha ou as ações. */
-function PlaceSheet({ open, onClose, name, sub, query, why, attractions, tip, tags, facts, footer, loading, children }: {
-  open: boolean; onClose: () => void; name: string; sub: string; query: string[]; why: string; attractions: PlaceAttraction[];
-  tip?: string | null; tags?: string[]; facts: React.ReactNode; footer?: React.ReactNode; loading?: boolean; children?: React.ReactNode;
+/** Janela do lugar já ligada ao detalhe: pede o conteúdo ao abrir e mostra o que já se sabe enquanto isso. */
+function PlaceWindow({ open, onClose, base, dt, profile, money, footer, children, facts, near, onTellUs }: {
+  open: boolean; onClose: () => void; base: PlaceBase; dt: Details; profile: TravelProfile | null; money: (v: number) => string;
+  footer?: React.ReactNode; children?: React.ReactNode; facts?: React.ReactNode; near?: string | null; onTellUs?: () => void;
 }) {
-  const photo = useResolvedPhoto(null, open ? query : null, open);
+  const k = placeKey(base.name);
+  const detail = dt.details[k] ?? null;
+  const req: DetailReq = { name: base.name, type: base.type ?? null, parent: base.parent ?? null, country: base.country ?? null, near: near ?? null };
+  useEffect(() => {
+    if (open && !detail) void dt.load(req);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <Sheet open={open} onClose={onClose} title={name} description={sub} size="lg" footer={footer}>
-      <div className={s.sheetBody}>
-        <Photo photo={photo as PhotoData | null} place={name} alt={`Foto de ${name}`} height={240} />
-        <div className={s.facts}>{facts}</div>
-        {why ? <p className={s.why}>{why}</p> : null}
-        {children}
-        {loading ? <p className={s.muted} role="status"><Busy>A Trilha está buscando o resumo e o que ver</Busy></p> : null}
-        {tags?.length ? <div className={s.chips}>{tags.map((t) => <Badge key={t}>{tagLabel(t)}</Badge>)}</div> : null}
-        {attractions.length ? (
-          <section aria-label={`O que ver em ${name}`} className={s.stack}>
-            <h3 className={s.label}>O que ver</h3>
-            <ul className={s.attractions}>{attractions.map((a) => <Attraction key={a.name} a={a} place={name} photo={open} />)}</ul>
-          </section>
-        ) : null}
-        {tip ? <p className={s.tip}><Icon name="sparkle" size={16} /> {tip}</p> : null}
-        <p className={s.muted}>Sugestões da Trilha. Horários, preços e regras de entrada mudam: confira antes de ir.</p>
-      </div>
-    </Sheet>
+    <PlaceDetailSheet
+      open={open} onClose={onClose} base={base} detail={detail} loading={dt.loading.has(k)} failed={dt.failed.has(k)} onRetry={() => void dt.load(req)}
+      profile={profile} money={money} footer={footer} facts={facts} onTellUs={onTellUs}
+    >
+      {children}
+    </PlaceDetailSheet>
   );
 }
 
-function PlaceCard({ p, mark, onMark, loading = false }: { p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; loading?: boolean }) {
+/**
+ * Foto do cartão: só a conferida (nome exato, perto das coordenadas, sem repetir outro lugar). Enquanto busca,
+ * reserva o espaço; sem foto, o cartão fica sem foto (nada de ilustração repetida em todos).
+ */
+function PlacePhoto({ name, type, parent, country, lat, lng, height, onOpen, className }: {
+  name: string; type?: PlaceType | null; parent?: string | null; country?: string | null; lat?: number | null; lng?: number | null;
+  height: number; onOpen: () => void; className?: string;
+}) {
+  const t = type ?? 'cidade';
+  const context = (t === 'bairro' || t === 'atracao') && parent ? parent : country || null;
+  const { photo, loading } = usePlacePhoto({ name, context, lat, lng, radiusKm: PHOTO_RADIUS[t] });
+  if (!photo && !loading) return null;
+  return (
+    <button type="button" className={`${s.photoBtn} ${className ?? ''}`} onClick={onOpen} aria-label={`Ver detalhes de ${name}`}>
+      {photo ? <Photo photo={photo as PhotoData} place={name} alt="" height={height} caption={false} /> : <div className="skel" style={{ height, borderRadius: 'var(--r-thumb)' }} aria-hidden="true" />}
+    </button>
+  );
+}
+
+function PlaceCard({ p, mark, onMark, loading = false, dt, profile, money, onTellUs }: {
+  p: PlaceIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; loading?: boolean; dt: Details; profile: TravelProfile | null; money: (v: number) => string; onTellUs: () => void;
+}) {
   const [open, setOpen] = useState(false);
-  // "Nara, Japão" ajuda a busca a achar a cidade (e não a cantora); o termo da IA fica de reserva.
-  const query = [p.country ? `${p.name}, ${p.country}` : p.name, p.name, p.photo_query ?? ''];
-  const resolved = useResolvedPhoto(null, query, true);
+  const type: PlaceType = p.type ?? (p.kind === 'experiencia' ? 'experiencia' : 'cidade');
+  const parent = p.parent ?? (p.kind === 'experiencia' ? p.base ?? null : null);
   const sights = p.attractions?.length ? p.attractions : (p.highlights ?? []).map((name) => ({ name }));
+  const time = type === 'experiencia' ? (parent ? `sai de ${parent}` : null) : takesNights(type) ? nightsText(p.nights_min, p.nights_max) : null;
+  const where = placeLocation({ type, parent, region: p.region, country: p.country });
+  const base: PlaceBase = { name: p.name, type, parent, region: p.region, country: p.country, lat: p.lat, lng: p.lng, why: p.why, fit: p.fit, time, attractions: sights, tip: p.tip };
   return (
     <article className={s.place} data-place={p.name} data-mark={mark}>
-      <button type="button" className={s.photoBtn} onClick={() => setOpen(true)} aria-label={`Ver detalhes de ${p.name}`}>
-        <Photo photo={resolved as PhotoData | null} place={p.name} alt="" height={140} caption={false} />
-      </button>
+      <PlacePhoto name={p.name} type={type} parent={parent} country={p.country} lat={p.lat} lng={p.lng} height={140} onOpen={() => setOpen(true)} />
       <div className={s.placeHead}>
         <h3>{p.name}</h3>
         <IconButton icon="info" label={`Mais sobre ${p.name}`} size={40} variant="ghost" onClick={() => setOpen(true)} />
       </div>
-      <small className={s.muted}>{[p.kind === 'experiencia' ? `Experiência${p.base ? ` · sai de ${p.base}` : ''}` : p.region, p.kind === 'experiencia' ? null : nightsText(p.nights_min, p.nights_max)].filter(Boolean).join(' · ')}</small>
-      {loading ? <p className={s.muted} role="status"><Busy>Buscando resumo, foto e o que ver</Busy></p> : <p className={s.why}>{p.why}</p>}
+      <div className={s.placeMeta}><TypeChip type={type} /><small className={s.muted}>{[where, time].filter(Boolean).join(' · ')}</small></div>
+      {loading ? <p className={s.muted} role="status"><Busy>Buscando resumo e o que ver</Busy></p> : <p className={s.why}>{p.why}</p>}
+      {p.fit ? <p className={s.fitLine}><Icon name="sparkle" size={14} /><span>{p.fit}</span></p> : null}
       {sights.length ? <ul className={s.highlights}>{sights.slice(0, 3).map((h) => <li key={h.name}>{h.name}</li>)}</ul> : null}
+      <button type="button" className={s.more} onClick={() => setOpen(true)}>Por que ir e o que fazer <Icon name="next" size={14} /></button>
       <MarkPicker label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} />
-      <PlaceSheet
-        open={open} onClose={() => setOpen(false)} name={p.name} sub={[p.region, p.country].filter(Boolean).join(', ')} query={query}
-        why={p.why} attractions={sights} tip={p.tip} tags={p.tags} loading={loading}
-        footer={<MarkPicker label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} />}
-        facts={<>{p.kind === 'experiencia' ? <Badge>experiência{p.base ? ` · sai de ${p.base}` : ''}</Badge> : <Badge>{nightsText(p.nights_min, p.nights_max)}</Badge>}{p.country ? <Badge>{p.country}</Badge> : null}</>}
-      />
+      {open ? (
+        <PlaceWindow
+          open={open} onClose={() => setOpen(false)} base={base} dt={dt} profile={profile} money={money} onTellUs={onTellUs}
+          footer={<MarkPicker label={`${p.name}: quanto quer ir`} value={mark} onChange={onMark} />}
+        />
+      ) : null}
     </article>
   );
 }
 
-function NearbyCard({ n, mark, onMark, money }: { n: NearbyIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; money: (v: number) => string }) {
+function NearbyCard({ n, mark, onMark, money, dt, profile, onTellUs }: {
+  n: NearbyIdea; mark: PlaceMark; onMark: (m: PlaceMark) => void; money: (v: number) => string; dt: Details; profile: TravelProfile | null; onTellUs: () => void;
+}) {
   const [open, setOpen] = useState(false);
-  const query = [n.country ? `${n.name}, ${n.country}` : n.name, n.name, n.photo_query ?? ''];
-  const resolved = useResolvedPhoto(null, query, true);
   const how = `${hoursText(n.hours)} de ${MODE_LABEL[n.mode as TransportMode]?.toLowerCase() ?? 'viagem'} de ${n.from}`;
+  const base: PlaceBase = { name: n.name, type: 'cidade', country: n.country, lat: n.lat, lng: n.lng, why: n.why, time: n.kind === 'bate_volta' ? 'Bate-volta' : '1 noite', attractions: n.attractions, tip: n.tip };
   return (
     <article className={s.place} data-nearby={n.name} data-mark={mark}>
-      <button type="button" className={s.photoBtn} onClick={() => setOpen(true)} aria-label={`Ver detalhes de ${n.name}`}>
-        <Photo photo={resolved as PhotoData | null} place={n.name} alt="" height={110} caption={false} />
-      </button>
+      <PlacePhoto name={n.name} type="cidade" country={n.country} lat={n.lat} lng={n.lng} height={110} onOpen={() => setOpen(true)} />
       <div className={s.placeHead}>
         <h3>{n.name}{n.country ? <small> · {n.country}</small> : null}</h3>
         <IconButton icon="info" label={`Mais sobre ${n.name}`} size={40} variant="ghost" onClick={() => setOpen(true)} />
@@ -314,12 +391,13 @@ function NearbyCard({ n, mark, onMark, money }: { n: NearbyIdea; mark: PlaceMark
       <p className={s.muted}>{n.kind === 'bate_volta' ? 'Bate-volta' : 'Pede 1 noite'} · {how} · ≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa <EstimateBadge /></p>
       <p className={s.why}>{n.why}</p>
       <MarkPicker label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} />
-      <PlaceSheet
-        open={open} onClose={() => setOpen(false)} name={n.name} sub={`${n.country} · perto de ${n.from}`} query={query}
-        why={n.why} attractions={n.attractions ?? []} tip={n.tip}
-        footer={<MarkPicker label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} />}
-        facts={<><Badge>{n.kind === 'bate_volta' ? 'bate-volta' : 'pede 1 noite'}</Badge><Badge>{how}</Badge><Badge>≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa</Badge></>}
-      />
+      {open ? (
+        <PlaceWindow
+          open={open} onClose={() => setOpen(false)} base={base} dt={dt} profile={profile} money={money} near={n.from} onTellUs={onTellUs}
+          footer={<MarkPicker label={`${n.name}: quanto quer ir`} value={mark} onChange={onMark} />}
+          facts={<><Badge>{n.kind === 'bate_volta' ? 'bate-volta' : 'pede 1 noite'}</Badge><Badge>{how}</Badge><Badge>≈ {money(n.cost_low)}–{money(n.cost_high)} por pessoa</Badge></>}
+        />
+      ) : null}
     </article>
   );
 }
@@ -333,6 +411,10 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
   const [extra, setExtra] = useState('');
   const asked = useRef(false);
   const places = ob.places;
+  const dt = usePlaceDetails(b.trip.id, ob, persist, online);
+  const profile = parseProfile(ob.profile);
+  const tellUs = () => go(2);
+  const placesStale = !!ob.stale?.includes('places');
   // Lugares adicionados à mão (e os que vieram do Descobrir) ganham resumo, foto e o que ver, como as sugestões.
   const [enriching, setEnriching] = useState<Set<string>>(new Set());
   const tried = useRef(new Set<string>());
@@ -365,10 +447,15 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
     setLoading(false);
     if (!r.ok) { setFail({ unavailable: r.status === 503, error: r.error }); return; }
     const preset = (ob.discover_stops ?? []).filter((n) => !r.res.data.items.some((p) => placeKey(p.name) === placeKey(n)));
-    const items: PlaceIdea[] = [...r.res.data.items, ...preset.map((n) => ({ name: n, country: '', why: 'Estava no roteiro sugerido pelo Descobrir.', nights_min: 1, nights_max: 3, from_discover: true }))];
+    // Ao refazer (a turma contou mais sobre a viagem), os lugares adicionados à mão continuam.
+    const kept = (ob.places?.items ?? []).filter((p) => p.added && !r.res.data.items.some((x) => placeKey(x.name) === placeKey(p.name)));
+    const items: PlaceIdea[] = [...r.res.data.items, ...preset.map((n) => ({ name: n, country: '', why: 'Estava no roteiro sugerido pelo Descobrir.', nights_min: 1, nights_max: 3, from_discover: true })), ...kept];
     const nextMarks = defaultMarks(items, r.res.data.nearby, marks);
     setMarks(nextMarks);
-    await persist({ ...ob, places: { items, nearby: r.res.data.nearby, fetched_at: new Date().toISOString() }, marks: nextMarks, step: Math.max(3, ob.step) as OnboardingStep }).catch(() => undefined);
+    await persist({
+      ...obRef.current, places: { items, nearby: r.res.data.nearby, fetched_at: new Date().toISOString() }, marks: nextMarks, step: Math.max(3, ob.step) as OnboardingStep,
+      stale: (obRef.current.stale ?? []).filter((x) => x !== 'places'),
+    }).catch(() => undefined);
   };
   useEffect(() => {
     if (!places && !asked.current && online) { asked.current = true; void fetchPlaces(); }
@@ -410,9 +497,15 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
 
   return (
     <StepChat label="O que não pode faltar">
-      <TrilhaBubble step="3 · Lugares">Separei lugares que combinam com vocês. <b>O que não pode faltar?</b></TrilhaBubble>
+      <TrilhaBubble step="3 · Lugares">{profile ? <>Escolhi lugares pensando no que vocês contaram. Toque num lugar para ver <b>por que combina</b>. <b>O que não pode faltar?</b></> : <>Separei lugares que combinam com vocês. <b>O que não pode faltar?</b></>}</TrilhaBubble>
       <ChatOptions>
-        <div className={s.grid}>{items.map((p) => <PlaceCard key={p.name} p={p} mark={marks[placeKey(p.name)] ?? 'maybe'} onMark={mark(p.name)} loading={enriching.has(placeKey(p.name))} />)}</div>
+        {placesStale ? (
+          <div className={s.note} role="status">
+            <span>Vocês contaram mais sobre a viagem. Quer que a Trilha refaça as sugestões com isso? Suas marcações e lugares adicionados ficam.</span>
+            <Button size="sm" variant="secondary" disabled={busy || !online} onClick={() => void fetchPlaces()}>Refazer sugestões</Button>
+          </div>
+        ) : null}
+        <div className={s.grid}>{items.map((p) => <PlaceCard key={p.name} p={p} mark={marks[placeKey(p.name)] ?? 'maybe'} onMark={mark(p.name)} loading={enriching.has(placeKey(p.name))} dt={dt} profile={profile} money={money} onTellUs={tellUs} />)}</div>
         <div className={s.wishRow}>
           <Field label="Adicionar um lugar"><input value={extra} maxLength={80} placeholder="Ex.: Lucca" onChange={(e) => setExtra(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPlace(); } }} /></Field>
           <Button variant="secondary" onClick={addPlace} disabled={!extra.trim()}>Adicionar</Button>
@@ -421,7 +514,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
           <>
             <h2 className={s.label}>Perto daqui</h2>
             <p className={s.muted}>Lugares que ficam perto dos que você viu acima, inclusive em países vizinhos. Muita gente não sabe que dá pra ir.</p>
-            <div className={s.grid}>{nearby.map((n) => <NearbyCard key={n.name} n={n} money={money} mark={marks[placeKey(n.name)] ?? 'maybe'} onMark={mark(n.name)} />)}</div>
+            <div className={s.grid}>{nearby.map((n) => <NearbyCard key={n.name} n={n} money={money} mark={marks[placeKey(n.name)] ?? 'maybe'} onMark={mark(n.name)} dt={dt} profile={profile} onTellUs={tellUs} />)}</div>
           </>
         ) : null}
         <h2 className={s.label}>Algo que vocês querem fazer?</h2>
@@ -475,10 +568,6 @@ type InfoMap = Record<string, PlaceInfo>;
 const stopId = (name: string) => `s:${placeKey(name)}`;
 const tripMark = (stop: string, name: string) => `t:${placeKey(stop)}:${placeKey(name)}`;
 const outId = (name: string) => `o:${placeKey(name)}`;
-const photoQuery = (name: string, info: PlaceInfo | null, country?: string | null) => {
-  const c = info?.country || country;
-  return [c ? `${info?.name ?? name}, ${c}` : info?.name ?? name, info?.name ?? name, info?.photo_query ?? ''];
-};
 const scrollToStop = (name: string) => {
   if (typeof document === 'undefined') return;
   const el = [...document.querySelectorAll<HTMLElement>('[data-stop]')].find((x) => placeKey(x.dataset.stop ?? '') === placeKey(name));
@@ -537,14 +626,14 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishe
   const alt = st.stay_alt ?? null;
   // A escolha fica visível enquanto vale a pena ou enquanto a pessoa estiver usando (para poder desfazer).
   const showAlt = !!alt && (!!saving || !!st.stay_at_alt);
-  const photo = useResolvedPhoto(null, photoQuery(st.name, info, st.country), true);
+  const { photo } = usePlacePhoto({ name: info?.name ?? st.name, context: info?.country || st.country || null, lat: st.lat ?? info?.lat, lng: st.lng ?? info?.lng, radiusKm: PHOTO_RADIUS.cidade });
   const summary = info?.why && !/^Você adicionou\.?$|^Estava no roteiro/.test(info.why) ? info.why : st.why;
   const sights = (info?.attractions?.length ? info.attractions.map((a) => a.name) : info?.highlights ?? []).slice(0, 3);
   return (
     <article className={s.stopCard} data-stop={st.name}>
       <div className={s.stopTop}>
         <button type="button" className={s.photoBtn} onClick={onOpen} aria-label={`Ver detalhes de ${st.name}`}>
-          <Photo photo={photo as PhotoData | null} place={st.name} alt="" height={84} caption={false} className={s.stopPhoto} />
+          {photo ? <Photo photo={photo as PhotoData} place={st.name} alt="" height={84} caption={false} className={s.stopPhoto} /> : <span className={s.stopTile} aria-hidden="true"><Icon name="city" size={26} /></span>}
         </button>
         <div className={s.stopInfo}>
           <span className={s.stopNum}>{i + 1}</span>
@@ -628,8 +717,15 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   const stale = ob.stale?.includes('route');
   const calls = ob.route_calls ?? 0;
   const style = ob.prefs?.stay ?? b.trip.budget_plan?.style ?? 'equilibrado';
-  const { info, loading: infoLoading, load } = usePlaceInfo(b.trip.id, ob, persist, online);
+  const { info, load } = usePlaceInfo(b.trip.id, ob, persist, online);
+  const dt = usePlaceDetails(b.trip.id, ob, persist, online);
+  const profile = parseProfile(ob.profile);
   const about = (name: string) => infoOf(name, places, info);
+  // Detalhe não veio (cota, IA fora): o resumo curto com o que ver serve de reserva na janela.
+  useEffect(() => {
+    const want = [...dt.failed].map((k) => sheet && placeKey(sheet.name) === k ? sheet.name : null).filter((n): n is string => !!n && !about(n).detailed);
+    if (want.length) void load(want.map((name) => ({ name, near: sheet?.type === 'trip' ? sheet.stop : null })));
+  }, [dt.failed]); // eslint-disable-line react-hooks/exhaustive-deps
   const coordOf = (name: string, lat?: number | null, lng?: number | null): [number, number] | null => {
     if (lat != null && lng != null && (lat !== 0 || lng !== 0)) return [lat, lng];
     const i = about(name).info;
@@ -728,7 +824,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
 
   const openSheet = (x: NonNullable<RouteSheetState>, near?: string) => {
     setSheet(x);
-    if (!about(x.name).detailed) void load([{ name: x.name, near: near ?? null }]);
+    if (!coordOf(x.name)) void load([{ name: x.name, near: near ?? null }]);
   };
   const showOnMap = (id: string, name: string) => {
     setFocus(id);
@@ -777,23 +873,23 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
     go(5);
   });
 
-  // Janela do lugar aberto (parada, bate-volta ou "ficou de fora").
+  // Janela do lugar aberto (parada, bate-volta ou "ficou de fora"): a mesma janela do passo 3, com o contexto da rota.
   const sheetView = (() => {
     if (!sheet) return null;
-    const a = about(sheet.name);
-    const i = a.info;
-    const isLoading = infoLoading.has(placeKey(sheet.name)) && !a.detailed;
+    const i = about(sheet.name).info;
     const why = i?.why && !/^Você adicionou\.?$|^Estava no roteiro/.test(i.why) ? i.why : '';
-    const base = { open: true, onClose: () => setSheet(null), name: i?.name ?? sheet.name, query: photoQuery(sheet.name, i), attractions: i?.attractions ?? [], tip: i?.tip ?? null, tags: i?.tags, loading: isLoading };
+    const known = places.items.find((p) => placeKey(p.name) === placeKey(sheet.name));
+    const common = { open: true, onClose: () => setSheet(null), dt, profile, money, onTellUs: () => go(2) };
     if (sheet.type === 'stop') {
       const idx = route.stops.findIndex((x) => x.name === sheet.name);
       const st = route.stops[idx];
       if (!st) return null;
       const here = wishesAt(route, st);
       return (
-        <PlaceSheet
-          {...base} sub={[i?.region, st.country].filter(Boolean).join(', ')} why={why || st.why || ''}
-          facts={<><Badge>parada {idx + 1}</Badge><Badge>{nightsText(st.nights, st.nights)}</Badge><Badge>{dayMonth(dates[idx].arrival)} a {dayMonth(dates[idx].departure)}</Badge></>}
+        <PlaceWindow
+          {...common}
+          base={{ name: st.name, type: i?.type ?? known?.type ?? 'cidade', region: i?.region, country: st.country, lat: st.lat ?? i?.lat, lng: st.lng ?? i?.lng, why: why || st.why || '', fit: known?.fit ?? null, time: nightsText(st.nights, st.nights), attractions: i?.attractions, tip: i?.tip }}
+          facts={<><Badge>parada {idx + 1}</Badge><Badge>{dayMonth(dates[idx].arrival)} a {dayMonth(dates[idx].departure)}</Badge></>}
           footer={<div className={s.actions}><Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(stopId(st.name), st.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button></div>}
         >
           {here.map((w) => <WishHere key={w.wish} {...w} />)}
@@ -804,7 +900,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
               <div className={s.chips}>{st.day_trips.map((d) => <button key={d.name} type="button" className={s.tripChip} onClick={() => openSheet({ type: 'trip', stop: st.name, name: d.name }, st.name)}>{d.name} · dia {d.day_offset + 1}<Icon name="info" size={14} /></button>)}</div>
             </section>
           ) : null}
-        </PlaceSheet>
+        </PlaceWindow>
       );
     }
     if (sheet.type === 'trip') {
@@ -813,21 +909,23 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
       if (!st || !d) return null;
       const price = Math.round((d.cost_low + d.cost_high) / 2);
       return (
-        <PlaceSheet
-          {...base} sub={`Bate-volta saindo de ${st.name}`} why={d.why || why}
-          facts={<><Badge>bate-volta · dia {d.day_offset + 1} em {st.name}</Badge>{price ? <Badge>≈ {money(price)} por pessoa</Badge> : null}{i?.country ? <Badge>{i.country}</Badge> : null}</>}
+        <PlaceWindow
+          {...common} near={st.name}
+          base={{ name: d.name, type: i?.type ?? null, parent: i?.parent ?? null, region: i?.region, country: i?.country ?? st.country, lat: d.lat ?? i?.lat, lng: d.lng ?? i?.lng, why: d.why || why, time: 'Bate-volta', attractions: i?.attractions, tip: i?.tip }}
+          facts={<><Badge>bate-volta · dia {d.day_offset + 1} em {st.name}</Badge>{price ? <Badge>≈ {money(price)} por pessoa</Badge> : null}</>}
           footer={<div className={s.actions}><Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(tripMark(st.name, d.name), d.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button></div>}
         >
           {d.wish ? <WishHere wish={d.wish} how={route.wishes.find((w) => placeKey(w.wish) === placeKey(d.wish ?? ''))?.how ?? null} dayTrip={null} /> : null}
-        </PlaceSheet>
+        </PlaceWindow>
       );
     }
     const l = route.left_out.find((x) => x.name === sheet.name);
     if (!l) return null;
     return (
-      <PlaceSheet
-        {...base} sub={[i?.region, i?.country].filter(Boolean).join(', ') || 'Ficou de fora do roteiro'} why={why}
-        facts={<><OriginBadge name={l.name} places={ob.places} marks={marks} />{i?.nights_max ? <Badge>{nightsText(Math.max(1, i.nights_min ?? 1), i.nights_max)}</Badge> : null}</>}
+      <PlaceWindow
+        {...common}
+        base={{ name: l.name, type: i?.type ?? known?.type ?? null, parent: i?.parent ?? known?.parent ?? null, region: i?.region, country: i?.country, lat: l.lat ?? i?.lat, lng: l.lng ?? i?.lng, why, fit: known?.fit ?? null, time: i?.nights_max ? nightsText(Math.max(1, i.nights_min ?? 1), i.nights_max) : null, attractions: i?.attractions, tip: i?.tip }}
+        facts={<OriginBadge name={l.name} places={ob.places} marks={marks} />}
         footer={(
           <div className={s.actions}>
             <Button size="sm" variant="secondary" onClick={() => { setSheet(null); showOnMap(outId(l.name), l.name); }}><Icon name="pin" size={15} /> Ver no mapa</Button>
@@ -839,7 +937,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
           <p><b>Por que ficou de fora:</b> {l.reason}</p>
           {l.sacrifice ? <p><b>Pra caber:</b> {l.sacrifice}</p> : null}
         </div>
-      </PlaceSheet>
+      </PlaceWindow>
     );
   })();
 

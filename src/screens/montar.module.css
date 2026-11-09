@@ -215,3 +215,11 @@
 .stayAltHead span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .stayAltHead small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
 .sleepsAt { display: inline-flex; align-items: center; gap: 4px; color: var(--brand-ink) !important; font-weight: 600; }
+
+/* Recomendações pessoais (09/11/2026): tipo do lugar, "por que combina" no cartão, parada sem foto conferida. */
+.placeMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: -4px; }
+.fitLine { margin: 0; display: flex; gap: 6px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; background: var(--suggest-bg); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
+.fitLine svg { flex: none; margin-top: 2px; color: var(--brand); }
+.place .more { margin-top: -2px; }
+.stopTile { width: 104px; height: 84px; border-radius: var(--r-thumb); background: var(--field); color: var(--mute); display: flex; align-items: center; justify-content: center; }
+.note:has(button) { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--suggest-bg); color: var(--ink-2); }

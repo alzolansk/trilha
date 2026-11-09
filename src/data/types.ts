@@ -70,6 +70,11 @@ export interface Trip extends Versioned {
 
 /** Marcação do passo 3 do onboarding. */
 export type PlaceMark = 'must' | 'maybe' | 'skip';
+/**
+ * O que o lugar é (muda o cabeçalho, a unidade de tempo e as noites): cidade e região pedem noites;
+ * bairro e atração ficam dentro de uma cidade (`parent`) e se medem em horas; experiência sai de uma base.
+ */
+export type PlaceType = 'cidade' | 'regiao' | 'bairro' | 'atracao' | 'experiencia';
 /** Lugar sugerido no passo 3 (valores em centavos da moeda base). */
 export interface PlaceIdea {
   name: string;
@@ -97,6 +102,12 @@ export interface PlaceIdea {
   base?: string | null;
   /** a IA já completou resumo, foto e passeios (lugar adicionado à mão ou vindo do Descobrir) */
   enriched?: boolean;
+  /** tipo do lugar (respostas antigas não têm: tratadas como cidade) */
+  type?: PlaceType | null;
+  /** cidade onde fica o bairro ou a atração */
+  parent?: string | null;
+  /** uma frase ligando o lugar ao perfil da turma (só com base no que ela contou) */
+  fit?: string | null;
 }
 /** Resumo de um lugar buscado sob demanda (parada sugerida, bate-volta, "ficou de fora"). Cache em onboarding.info. */
 export interface PlaceInfo {
@@ -115,6 +126,8 @@ export interface PlaceInfo {
   tags?: string[];
   attractions?: PlaceAttraction[];
   tip?: string | null;
+  type?: PlaceType | null;
+  parent?: string | null;
 }
 export interface PlaceAttraction {
   name: string;
@@ -231,7 +244,105 @@ export interface OnboardingPrefs {
   budget?: number | null;
   /** sugerir cidade vizinha mais barata para dormir (padrão: sim) */
   stay_nearby?: boolean;
+  /** como a turma imagina a viagem, nas palavras dela (passo 2) */
+  story?: string | null;
 }
+/** Um traço do perfil, com o trecho do texto da pessoa que o justifica. */
+export interface TravelTrait {
+  label: string;
+  detail?: string | null;
+  /** trecho do que a pessoa escreveu (nunca inventado) */
+  evidence?: string | null;
+}
+/** O que a Trilha entendeu do texto livre do passo 2 (planning: recomendações pessoais). */
+export interface TravelProfile {
+  /** duas frases na voz da Trilha: "Vocês querem…" */
+  summary: string;
+  traits: TravelTrait[];
+  /** o que querem evitar */
+  avoid: string[];
+  /** quem vai (casal, amigos, família, sozinho), se disseram */
+  group?: string | null;
+  /** gostos (ids de VIBES) inferidos do texto */
+  vibes: string[];
+  pace?: BudgetPace | null;
+  stay?: BudgetStyle | null;
+  generated_at: string;
+}
+
+export type CostKind = 'gratis' | 'pago' | 'varia';
+/** Destaque da janela do lugar: atração específica ou sugestão ampla ("explorar os cafés do bairro"). */
+export interface PlaceHighlight {
+  name: string;
+  scope: 'especifico' | 'amplo';
+  /** o que fazer ali */
+  what: string;
+  /** por que vale */
+  why?: string | null;
+  duration?: string | null;
+  cost?: CostKind | null;
+  /** precisa reservar? (texto curto, ex.: "ingresso antecipado") */
+  booking?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}
+export interface PlaceVisitStep {
+  /** momento ilustrativo ("Fim de tarde", "Manhã") */
+  when: string;
+  text: string;
+  /** destaques citados (posição 1-based em `highlights`) */
+  refs: number[];
+}
+/** Linha de custo estimado: centavos por `unit`; low = high = 0 é grátis. */
+export interface PlaceCostLine {
+  item: string;
+  low: number;
+  high: number;
+  unit: string;
+}
+/** Conteúdo completo da janela do lugar, pedido sob demanda e guardado em onboarding.details. */
+export interface PlaceDetail {
+  name: string;
+  type: PlaceType;
+  parent?: string | null;
+  country: string;
+  region?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  /** o que é o lugar, em uma frase neutra */
+  summary: string;
+  /** por que vale conhecer: atmosfera, identidade, contexto (1 a 2 parágrafos) */
+  why_go: string[];
+  /** por que combina com vocês: cada motivo ligado a um traço ou gosto que a turma informou */
+  fit: { trait: string; text: string }[];
+  /** para quem é, quando a turma não contou preferências */
+  for_whom?: string | null;
+  /** pode não valer a pena se… */
+  caveats: string[];
+  time: {
+    label: string;
+    options: { label: string; text: string; suggested?: boolean }[];
+    why: string;
+    /** bairro: serve de base para se hospedar? */
+    stay_base?: boolean | null;
+  };
+  best_moment?: string | null;
+  getting_around?: string | null;
+  highlights: PlaceHighlight[];
+  visit: PlaceVisitStep[];
+  practical: {
+    getting_there?: string | null;
+    best_time?: string | null;
+    costs: PlaceCostLine[];
+    cost_note?: string | null;
+    limits: string[];
+    /** site oficial onde conferir horários e agenda (domínio), quando a IA conhece */
+    check_at?: string | null;
+  };
+  currency: string;
+  generated_at: string;
+}
+
 export type OnboardingStep = 2 | 3 | 4 | 5 | 6;
 export interface OnboardingState {
   status: 'em_andamento' | 'concluido' | 'manual' | 'pulado';
@@ -257,6 +368,10 @@ export interface OnboardingState {
   tours_applied?: boolean;
   /** resumos buscados sob demanda (chave = placeKey do nome) */
   info?: Record<string, PlaceInfo>;
+  /** perfil entendido do texto livre (passo 2) */
+  profile?: TravelProfile | null;
+  /** conteúdo da janela de cada lugar (chave = placeKey do nome) */
+  details?: Record<string, PlaceDetail>;
 }
 
 /** Foto escolhida: Wikimedia (com crédito) ou upload próprio (`path` no bucket covers). */

@@ -1,0 +1,32 @@
+.story { display: flex; flex-direction: column; gap: 10px; }
+.label { font: var(--t-small); font-weight: 600; color: var(--ink); }
+.area { width: 100%; box-sizing: border-box; min-height: 128px; resize: vertical; padding: 14px 16px; border-radius: var(--r-btn); border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: var(--t-body); line-height: 1.5; }
+.area:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand); }
+.hint { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--mute); }
+.examples { display: flex; flex-direction: column; gap: 6px; }
+.example { text-align: left; min-height: 44px; padding: 10px 12px; border-radius: var(--r-btn); border: 1px dashed var(--line); background: transparent; color: var(--ink-2); font: inherit; font-size: 13.5px; line-height: 1.4; cursor: pointer; }
+.example:hover { border-color: var(--brand); color: var(--ink); }
+.example:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.error { margin: 0; font-size: 14px; color: var(--warn); }
+
+.card { display: flex; flex-direction: column; gap: 12px; padding: var(--s5); border-radius: var(--r-card); background: var(--suggest-bg); border: 1px solid var(--brand-soft); }
+.cardHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cardHead h3 { margin: 0; display: flex; align-items: center; gap: 8px; font: 800 19px/1.2 var(--font-title); }
+.cardHead h3 svg { color: var(--brand); }
+.redo { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--brand-ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.redo:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 10px; }
+.summary { margin: 0; font-size: 15.5px; line-height: 1.55; color: var(--ink); }
+.traits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.trait { display: flex; align-items: flex-start; gap: 10px; padding: 10px 6px 10px 14px; border-radius: var(--r-thumb); background: var(--surface); border: 1px solid var(--line-2); }
+.traitText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.traitText b { font-size: 15px; color: var(--brand-ink); }
+.traitText small { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.traitText q { font-size: 12.5px; color: var(--mute); font-style: italic; }
+.traitText q::before { content: 'vocês escreveram: “'; font-style: normal; }
+.traitText q::after { content: '”'; }
+.remove { flex: none; width: 44px; height: 44px; margin: -8px 0; border: 0; border-radius: 12px; background: transparent; color: var(--mute); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.remove:hover { color: var(--ink); background: var(--field); }
+.remove:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.avoid { margin: 0; padding: 10px 14px; border-radius: var(--r-thumb); background: var(--sun-soft); color: var(--ink-2); font-size: 14px; }
+.avoid b { color: var(--sun-ink); }
+.meta { margin: 0; font-size: 13px; line-height: 1.5; color: var(--mute); }
