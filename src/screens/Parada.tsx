@@ -475,7 +475,7 @@ function BigTour({ t, b, stop, resolve, canEdit, onChoose }: { t: Tour; b: TripB
   const photo = useResolvedPhoto(t.photo, t.photoQuery, resolve, (p: PhotoRef) => {
     if (t.activity) void source.update('activities', t.activity.id, { photo: p }, t.activity.version).then(reload).catch(() => undefined);
     else if (t.suggestion) void source.update('suggestions', t.suggestion.id, { payload: { ...t.suggestion.payload, photo: p } }, t.suggestion.version).then(reload).catch(() => undefined);
-  });
+  }, stop.name);
   const badge = t.fans.length ? `${t.fans.join(' e ')} ${t.fans.length === 1 ? 'quer' : 'querem'} muito` : t.savedBy ? `${t.savedBy} salvou no Diário` : t.suggestion?.source === 'ai' && t.status.kind === 'nova' ? 'Sugestão da Trilha' : null;
   const slot = t.status.kind === 'nova' ? t.status.slot : null;
   return (

@@ -8,7 +8,7 @@ import type { PlaceDetail, PlaceHighlight, PlaceType, TravelProfile } from '../.
 import { PHOTO_RADIUS, usePlacePhoto } from '../../data/usePhoto';
 import { miniMap, placeLocation, PLACE_TYPE_LABEL, spanLabel, takesNights, timeUnitLabel } from '../../lib/placeDetail';
 import { Busy } from '../ui/Loader';
-import { Button, EstimateBadge, Icon, Photo, Sheet, type PhotoData } from '../ui';
+import { Button, EstimateBadge, GoogleLink, Icon, Photo, Sheet, type PhotoData } from '../ui';
 import type { IconName } from '../ui/icons.data';
 import s from './placeDetail.module.css';
 
@@ -255,6 +255,7 @@ function HighlightRow({ h, n, place, open }: { h: PlaceHighlight; n: number; pla
         <div className={s.hlTitle}>
           <b>{h.name}</b>
           <span className={s.scope} data-scope={h.scope}>{h.scope === 'amplo' ? 'Sugestão ampla' : 'Atração'}</span>
+          {h.scope === 'especifico' ? <GoogleLink what={h.name} where={place} compact /> : null}
         </div>
         <p className={s.p}>{h.what}{h.why ? ` ${h.why}` : ''}</p>
         <div className={s.meta}>

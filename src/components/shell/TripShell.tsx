@@ -6,6 +6,7 @@ import { useAuth } from '../../data/AuthContext';
 import { useTrip } from '../../data/TripContext';
 import { grantMissingKeys } from '../../data/docKeys';
 import { syncOffline } from '../../data/offlineSync';
+import { usePhotoBackfill } from '../../data/usePhotoBackfill';
 import { useVault } from '../../data/VaultContext';
 import { track } from '../../lib/analytics';
 import { ErrorBox } from '../ui/ErrorBox';
@@ -67,6 +68,8 @@ export function TripShell({ children }: { children: React.ReactNode }) {
   const firstPath = useRef(path);
   const navigated = path !== firstPath.current;
   useTabScroll(path);
+  // Paradas e passeios sem foto ganham a foto conferida, gravada para a turma (Início e Roteiro deixam de ficar sem foto).
+  usePhotoBackfill();
 
   useEffect(() => {
     if (bundle && source.kind === 'supabase') {

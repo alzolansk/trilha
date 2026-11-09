@@ -61,7 +61,8 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
       const sun = css.getPropertyValue('--sun').trim() || '#F5A524';
       const fg = fgOn(accent);
       const pts = stops.filter((s) => s.lat != null && s.lng != null);
-      map = L.map(el.current, { scrollWheelZoom: false, attributionControl: true, zoomControl: true });
+      // Zoom pela rodinha do mouse (pedido de 09/11); suave, meio nível por passo.
+      map = L.map(el.current, { scrollWheelZoom: true, wheelPxPerZoomLevel: 120, zoomSnap: 0.5, attributionControl: true, zoomControl: true });
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',

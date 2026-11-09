@@ -371,3 +371,101 @@ export function claimPhoto(url: string, owner: string): boolean {
 export function resetPhotoClaims() {
   claims.clear();
 }
+
+// ───────────── Foto de passeio: Wikipedia e, de reserva, o acervo do Commons (ajuste de 09/11/2026) ─────────────
+// Passeio raramente tem página própria na Wikipedia ("Travessia para a Ilha de Murano"), então a busca por página
+// falhava e a carta ficava sem foto. Reserva: busca direta nos ARQUIVOS do Wikimedia Commons (milhões de fotos com
+// licença livre), aceitando só arquivo cujo nome cita uma palavra própria do passeio ("murano", "rialto", "gondola"),
+// nunca só a cidade: assim a foto é do passeio, e não uma foto qualquer de Veneza repetida em todas as cartas.
+
+/** Palavras que não identificam um passeio (tipo de atividade, artigos, preposições). */
+const GENERIC = new Set([
+  'para', 'pela', 'pelo', 'pelos', 'pelas', 'com', 'sem', 'dos', 'das', 'nos', 'nas', 'uma', 'umas', 'uns', 'entre', 'sobre', 'ate',
+  'the', 'and', 'with', 'from', 'into', 'tour', 'tours', 'passeio', 'passeios', 'visita', 'visitar', 'conhecer', 'travessia', 'experiencia',
+  'roteiro', 'caminhada', 'caminhar', 'subir', 'subida', 'ver', 'dia', 'meio', 'tarde', 'noite', 'manha', 'fim', 'bate', 'volta', 'ingresso',
+  'guiado', 'guiada', 'aula', 'curso', 'degustacao', 'jantar', 'almoco', 'cafe', 'centro', 'historico', 'historica', 'cidade', 'old', 'town',
+  // artigos de nomes em outras línguas ("Galleria degli Uffizi", "Museo del Prado")
+  'degli', 'della', 'delle', 'dello', 'dei', 'del', 'des', 'der', 'die', 'das', 'los', 'las', 'von',
+]);
+
+/** Palavras próprias do passeio (≥ 4 letras, sem as genéricas e sem as da cidade). */
+export function keyWords(names: string[], city: string): string[] {
+  const cityWords = new Set(fold(city).split(' '));
+  const out = new Set<string>();
+  for (const n of names) for (const w of fold(n.split(',')[0]).split(' ')) if (w.length >= 4 && !GENERIC.has(w) && !cityWords.has(w)) out.add(w);
+  return [...out];
+}
+
+/** Busca de arquivos (fotos) no Commons, já com URL, tamanho e licença de cada um. */
+export function commonsSearchUrl(q: string, width = 1280): string {
+  return `https://commons.wikimedia.org/w/api.php?${new URLSearchParams({
+    action: 'query', format: 'json', formatversion: '2', origin: '*',
+    generator: 'search', gsrsearch: `${q} filetype:bitmap`, gsrnamespace: '6', gsrlimit: '12',
+    prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: String(width), iiextmetadatafilter: 'Artist|LicenseShortName|Credit',
+  })}`;
+}
+
+interface CommonsJson {
+  query?: { pages?: { title: string; index?: number; imageinfo?: (NonNullable<NonNullable<NonNullable<ImageInfoJson['query']>['pages']>[number]['imageinfo']>[number] & { mime?: string })[] }[] };
+}
+
+/**
+ * Escolhe a foto do passeio: JPEG/PNG/WebP, larga o bastante (≥ 800 px, não muito em pé), sem cara de mapa/logo,
+ * com licença e com uma palavra própria do passeio no nome do arquivo. A ordem da busca desempata.
+ */
+export function pickCommonsImage(json: CommonsJson, words: string[]): PhotoRef | null {
+  if (!words.length) return null;
+  const pages = [...(json.query?.pages ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  for (const p of pages) {
+    const file = p.title.replace(/^File:/i, '');
+    const info = p.imageinfo?.[0];
+    if (!info || isUnfitImage(file)) continue;
+    if (info.mime && !/^image\/(jpeg|png|webp)$/.test(info.mime)) continue;
+    const w = info.width ?? 0;
+    const h = info.height ?? 0;
+    if (w < 800 || (h && h > w * 1.4)) continue;
+    const name = ` ${fold(file.replace(/\.[a-z0-9]+$/i, ''))} `;
+    if (!words.some((k) => name.includes(` ${k}`))) continue;
+    const photo = parseImageInfo({ query: { pages: [{ imageinfo: [info] }] } });
+    if (photo) return photo;
+  }
+  return null;
+}
+
+/**
+ * Navegador: foto de um passeio. 1) página da Wikipedia (nome do lugar do passeio, depois o título), 2) arquivos do
+ * Commons citando uma palavra própria do passeio. null = sem foto (a carta mostra a ilustração e a busca no Google).
+ */
+export async function fetchActivityPhoto(names: string[], city: string, fetcher: typeof fetch = fetch): Promise<PhotoRef | null> {
+  const list = [...new Set(names.map((n) => n.trim()).filter((n) => n.length >= 2))];
+  if (!list.length) return null;
+  const wiki = await fetchPhoto(list.map((n) => (city ? `${n}, ${city}` : n)), 'pt', fetcher);
+  if (wiki) return wiki;
+  const words = keyWords(list, city);
+  if (!words.length) return null;
+  const key = `act|${fold(city)}|${list.map(fold).join('|')}`;
+  const cached = readCache(key);
+  if (cached !== undefined) return cached;
+  if (!memory.has(key)) {
+    memory.set(key, inQueue(async () => {
+      let failed = false;
+      // Só as palavras próprias + cidade primeiro ("gondola Veneza" acha mais que "Passeio de gôndola Veneza").
+      const searches = [...new Set([`${words.join(' ')} ${city}`.trim(), ...list.flatMap((n) => [city ? `${n} ${city}` : '', n])].filter(Boolean))].slice(0, 3);
+      for (const q of searches) {
+        const res = await wikiJson<CommonsJson>(commonsSearchUrl(q), fetcher);
+        if (res === undefined) { failed = true; continue; }
+        const p = res ? pickCommonsImage(res, words) : null;
+        if (p) { writeCache(key, p); return p; }
+      }
+      if (!failed) writeCache(key, null);
+      else memory.delete(key);
+      return null;
+    }));
+  }
+  return memory.get(key)!;
+}
+
+/** Link de busca no Google para a pessoa conferir o passeio por conta própria. */
+export function googleSearchUrl(...parts: (string | null | undefined)[]): string {
+  return `https://www.google.com/search?${new URLSearchParams({ q: parts.map((p) => p?.trim()).filter(Boolean).join(' ') })}`;
+}

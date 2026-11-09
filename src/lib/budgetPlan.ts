@@ -1,7 +1,7 @@
 // Orçamento em conversa (planning §5.5 e §7): calcula o previsto por pessoa a partir do roteiro
 // e das respostas da turma (estilo, ritmo, passeios escolhidos, diária de comida).
 // Puro e testável. Valores de itens sem preço confirmado continuam ESTIMATIVA na UI.
-import type { BudgetFood, BudgetKind, BudgetPace, BudgetPlan, BudgetSnapshot, BudgetStyle, Transport, TripBundle } from '../data/types';
+import type { BudgetFood, BudgetKind, BudgetPace, BudgetPlan, BudgetSnapshot, BudgetStyle, RoomShare, Transport, TripBundle } from '../data/types';
 import { categoryKind, itemCost, toBaseCents, type Rates } from './money';
 import { estimateCents } from './suggestions';
 import { headcount } from './people';
@@ -18,6 +18,18 @@ export const PACES: { key: BudgetPace; label: string; detail: string }[] = [
   { key: 'moderado', label: 'Moderado', detail: 'Um passeio por dia' },
   { key: 'intenso', label: 'Intenso', detail: 'Dois passeios por dia' },
 ];
+
+/**
+ * Como a turma dorme (ajuste de 09/11/2026). As diárias estimadas pela Trilha são POR PESSOA com o quarto dividido
+ * pela turma. Cada um no seu quarto: um quarto individual custa perto de 80% de um duplo e é pago por uma pessoa só,
+ * então cada um paga ~1,6× o que pagaria dividindo. Sozinho na viagem não muda nada.
+ */
+export const ROOMS: { key: RoomShare; label: string; detail: string }[] = [
+  { key: 'shared', label: 'Dividindo o quarto', detail: 'um quarto (ou casa) para a turma, diária dividida' },
+  { key: 'private', label: 'Cada um no seu quarto', detail: 'um quarto por pessoa' },
+];
+export const PRIVATE_ROOM_FACTOR = 1.6;
+export const roomFactor = (room: RoomShare | null | undefined, people: number) => (room === 'private' && people >= 2 ? PRIVATE_ROOM_FACTOR : 1);
 
 /** Multiplica hospedagem sem preço e comida. */
 export const STYLE_FACTOR: Record<BudgetStyle, number> = { economico: 0.6, equilibrado: 1, conforto: 1.9 };
@@ -107,7 +119,7 @@ export function virtualLegs(b: Pick<TripBundle, 'trip' | 'stops' | 'transports'>
 const ppl = (b: Pick<TripBundle, 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }) => headcount(b);
 
 /** Calcula o previsto a partir do roteiro e do plano. `rates` converte preços em outra moeda. */
-export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | 'pace' | 'activities' | 'daily_food_cents' | 'transport_cents' | 'stay_estimates'>, rates: Rates = {}): PlanResult {
+export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | 'pace' | 'activities' | 'daily_food_cents' | 'transport_cents' | 'stay_estimates'> & Pick<Partial<BudgetPlan>, 'room'>, rates: Rates = {}): PlanResult {
   const people = ppl(b);
   const days = daysBetween(b.trip.start_date, b.trip.end_date) + 1;
   const nights = Math.max(0, days - 1);
@@ -139,6 +151,8 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
   for (const c of commuteLegs(b, plan)) { tr += c.perPersonCents; trEst += c.perPersonCents; }
 
   // Hospedagem: preço por noite da casa ÷ pessoas; parada com noites e sem preço → referência × estilo.
+  // Só as diárias ESTIMADAS acompanham "cada um no seu quarto"; preço informado ou reserva feita ficam como estão.
+  const room = roomFactor(plan.room, people);
   let st = 0;
   let stEst = 0;
   let stMissing = 0;
@@ -149,12 +163,12 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
     const total = stay ? itemCost(b, 'stay', stay.id, rates) : null;
     const range = plan.stay_estimates?.[s.id]?.[plan.style];
     if (range && stay?.status !== 'booked' && stay?.price_is_estimate !== false) {
-      const v = Math.round((range.low + range.high) / 2) * n;
+      const v = Math.round((range.low + range.high) / 2 * room) * n;
       st += v; stEst += v; continue;
     }
     if (total == null) {
       stMissing++;
-      const v = nightFor(plan.style) * n;
+      const v = Math.round(nightFor(plan.style) * room) * n;
       st += v;
       stEst += v;
     } else {
@@ -171,7 +185,7 @@ export function budgetFromPlan(b: TripBundle, plan: Pick<BudgetPlan, 'style' | '
   const uncoveredNights = Math.max(0, nights - covered);
   if (uncoveredNights > 0) {
     const known = Object.values(plan.stay_estimates ?? {}).map((x) => x[plan.style]).filter((x): x is { low: number; high: number } => !!x);
-    const night = known.length ? Math.round(known.reduce((a, r) => a + (r.low + r.high) / 2, 0) / known.length) : nightFor(plan.style);
+    const night = Math.round((known.length ? known.reduce((a, r) => a + (r.low + r.high) / 2, 0) / known.length : nightFor(plan.style)) * room);
     st += night * uncoveredNights;
     stEst += night * uncoveredNights;
   }
@@ -332,10 +346,10 @@ export interface StayOption {
 }
 
 /** Passo 2: as 3 opções de estilo, já com o total por pessoa (estadias com preço entram com o valor real). */
-export function stayOptions(b: TripBundle, rates: Rates = {}, plan?: Pick<BudgetPlan, 'stay_estimates'>): { options: StayOption[]; nights: number; fixed: number } {
+export function stayOptions(b: TripBundle, rates: Rates = {}, plan?: Pick<BudgetPlan, 'stay_estimates' | 'room'>): { options: StayOption[]; nights: number; fixed: number } {
   const options = STYLES.map((st) => {
     const r = budgetFromPlan(b, { ...plan, style: st.key, pace: 'moderado', activities: [], daily_food_cents: 0 }, rates);
-    return { ...st, nightCents: nightFor(st.key), perPersonCents: r.lines.find((l) => l.kind === 'hospedagem')!.perPersonCents };
+    return { ...st, nightCents: Math.round(nightFor(st.key) * roomFactor(plan?.room, r.people)), perPersonCents: r.lines.find((l) => l.kind === 'hospedagem')!.perPersonCents };
   });
   const nights = b.stops.reduce((a, s) => a + Math.max(0, daysBetween(s.arrival_date, s.departure_date)), 0);
   const fixed = b.stops.filter((s) => {
@@ -383,6 +397,7 @@ export function initialPlan(b: TripBundle, rates: Rates = {}): BudgetPlan {
   return {
     style: saved?.style ?? 'equilibrado',
     pace: saved?.pace ?? 'moderado',
+    room: saved?.room ?? 'shared',
     food,
     daily_food_cents: saved?.daily_food_cents ?? foodLevels()[food],
     // ids que sumiram (atividade apagada, sugestão dispensada) saem da seleção

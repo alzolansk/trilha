@@ -156,7 +156,7 @@ export function normalizeDetail(raw: RawDetail, ctx: { labels: string[]; currenc
     .map((f) => ({ trait: labels.get(fold(f.trait)) ?? '', text: clip(f.text, 240) }))
     .filter((f, i, a) => f.trait && f.text && fair(f.text) && a.findIndex((x) => x.trait === f.trait) === i)
     .slice(0, 4);
-  const center = raw.lat != null && raw.lng != null ? ([raw.lat, raw.lng] as [number, number]) : null;
+  const center = raw.lat != null && raw.lng != null && Math.abs(raw.lat) <= 90 && Math.abs(raw.lng) <= 180 ? ([raw.lat, raw.lng] as [number, number]) : null;
   const highlights: PlaceHighlight[] = (raw.highlights ?? [])
     .filter((h) => clip(h.name, 80) && ok(h.what))
     .slice(0, 5)

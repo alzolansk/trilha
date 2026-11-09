@@ -389,9 +389,13 @@ export type BudgetStyle = 'economico' | 'equilibrado' | 'conforto';
 export type BudgetPace = 'leve' | 'moderado' | 'intenso';
 export type BudgetFood = 'econ' | 'medio' | 'solto';
 /** Respostas do Orçamento em conversa, gravadas em trips.budget_plan. */
+/** Como a turma dorme: dividindo o quarto (diária dividida) ou cada um no seu quarto. */
+export type RoomShare = 'shared' | 'private';
 export interface BudgetPlan {
   style: BudgetStyle;
   pace: BudgetPace;
+  /** quarto dividido (padrão) ou um quarto por pessoa; muda só a hospedagem estimada */
+  room?: RoomShare | null;
   /** ids de atividades/sugestões que entram na conta de passeios */
   activities?: string[];
   /** diária de comida por pessoa, em centavos (estimativa confirmada pela turma) */

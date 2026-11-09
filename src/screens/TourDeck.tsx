@@ -2,9 +2,9 @@
 // Passo 5 do onboarding como baralho (planning §10.7): um passeio por vez, "quero" ou "pular",
 // arrastando a carta ou pelos botões/setas. As cartas de cada cidade acabam e entram as da próxima.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PhotoRef, TourIdea } from '../data/types';
-import { useResolvedPhoto } from '../data/usePhoto';
-import { Badge, EstimateBadge, Icon, Photo, type PhotoData } from '../components/ui';
+import type { TourIdea } from '../data/types';
+import { useActivityPhoto } from '../data/usePhoto';
+import { Badge, EstimateBadge, GoogleLink, Icon, Photo, type PhotoData } from '../components/ui';
 import { AI_STEPS, AiThinking } from '../components/ui/Loader';
 import s from './montar.module.css';
 
@@ -23,7 +23,8 @@ function TourCard({ card, money, recommended, wish, drag, leaving }: {
 }) {
   const t = card.idea;
   const name = t.title.replace(/^Bate-volta: /, '');
-  const photo = useResolvedPhoto(null, [`${name}, ${card.stop.name}`, t.photo_query ? `${t.photo_query}, ${card.stop.name}` : ''], true) as PhotoRef | null;
+  // O lugar do passeio (photo_query, ex.: "Murano") acha foto mais vezes que o título inteiro.
+  const photo = useActivityPhoto([t.photo_query, name], card.stop.name);
   const price = Math.round((t.cost_low + t.cost_high) / 2);
   const hint = leaving ?? (drag > 40 ? 'yes' : drag < -40 ? 'no' : null);
   return (
@@ -33,7 +34,10 @@ function TourCard({ card, money, recommended, wish, drag, leaving }: {
       <span className={s.stamp} data-show={hint === 'no'} data-kind="no" aria-hidden="true"><Icon name="close" size={18} />Pular</span>
       <div className={s.tourBody}>
         <span className={s.tourCity}><Icon name="pin" size={13} />{card.stop.name} · {card.index + 1} de {card.of}</span>
-        <h3 className={s.tourTitle}>{t.title}</h3>
+        <div className={s.tourHead}>
+          <h3 className={s.tourTitle}>{t.title}</h3>
+          <GoogleLink what={name} where={card.stop.name} />
+        </div>
         <div className={s.chips}>
           {wish ? <span className={s.origin} data-tone="ok"><Icon name="heart" size={13} />Seu pedido: {t.wish}</span> : null}
           {recommended && !wish ? <span className={s.origin} data-tone="brand"><Icon name="sparkle" size={13} />A Trilha recomenda</span> : null}

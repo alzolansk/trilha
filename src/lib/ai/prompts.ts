@@ -233,48 +233,69 @@ export const profileSchema = z.object({
 });
 
 /** Conteúdo da janela de um lugar (normalizado depois por lib/placeDetail.ts normalizeDetail). */
-export const placeDetailSchema = z.object({
-  name: z.string().min(2).max(80),
-  type: placeType,
-  parent: z.string().max(80).nullable().optional(),
-  country: z.string().min(2).max(60),
-  region: z.string().max(80).nullable().optional(),
-  lat: lat.nullable().optional(),
-  lng: lng.nullable().optional(),
-  summary: z.string().min(8).max(260),
-  why_go: z.array(z.string().min(20).max(600)).min(1).max(2),
-  fit: z.array(z.object({ trait: z.string().max(40), text: z.string().min(8).max(240) })).max(4).default([]),
-  for_whom: z.string().max(240).nullable().optional(),
-  caveats: z.array(z.string().min(6).max(200)).max(3).default([]),
-  time: z.object({
-    label: z.string().min(2).max(40),
-    options: z.array(z.object({ label: z.string().min(1).max(40), text: z.string().min(4).max(160), suggested: z.boolean().nullable().optional() })).max(3).default([]),
-    why: z.string().max(320),
-    stay_base: z.boolean().nullable().optional(),
+// Janela do lugar: schema TOLERANTE (ajuste de 09/11/2026). O estrito (tamanhos máximos, inteiros, listas com teto)
+// recusava quase toda resposta: um texto 5 caracteres maior ou um custo 12.5 derrubava a janela inteira e a pessoa
+// via "Não deu pra carregar os detalhes agora". Aqui só se exige o essencial (nome, resumo, por que vale); o resto
+// é aceito como vier e `normalizeDetail` corta no tamanho, tira itens ruins e limita as listas.
+const looseNum = z.preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.replace(',', '.')) : v), z.number().finite());
+const optNum = looseNum.nullish().catch(null);
+const optStr = z.preprocess((v) => (typeof v === 'number' ? String(v) : v), z.string().nullish()).catch(null);
+const reqStr = z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().min(1));
+/** Lista que aceita string solta (vira lista de um) e descarta só os itens inválidos, sem derrubar o resto. */
+function looseList<T extends z.ZodType>(item: T) {
+  return z.preprocess((v) => (v == null ? [] : Array.isArray(v) ? v : [v]), z.array(z.unknown()))
+    .catch([])
+    .transform((xs) => xs.flatMap((x) => { const r = item.safeParse(x); return r.success ? [r.data as z.output<T>] : []; }));
+}
+export const placeDetailSchema = z.preprocess(
+  // Alguns modelos embrulham a resposta: {"detail": {...}} ou {"place": {...}}.
+  (v) => (v && typeof v === 'object' && !Array.isArray(v) && !('summary' in v) && Object.keys(v).length === 1 ? Object.values(v)[0] : v),
+  z.object({
+    name: reqStr,
+    type: optStr,
+    parent: optStr,
+    country: optStr.transform((x) => x ?? ''),
+    region: optStr,
+    lat: optNum,
+    lng: optNum,
+    summary: reqStr,
+    why_go: looseList(reqStr),
+    fit: looseList(z.object({ trait: reqStr, text: reqStr })),
+    for_whom: optStr,
+    caveats: looseList(reqStr),
+    time: z.object({
+      label: optStr.transform((x) => x ?? ''),
+      options: looseList(z.object({ label: reqStr, text: reqStr, suggested: z.boolean().nullish().catch(null) })),
+      why: optStr.transform((x) => x ?? ''),
+      stay_base: z.boolean().nullish().catch(null),
+    }).catch({ label: '', options: [], why: '', stay_base: null }),
+    best_moment: optStr,
+    getting_around: optStr,
+    highlights: looseList(z.object({
+      name: reqStr,
+      scope: optStr,
+      what: reqStr,
+      why: optStr,
+      duration: optStr,
+      cost: optStr,
+      booking: optStr,
+      lat: optNum,
+      lng: optNum,
+    })),
+    visit: looseList(z.object({
+      when: reqStr, text: reqStr,
+      refs: looseList(looseNum.transform((n) => Math.round(n))),
+    })),
+    practical: z.object({
+      getting_there: optStr,
+      best_time: optStr,
+      costs: looseList(z.object({ item: reqStr, low: looseNum, high: looseNum, unit: optStr.transform((x) => x ?? '') })),
+      cost_note: optStr,
+      limits: looseList(reqStr),
+      check_at: optStr,
+    }).catch({ getting_there: null, best_time: null, costs: [], cost_note: null, limits: [], check_at: null }),
   }),
-  best_moment: z.string().max(60).nullable().optional(),
-  getting_around: z.string().max(60).nullable().optional(),
-  highlights: z.array(z.object({
-    name: z.string().min(2).max(80),
-    scope: z.enum(['especifico', 'amplo']).nullable().optional(),
-    what: z.string().min(6).max(220),
-    why: z.string().max(200).nullable().optional(),
-    duration: z.string().max(40).nullable().optional(),
-    cost: z.enum(['gratis', 'pago', 'varia']).nullable().optional(),
-    booking: z.string().max(80).nullable().optional(),
-    lat: lat.nullable().optional(),
-    lng: lng.nullable().optional(),
-  })).max(5).default([]),
-  visit: z.array(z.object({ when: z.string().min(2).max(30), text: z.string().min(4).max(180), refs: z.array(z.number().int()).max(5).default([]) })).max(5).default([]),
-  practical: z.object({
-    getting_there: z.string().max(320).nullable().optional(),
-    best_time: z.string().max(320).nullable().optional(),
-    costs: z.array(z.object({ item: z.string().min(2).max(60), low: money, high: money, unit: z.string().max(30) })).max(6).default([]),
-    cost_note: z.string().max(160).nullable().optional(),
-    limits: z.array(z.string().min(4).max(160)).max(4).default([]),
-    check_at: z.string().max(120).nullable().optional(),
-  }).default({ costs: [], limits: [] }),
-});
+);
 
 export const exploreStaySchema = z.object({
   areas: z.array(z.object({

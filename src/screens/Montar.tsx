@@ -18,7 +18,7 @@ import { parseProfile, placeLocation, takesNights } from '../lib/placeDetail';
 import { closeBudget } from '../data/budgetActions';
 import { humanError } from '../data/source';
 import { callAi, callAiOrError } from '../lib/ai/client';
-import { budgetFromPlan, budgetRange, capPerPerson, foodLevels, initialPlan, nightFor, tourOptions, transportLegs } from '../lib/budgetPlan';
+import { budgetFromPlan, budgetRange, capPerPerson, foodLevels, initialPlan, nightFor, roomFactor, ROOMS, STYLES as STAY_STYLES, tourOptions, transportLegs } from '../lib/budgetPlan';
 import { VIBES } from '../lib/discover';
 import { MODE_LABEL } from '../lib/format';
 import { formatMoney } from '../lib/money';
@@ -87,10 +87,21 @@ export default function Montar() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Grava o rascunho (e o que mais vier junto) e mantém o estado local igual ao banco. */
+  const latest = useRef(ob);
+  latest.current = ob;
   const persist = async (next: OnboardingState, extra: Record<string, unknown> = {}) => {
+    latest.current = next;
     setOb(next);
     await source.update('trips', b.trip.id, { onboarding: next, ...extra });
     await reload();
+  };
+  /**
+   * Guarda o detalhe de um lugar sobre o rascunho MAIS RECENTE: o detalhe pode chegar em segundo plano depois
+   * que a pessoa já mudou de passo, e gravar uma cópia antiga apagaria o que ela fez no passo seguinte.
+   */
+  const saveDetail = async (key: string, detail: PlaceDetail) => {
+    const cur = latest.current;
+    await persist({ ...cur, details: { ...(cur.details ?? {}), [key]: detail } });
   };
   const go = (n: OnboardingStep) => router.replace(`${base}/montar?passo=${n}`);
   const later = () => run(async () => {
@@ -107,7 +118,7 @@ export default function Montar() {
   // Navegação livre: qualquer passo já alcançado (e Passeios/Custo quando o roteiro já existe) pode ser reaberto.
   const reached = Math.max(ob.step, step);
   const canGo = (n: OnboardingStep) => n !== step && (n <= reached || (n >= 5 && b.stops.length > 0));
-  const common = { b, ob, persist, go, busy, run, money, online, manual };
+  const common = { b, ob, persist, saveDetail, go, busy, run, money, online, manual };
   return (
     <div className="wrap">
       <div className={s.page}>
@@ -139,6 +150,7 @@ interface StepProps {
   b: ReturnType<typeof useBundle>['bundle'];
   ob: OnboardingState;
   persist: (next: OnboardingState, extra?: Record<string, unknown>) => Promise<void>;
+  saveDetail: (key: string, detail: PlaceDetail) => Promise<void>;
   go: (n: OnboardingStep) => void;
   busy: boolean;
   run: ReturnType<typeof useAction>['run'];
@@ -164,7 +176,7 @@ function AiFailed({ fail, retry, manual }: { fail: NonNullable<AiFail>; retry: (
 function StepPrefs({ b, ob, persist, go, busy, run, me, online }: StepProps & { me: string }) {
   const { source } = useBundle();
   const people = headcount(b);
-  const [p, setP] = useState<OnboardingPrefs>(() => ob.prefs ?? {
+  const [p, setP] = useState<OnboardingPrefs>(() => ob.prefs ? { ...ob.prefs, stay: b.trip.budget_plan?.style ?? ob.prefs.stay } : {
     ...DEFAULT_PREFS,
     budget: b.trip.budget_total != null && Number(b.trip.budget_total) > 0 ? Math.round(Number(b.trip.budget_total) * 100 / people) / 100 : null,
   });
@@ -273,33 +285,66 @@ type DetailReq = { name: string; type?: PlaceType | null; parent?: string | null
 type Details = ReturnType<typeof usePlaceDetails>;
 
 /**
- * Conteúdo da janela de cada lugar (planning: recomendações pessoais), pedido quando a janela abre e guardado em
- * `onboarding.details` para a turma toda não pedir de novo.
+ * Conteúdo da janela de cada lugar (planning: recomendações pessoais), guardado em `onboarding.details` para a
+ * turma toda não pedir de novo. Desde 09/11/2026 os detalhes são buscados em segundo plano, um por vez, assim
+ * que a lista aparece (`prefetch`): ao abrir o lugar, ele já está pronto. Tocar num lugar ainda na fila pede na hora.
+ * A fila para depois de 2 falhas seguidas (IA fora ou cota): não gasta a cota diária à toa.
  */
-function usePlaceDetails(tripIdValue: string, ob: OnboardingState, persist: StepProps['persist'], online: boolean) {
+const PREFETCH_MAX = 8;
+function usePlaceDetails(tripIdValue: string, ob: OnboardingState, saveDetail: StepProps['saveDetail'], online: boolean) {
   const [details, setDetails] = useState<Record<string, PlaceDetail>>(ob.details ?? {});
   const [loading, setLoading] = useState<Set<string>>(new Set());
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const ref = useRef(details);
   const busy = useRef(new Set<string>());
-  const obRef = useRef(ob);
-  obRef.current = ob;
-  const load = async (req: DetailReq) => {
+  const queue = useRef<DetailReq[]>([]);
+  const queued = useRef(new Set<string>());
+  const pumping = useRef(false);
+  const fails = useRef(0);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  /** true quando o detalhe existe (já tinha, chegou agora ou outro pedido já está buscando). */
+  const load = async (req: DetailReq): Promise<boolean> => {
     const k = placeKey(req.name);
-    if (ref.current[k] || busy.current.has(k) || !online) return;
+    if (ref.current[k] || busy.current.has(k)) return true;
+    if (!online) return false;
     busy.current.add(k);
     setLoading((l) => new Set([...l, k]));
     setFailed((f) => { const n = new Set(f); n.delete(k); return n; });
     const r = await callAi<{ detail: PlaceDetail }>('explore', { kind: 'place_detail', tripId: tripIdValue, ...req });
     busy.current.delete(k);
     setLoading((l) => { const n = new Set(l); n.delete(k); return n; });
-    if (!r?.data?.detail) { setFailed((f) => new Set([...f, k])); return; }
-    const next = { ...ref.current, [k]: r.data.detail };
-    ref.current = next;
-    setDetails(next);
-    await persist({ ...obRef.current, details: next }).catch(() => undefined);
+    if (!r?.data?.detail) { setFailed((f) => new Set([...f, k])); return false; }
+    ref.current = { ...ref.current, [k]: r.data.detail };
+    setDetails(ref.current);
+    await saveDetail(k, r.data.detail).catch(() => undefined);
+    return true;
   };
-  return { details, loading, failed, load };
+  const pump = async () => {
+    if (pumping.current) return;
+    pumping.current = true;
+    while (alive.current && queue.current.length && fails.current < 2) {
+      const req = queue.current.shift()!;
+      fails.current = (await load(req)) ? 0 : fails.current + 1;
+    }
+    pumping.current = false;
+  };
+  /** Põe na fila os lugares ainda sem detalhe (na ordem pedida, até PREFETCH_MAX por tela). */
+  const prefetch = (reqs: DetailReq[]) => {
+    if (!online) return;
+    for (const r of reqs) {
+      const k = placeKey(r.name);
+      if (queued.current.size >= PREFETCH_MAX) break;
+      if (ref.current[k] || queued.current.has(k)) continue;
+      queued.current.add(k);
+      queue.current.push(r);
+    }
+    void pump();
+  };
+  return { details, loading, failed, load, prefetch };
 }
 
 /** Janela do lugar já ligada ao detalhe: pede o conteúdo ao abrir e mostra o que já se sabe enquanto isso. */
@@ -402,7 +447,7 @@ function NearbyCard({ n, mark, onMark, money, dt, profile, onTellUs }: {
   );
 }
 
-function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: StepProps) {
+function StepPlaces({ b, ob, persist, saveDetail, go, busy, run, money, online, manual }: StepProps) {
   const [fail, setFail] = useState<AiFail>(null);
   const [loading, setLoading] = useState(false);
   const [marks, setMarks] = useState<Record<string, PlaceMark>>(ob.marks ?? {});
@@ -411,7 +456,7 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
   const [extra, setExtra] = useState('');
   const asked = useRef(false);
   const places = ob.places;
-  const dt = usePlaceDetails(b.trip.id, ob, persist, online);
+  const dt = usePlaceDetails(b.trip.id, ob, saveDetail, online);
   const profile = parseProfile(ob.profile);
   const tellUs = () => go(2);
   const placesStale = !!ob.stale?.includes('places');
@@ -460,6 +505,20 @@ function StepPlaces({ b, ob, persist, go, busy, run, money, online, manual }: St
   useEffect(() => {
     if (!places && !asked.current && online) { asked.current = true; void fetchPlaces(); }
   }, [places, online]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Detalhes em segundo plano: indispensáveis primeiro, depois os "talvez" (pulados e os ainda sem resumo esperam).
+  useEffect(() => {
+    if (!places || loading || !online) return;
+    const pending = new Set(needsInfo(places.items).map(placeKey));
+    const rank = (n: string) => ({ must: 0, maybe: 1, skip: 2 }[marksRef.current[placeKey(n)] ?? 'maybe']);
+    dt.prefetch(places.items
+      .filter((p) => !pending.has(placeKey(p.name)) && rank(p.name) < 2)
+      .sort((x, y) => rank(x.name) - rank(y.name))
+      .map((p) => ({
+        name: p.name, type: p.type ?? (p.kind === 'experiencia' ? 'experiencia' : 'cidade'),
+        parent: p.parent ?? (p.kind === 'experiencia' ? p.base ?? null : null), country: p.country || null, near: null,
+      })));
+  }, [places, loading, online]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (fail) return <AiFailed fail={fail} retry={() => void fetchPlaces()} manual={manual} />;
   if (!places || loading) {
@@ -698,7 +757,7 @@ function StopCard({ st, i, count, dates, cost, money, places, marks, info, wishe
 
 type RouteSheetState = { type: 'stop'; name: string } | { type: 'trip'; stop: string; name: string } | { type: 'out'; name: string } | null;
 
-function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: StepProps) {
+function StepRoute({ b, ob, persist, saveDetail, go, busy, run, money, online, manual }: StepProps) {
   const { source, accent } = useBundle();
   const confirm = useConfirm();
   const [fail, setFail] = useState<AiFail>(null);
@@ -716,11 +775,18 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   const marks = ob.marks ?? {};
   const stale = ob.stale?.includes('route');
   const calls = ob.route_calls ?? 0;
-  const style = ob.prefs?.stay ?? b.trip.budget_plan?.style ?? 'equilibrado';
+  // O Orçamento (passo 6 ou Dinheiro) é quem manda no estilo e no quarto depois de escolhidos; o passo 2 grava nos dois.
+  const style = b.trip.budget_plan?.style ?? ob.prefs?.stay ?? 'equilibrado';
+  const room = roomFactor(b.trip.budget_plan?.room, headcount(b));
   const { info, load } = usePlaceInfo(b.trip.id, ob, persist, online);
-  const dt = usePlaceDetails(b.trip.id, ob, persist, online);
+  const dt = usePlaceDetails(b.trip.id, ob, saveDetail, online);
   const profile = parseProfile(ob.profile);
   const about = (name: string) => infoOf(name, places, info);
+  // Detalhes das paradas em segundo plano, na ordem da rota (a janela abre pronta).
+  useEffect(() => {
+    if (!route || !online) return;
+    dt.prefetch(route.stops.map((st) => ({ name: st.name, type: about(st.name).info?.type ?? places.items.find((p) => placeKey(p.name) === placeKey(st.name))?.type ?? 'cidade', parent: null, country: st.country ?? null, near: null })));
+  }, [route?.stops.map((x) => x.name).join('|'), online]); // eslint-disable-line react-hooks/exhaustive-deps
   // Detalhe não veio (cota, IA fora): o resumo curto com o que ver serve de reserva na janela.
   useEffect(() => {
     const want = [...dt.failed].map((k) => sheet && placeKey(sheet.name) === k ? sheet.name : null).filter((n): n is string => !!n && !about(n).detailed);
@@ -803,8 +869,8 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
   const dates = datesFor(route, b.trip.start_date);
   const fallbackNight = nightFor(style);
   const fallbackFood = foodLevels().medio;
-  const costs = route.stops.map((st) => stopCost(st, style, route.food_pp_day, fallbackNight, fallbackFood));
-  const total = routeCost(route, style, fallbackNight, fallbackFood);
+  const costs = route.stops.map((st) => stopCost(st, style, route.food_pp_day, fallbackNight, fallbackFood, room));
+  const total = routeCost(route, style, fallbackNight, fallbackFood, room);
   const legsTotal = total.legs;
   const mustNames = new Set(namesBy('must', places.items, places.nearby, marks).map(placeKey));
   // "Perto daqui" que a rota não usou (nem como parada, nem como bate-volta): atalho para incluir.
@@ -948,7 +1014,7 @@ function StepRoute({ b, ob, persist, go, busy, run, money, online, manual }: Ste
         {notFit ? <> <b>{notFit === 1 ? '1 pedido seu não coube' : `${notFit} pedidos seus não couberam`}</b>: veja abaixo o motivo e o que dá pra trocar.</> : null}
       </TrilhaBubble>
       <ChatOptions>
-        <section className={m.summary} aria-label="Resumo do roteiro">
+        <section className={`${m.summary} ${s.fixedSummary}`} aria-label="Resumo do roteiro">
           <div className={m.row}>
             <div><small>Roteiro</small><br /><strong>{route.stops.length} cidades · {nights} noites</strong></div>
             <div><small>Por pessoa</small><br /><b data-testid="route-total">≈ {money(total.total)}</b></div>
@@ -1228,10 +1294,13 @@ function StepCost({ b, ob, persist, busy, run, money, online, onDone }: StepProp
   const cuts = cap != null && range.mid > cap ? cutSuggestions(plan, tours, (p) => budgetFromPlan(b, { ...plan, ...p }).perPersonCents) : [];
   const daily = plan.daily_food_cents ?? 0;
   const styleName = { economico: 'hostel', equilibrado: 'pousada', conforto: 'hotel' }[plan.style];
+  const shared = (plan.room ?? 'shared') === 'shared';
+  const perNight = result.nights ? Math.round(line('hospedagem') / result.nights) : 0;
 
   const finish = (invite: boolean) => run(async () => {
     await closeBudget(source, b, plan, result, {});
-    await persist({ ...ob, status: 'concluido' });
+    // O que foi escolhido aqui vale também para o passo 2 e para o estilo da trilha (nada de "pousada" esquecida).
+    await persist({ ...ob, status: 'concluido', ...(ob.prefs ? { prefs: { ...ob.prefs, stay: plan.style } } : {}) }, { style: TRIP_STYLE_OF[plan.style] });
     if (invite) setInviting(true);
     else onDone();
   }, { success: 'Viagem montada. Tudo que é estimativa continua com o selo até alguém confirmar.' });
@@ -1254,12 +1323,23 @@ function StepCost({ b, ob, persist, busy, run, money, online, onDone }: StepProp
             {flights.length ? <div className={s.line}><span>Voo{flights.length > 1 ? 's' : ''} ({flights.length})</span><span>{money(sum(flights))}</span></div> : null}
             {ground.length ? <div className={s.line}><span>Trechos entre cidades · {ground.length}</span><span>{money(sum(ground))}</span></div> : null}
             {commute.length ? <div className={s.line}><span>Trajeto diário da cidade onde dormem · {commute.length}</span><span>{money(sum(commute))}</span></div> : null}
-            <div className={s.line}><span>Hospedagem · {result.nights} noites ({styleName})</span><span>{money(line('hospedagem'))}</span></div>
+            <div className={s.line}><span>Hospedagem · {result.nights} noites ({styleName}{result.people > 1 ? `, ${shared ? 'quarto dividido' : 'quartos individuais'}` : ''})</span><span>{money(line('hospedagem'))}</span></div>
             <div className={s.line}><span>Passeios{plan.activities ? ` · ${plan.activities.length}` : ''}</span><span>{money(line('passeios'))}</span></div>
             <div className={s.line}><span>Comida · {result.days} dias × {money(daily)}</span><span>{money(line('comida'))}</span></div>
           </div>
         </section>
         {legs.some((l) => l.perPersonCents == null) ? <p className={s.muted}>Alguns trechos ainda estão sem preço. Dá pra estimar depois em Dinheiro › Orçamento.</p> : null}
+        <section className={s.stayBox} aria-labelledby="stay-how">
+          <h2 id="stay-how" className={s.label}>Onde vocês dormem</h2>
+          <Segmented label="Tipo de hospedagem" value={plan.style} onChange={(style) => setPlan({ ...plan, style })} options={STAY_STYLES.map((x) => ({ value: x.key, label: x.label }))} block />
+          {result.people > 1 ? (
+            <Segmented label="Como dividem o quarto" value={plan.room ?? 'shared'} onChange={(room) => setPlan({ ...plan, room })} options={ROOMS.map((x) => ({ value: x.key, label: x.label }))} block />
+          ) : null}
+          <p className={s.muted}>
+            {perNight ? <>≈ <b>{money(perNight)}</b> por pessoa por noite{result.people > 1 ? <> · {shared ? <>quarto para {result.people} ≈ <b>{money(perNight * result.people)}</b> a noite</> : 'um quarto para cada um'}</> : null}. </> : null}
+            {STAY_STYLES.find((x) => x.key === plan.style)?.note}
+          </p>
+        </section>
         {cuts.length ? (
           <>
             <h2 className={s.label}>Pra caber no teto</h2>

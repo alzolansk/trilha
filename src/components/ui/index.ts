@@ -8,6 +8,7 @@ export { Chip, ChipGroup, type ChipOption } from './Chip';
 export { EmptyState } from './EmptyState';
 export { Field, FieldGrid } from './Field';
 export { ErrorBox } from './ErrorBox';
+export { GoogleLink } from './GoogleLink';
 export { ListRow } from './ListRow';
 export { Logo, LogoMark } from './Logo';
 export { TrailMark, PageLoader, TrailBar, LoadingDots, Busy, AiBusy, AiThinking, AI_STEPS } from './Loader';

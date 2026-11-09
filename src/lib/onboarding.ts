@@ -349,11 +349,12 @@ const midOf = (r: { low: number; high: number } | undefined | null) => (r ? Math
  * Quanto custa ficar na parada, por pessoa (planning §10.6): hospedagem no estilo escolhido, comida do país
  * e bate-voltas. Sem faixa da IA, usa a referência do estilo (`nightFor`) e a diária média de comida.
  */
-export function stopCost(stop: RouteStop, style: BudgetStyle, food: RouteProposal['food_pp_day'], fallbackNight: number, fallbackFood: number): StopCost {
+export function stopCost(stop: RouteStop, style: BudgetStyle, food: RouteProposal['food_pp_day'], fallbackNight: number, fallbackFood: number, room = 1): StopCost {
   const alt = stop.stay_at_alt && stop.stay_alt ? stop.stay_alt : null;
   const altNight = alt ? midOf(alt.stay_pp_night?.[style] ?? null) : null;
   const nightRange = altNight ?? midOf(stop.stay_pp_night?.[style] ?? null);
-  const stay = (nightRange ?? fallbackNight) * Math.max(0, stop.nights);
+  // `room`: multiplicador de "cada um no seu quarto" (roomFactor); 1 = quarto dividido.
+  const stay = Math.round((nightRange ?? fallbackNight) * room) * Math.max(0, stop.nights);
   const commute = alt ? commuteCost(alt, stop.nights) : 0;
   const country = food.find((f) => placeKey(f.country) === placeKey(stop.country)) ?? null;
   const day = country ? Math.round((country.low + country.high) / 2) : food.length ? Math.round(food.reduce((a, f) => a + (f.low + f.high) / 2, 0) / food.length) : fallbackFood;
@@ -393,10 +394,10 @@ export function keepStayChoices(next: RouteProposal, prev: RouteProposal | null 
 }
 
 /** Total por pessoa da rota proposta: ida, trechos, volta e o custo de cada parada. */
-export function routeCost(route: RouteProposal, style: BudgetStyle, fallbackNight: number, fallbackFood: number): { legs: number; stops: number; total: number; pendingLegs: number } {
+export function routeCost(route: RouteProposal, style: BudgetStyle, fallbackNight: number, fallbackFood: number, room = 1): { legs: number; stops: number; total: number; pendingLegs: number } {
   const all = [route.outbound, ...route.legs, route.return].filter((l): l is RouteLeg => !!l);
   const legs = all.reduce((a, l) => a + (mid(l) ?? 0), 0);
-  const stops = route.stops.reduce((a, st) => a + stopCost(st, style, route.food_pp_day, fallbackNight, fallbackFood).total, 0);
+  const stops = route.stops.reduce((a, st) => a + stopCost(st, style, route.food_pp_day, fallbackNight, fallbackFood, room).total, 0);
   return { legs, stops, total: legs + stops, pendingLegs: all.filter((l) => mid(l) == null).length };
 }
 

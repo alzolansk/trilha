@@ -6,10 +6,11 @@
 // Uma foto já mostrada para um lugar não aparece em outro (claimPhoto): nada de vários destinos com a mesma foto.
 import { useEffect, useState } from 'react';
 import type { PhotoRef } from './types';
-import { claimPhoto, fetchPhoto, fetchPlacePhoto, type PlacePhotoQuery } from '../lib/photos';
+import { claimPhoto, fetchActivityPhoto, fetchPhoto, fetchPlacePhoto, type PlacePhotoQuery } from '../lib/photos';
 import { useAuth } from './AuthContext';
 
-export function useResolvedPhoto(stored: PhotoRef | null | undefined, query: string | string[] | null | undefined, canResolve: boolean, onFound?: (p: PhotoRef) => void): PhotoRef | null {
+/** `activityIn`: é um passeio nessa cidade; sem página na Wikipedia, procura também nos arquivos do Commons. */
+export function useResolvedPhoto(stored: PhotoRef | null | undefined, query: string | string[] | null | undefined, canResolve: boolean, onFound?: (p: PhotoRef) => void, activityIn?: string | null): PhotoRef | null {
   const { online } = useAuth();
   // Chave estável: uma lista nova a cada render não pode disparar outra busca.
   const key = Array.isArray(query) ? query.filter(Boolean).join('|') : query ?? '';
@@ -19,7 +20,7 @@ export function useResolvedPhoto(stored: PhotoRef | null | undefined, query: str
     setFound(null);
     if (has || !key || !canResolve || !online) return;
     let alive = true;
-    void fetchPhoto(key.split('|')).then((p) => {
+    void (activityIn ? fetchActivityPhoto(key.split('|'), activityIn) : fetchPhoto(key.split('|'))).then((p) => {
       if (!alive || !p?.url) return;
       if (!claimPhoto(p.url, key.split('|')[0].toLowerCase())) return;
       setFound(p);
@@ -28,7 +29,7 @@ export function useResolvedPhoto(stored: PhotoRef | null | undefined, query: str
     return () => {
       alive = false;
     };
-  }, [has, key, canResolve, online]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [has, key, canResolve, online, activityIn]); // eslint-disable-line react-hooks/exhaustive-deps
   return has ? stored! : found;
 }
 
@@ -60,3 +61,24 @@ export function usePlacePhoto(q: PlacePhotoQuery | null, enabled = true): { phot
 
 /** Raio da conferência por tipo de lugar (km). */
 export const PHOTO_RADIUS: Record<string, number> = { cidade: 40, regiao: 120, bairro: 6, atracao: 3, experiencia: 60 };
+
+/** Foto de um passeio: página da Wikipedia e, de reserva, arquivos do Commons (fetchActivityPhoto). */
+export function useActivityPhoto(names: (string | null | undefined)[], city: string, enabled = true): PhotoRef | null {
+  const { online } = useAuth();
+  const key = JSON.stringify([city, ...names.filter(Boolean)]);
+  const [state, setState] = useState<{ key: string; photo: PhotoRef | null }>({ key: '', photo: null });
+  useEffect(() => {
+    if (!enabled || !online) return;
+    const [c, ...ns] = JSON.parse(key) as string[];
+    if (!ns.length) return;
+    let alive = true;
+    void fetchActivityPhoto(ns, c).then((p) => {
+      if (!alive) return;
+      setState({ key, photo: p?.url && claimPhoto(p.url, `act|${ns[0]}|${c}`.toLowerCase()) ? p : null });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [key, enabled, online]);
+  return state.key === key ? state.photo : null;
+}

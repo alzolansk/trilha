@@ -134,7 +134,7 @@ ${q.vibes?.length ? `A turma gosta de: ${q.vibes.join(', ')}.` : ''}
 ${q.pace ? `Ritmo da viagem: ${{ leve: 'calmo', moderado: 'equilibrado', intenso: 'ver tudo' }[q.pace]}.` : ''}
 ${q.wishes?.length ? `Desejos da turma (inclua um passeio para cada desejo que faça sentido NESTA cidade, e diga qual em "wish"): ${JSON.stringify(q.wishes)}.` : ''}
 Sugira até 8 passeios ou atrações (sem repetir o plano). "cost_low"/"cost_high" = custo aproximado por pessoa (0 e 0 se for grátis). "duration" = ex.: "2h", "meio dia", "dia inteiro".
-"tags" = só entre: natureza, cidade, praia, cultura, arte, comida, aventura, noturna, compras. "day_fit" = manha|tarde|noite|dia_todo. "photo_query" = nome da atração + cidade. "wish" = o desejo atendido, ou null.
+"tags" = só entre: natureza, cidade, praia, cultura, arte, comida, aventura, noturna, compras. "day_fit" = manha|tarde|noite|dia_todo. "photo_query" = o nome do LUGAR principal do passeio como aparece na Wikipedia (ex.: "Murano", "Ponte di Rialto", "Galleria degli Uffizi"), sem verbo e sem a cidade. "wish" = o desejo atendido, ou null.
 JSON: {"items":[{"title":"...","why":"...","duration":"...","cost_low":0,"cost_high":0,"tags":["..."],"day_fit":"manha","photo_query":"...","wish":null}]}`,
         (raw) => {
           const v = exploreActivitySchema.safeParse(raw);
@@ -431,11 +431,17 @@ Escreva a janela de decisão de "${q.name}"${where ? ` (${where})` : ''}. Ela re
 JSON: {"name":"...","type":"bairro","parent":"...","country":"...","region":"...","lat":0,"lng":0,"summary":"...","why_go":["..."],"fit":[{"trait":"...","text":"..."}],"for_whom":"...","caveats":["..."],"time":{"label":"...","options":[{"label":"...","text":"...","suggested":false}],"why":"...","stay_base":null},"best_moment":"...","getting_around":"...","highlights":[{"name":"...","scope":"especifico","what":"...","why":"...","duration":"...","cost":"gratis","booking":null,"lat":0,"lng":0}],"visit":[{"when":"...","text":"...","refs":[1]}],"practical":{"getting_there":"...","best_time":"...","costs":[{"item":"...","low":0,"high":0,"unit":"por pessoa"}],"cost_note":"...","limits":["..."],"check_at":null}}`,
     (raw) => {
       const v = placeDetailSchema.safeParse(raw);
-      if (!v.success) return null;
+      if (!v.success) {
+        // Diz o campo que falhou (o log antes só dizia "fora do formato" e não dava pra saber o porquê).
+        console.warn(`[ai] place_detail fora do schema: ${v.error.issues.slice(0, 3).map((i) => `${i.path.join('.') || '(raiz)'}: ${i.message}`).join('; ')}`);
+        return null;
+      }
       const d = normalizeDetail({ ...v.data, type: asPlaceType(v.data.type, asPlaceType(type)) }, { labels, currency: cur, fair });
+      if (!d.summary || !d.why_go.length) console.warn('[ai] place_detail sem resumo ou sem "por que vale"');
       return d.summary && d.why_go.length ? d : null;
     },
-    { maxTokens: 2600, temperature: 0.5 },
+    // Folga de saída: modelos com raciocínio (gpt-oss) gastam parte do limite pensando e cortavam o JSON no meio.
+    { maxTokens: 4500, temperature: 0.5 },
   );
   if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
   return NextResponse.json({ data: { detail: res.data, asked: q.name }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });

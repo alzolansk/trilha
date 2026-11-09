@@ -133,6 +133,8 @@
 .tourBody { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 18px; }
 .tourCity { display: inline-flex; align-items: center; gap: 4px; font: var(--t-micro); letter-spacing: .04em; text-transform: uppercase; color: var(--brand); }
 .tourTitle { margin: 0; font: var(--t-title); font-size: 22px; overflow-wrap: anywhere; }
+.tourHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tourHead .tourTitle { min-width: 0; }
 .tourPrice { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tourPrice small { font-size: 13px; font-weight: 500; color: var(--mute); }
 .stamp { position: absolute; top: 18px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 12px; border: 3px solid currentColor; background: rgba(255, 255, 255, .92); font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: .04em; opacity: 0; transform: scale(.8); transition: opacity 150ms, transform 150ms; }
@@ -199,6 +201,8 @@
 .linkBtn:hover { color: var(--brand); }
 .outWhy { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--sun-soft); color: var(--sun-ink); font-size: 14px; }
 .outWhy p { margin: 0; overflow-wrap: anywhere; }
+/* O resumo do roteiro fica no lugar (não acompanha a rolagem nem passa por baixo do mapa). */
+section.fixedSummary { position: static; }
 .mapBox { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 80px; }
 .mapLegend { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
 .mapLegend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -223,3 +227,7 @@
 .place .more { margin-top: -2px; }
 .stopTile { width: 104px; height: 84px; border-radius: var(--r-thumb); background: var(--field); color: var(--mute); display: flex; align-items: center; justify-content: center; }
 .note:has(button) { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--suggest-bg); color: var(--ink-2); }
+
+/* Passo 6: tipo de hospedagem e como a turma divide o quarto (ajuste de 09/11/2026). */
+.stayBox { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--surface); }
+.stayBox .label { margin: 0; }
