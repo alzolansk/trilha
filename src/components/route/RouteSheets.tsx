@@ -8,15 +8,18 @@ import { useDraft } from '../forms/useDraft';
 import { EstimateBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Busy } from '../ui/Loader';
+import { Icon } from '../ui/primitives';
 import { useAction, useConfirm } from '../ui/feedback';
 import { Field, FieldGrid } from '../ui/Field';
 import { formatMoneyTyping, parseMoneyInput } from '../ui/MoneyInput';
 import { Photo, type PhotoData } from '../ui/Photo';
 import { Sheet } from '../ui/Sheet';
 import { useAuth } from '../../data/AuthContext';
+import { saveActivityPlace } from '../../data/activityPlaces';
 import { acceptSuggestion, addStayOption } from '../../data/suggestionActions';
 import { useBundle } from '../../data/TripContext';
-import type { Activity, PhotoRef, Stay, Stop, Suggestion, Transport, TransportMode, TripBundle } from '../../data/types';
+import type { Activity, ActivityPlace, PhotoRef, Stay, Stop, Suggestion, Transport, TransportMode, TripBundle } from '../../data/types';
+import { pathLabel, placeOf } from '../../lib/activityPlace';
 import { callAi } from '../../lib/ai/client';
 import { currencyForCountry } from '../../lib/currency';
 import { dayWeekU, hhmm, MODE_LABEL } from '../../lib/format';
@@ -342,6 +345,10 @@ export function ActivitySheet({ stop, act, day, onClose }: { stop: Stop; act: Ac
     price: centsText(act?.cost_cents), currency: act?.cost_currency ?? b.trip.base_currency,
   });
   const priceChanged = v.price !== centsText(act?.cost_cents) || v.currency !== (act?.cost_currency ?? b.trip.base_currency);
+  // Lugar no mapa: `undefined` = não mexeu; objeto = escolhido na busca ou "tirar do mapa" ({ none: true }).
+  const [place, setPlace] = useState<ActivityPlace | undefined>(undefined);
+  const [placeText, setPlaceText] = useState('');
+  const current = place !== undefined ? (place.none ? null : place) : act ? placeOf(b, act) : null;
   const row = () => {
     const cents = parseMoneyInput(v.price);
     return {
@@ -349,13 +356,23 @@ export function ActivitySheet({ stop, act, day, onClose }: { stop: Stop; act: Ac
       ...(priceChanged || !act ? { cost_cents: cents, cost_currency: cents != null ? v.currency : null, cost_is_estimate: false } : {}),
     };
   };
+  // O lugar vai numa gravação separada: sem a migration 0012 o resto da atividade ainda salva.
+  const savePlace = async (id: string) => {
+    if (place !== undefined) await saveActivityPlace(source, id, place);
+  };
   const save = () =>
     run(async () => {
-      if (act) await source.update('activities', act.id, row(), act.version);
-      else await source.insert('activities', { ...row(), suggested_by: null, trip_id: b.trip.id, stop_id: stop.id, position: b.activities.filter((a) => a.stop_id === stop.id && a.day === v.day).length });
+      if (act) {
+        await source.update('activities', act.id, row(), act.version);
+        await savePlace(act.id);
+      } else {
+        const id = crypto.randomUUID();
+        await source.insert('activities', { ...row(), id, suggested_by: null, trip_id: b.trip.id, stop_id: stop.id, position: b.activities.filter((a) => a.stop_id === stop.id && a.day === v.day).length });
+        await savePlace(id);
+      }
       await reload();
       onClose();
-    }, { success: 'Plano atualizado.', onConflict: async () => { if (act) await source.update('activities', act.id, row()); await reload(); onClose(); } });
+    }, { success: 'Plano atualizado.', onConflict: async () => { if (act) { await source.update('activities', act.id, row()); await savePlace(act.id); } await reload(); onClose(); } });
   const del = async () => {
     if (!act || !(await confirm({ title: 'Remover atividade?', message: act.title }))) return;
     await run(() => source.remove('activities', { id: act.id }).then(reload).then(onClose), { success: 'Atividade removida.' });
@@ -374,6 +391,20 @@ export function ActivitySheet({ stop, act, day, onClose }: { stop: Stop; act: Ac
           hint={act?.cost_is_estimate && act.cost_cents != null && !priceChanged ? <span className={s.inline}><EstimateBadge /> estimado pela Trilha. Edite para confirmar.</span> : 'Deixe vazio se for grátis ou ainda não souber.'}
         />
         <Field label="Notas"><textarea rows={2} value={v.notes} maxLength={2000} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
+        <div className={s.placeNow}>
+          <span className={s.placeText}>
+            <Icon name="pin" size={16} />
+            {current
+              ? <span>No mapa: <b>{current.name ?? v.title}</b>{current.path?.length ? <> · trajeto {pathLabel(current.path)}</> : null}{current.by === 'ai' || current.by === 'route' ? <> <EstimateBadge /></> : null}</span>
+              : <span>Fora do mapa.</span>}
+          </span>
+          {current ? <Button size="sm" variant="ghost" onClick={() => setPlace({ none: true })}>Tirar do mapa</Button> : null}
+        </div>
+        <PlaceSearch
+          label={current ? 'Trocar o lugar no mapa (opcional)' : 'Lugar no mapa (opcional)'} value={placeText} placeholder="Ex.: Galleria degli Uffizi" enabled={source.kind === 'supabase'}
+          onText={setPlaceText}
+          onPick={(p) => { setPlaceText(p.name); setPlace({ name: p.name.slice(0, 80), lat: p.lat, lng: p.lng, path: null, by: 'osm' }); }}
+        />
       </div>
     </Sheet>
   );

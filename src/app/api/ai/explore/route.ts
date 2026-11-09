@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { aiConfigured, runWithFallback } from '@/lib/ai/providers';
-import { BASE_RULES, claimsAction, EXPLORE_RULES, exploreActivitySchema, exploreDestSchema, explorePlacesSchema, exploreRouteSchema, exploreStaySchema, placeDetailSchema, placeInfoSchema, profileSchema } from '@/lib/ai/prompts';
+import { BASE_RULES, claimsAction, EXPLORE_RULES, exploreActivitySchema, exploreDestSchema, explorePlacesSchema, exploreRouteSchema, exploreStaySchema, locateSchema, placeDetailSchema, placeInfoSchema, profileSchema } from '@/lib/ai/prompts';
 import type { NearbyIdea, PlaceIdea, PlaceInfo, RouteProposal } from '@/data/types';
 import { filterNearby, missingMust, mustForRoute, nightsOf, normalizeRoute, parseOnboarding, placeKey, splitFlights, stayAltSaving } from '@/lib/onboarding';
 import { asPlaceType, fitLabels, keepRealEvidence, normalizeDetail, parseProfile, profilePrompt } from '@/lib/placeDetail';
@@ -10,10 +10,13 @@ import { nightFor } from '@/lib/budgetPlan';
 import { headcount } from '@/lib/people';
 import { consumeQuota, handle, HttpError, loadTripForUser, readJson, requireUser, tripBrief } from '@/lib/ai/server';
 import { haversineKm } from '@/lib/derive';
+import { cleanPlace, needsLocate } from '@/lib/activityPlace';
 import { daysBetween } from '@/lib/time';
 
 // Sugestões do planejamento: destinos, passeios e bairros pra ficar. Só sugere;
 // nada é salvo aqui, e tudo volta marcado como estimativa da IA.
+/** Atividades localizadas por chamada (o app chama de novo se sobrar). */
+const LOCATE_MAX = 25;
 const reais = z.number().int().min(0).max(1_000_000).nullable().optional();
 const input = z.discriminatedUnion('kind', [
   z.object({
@@ -52,6 +55,8 @@ const input = z.discriminatedUnion('kind', [
     near: z.string().max(80).nullable().optional(),
   }),
   z.object({ kind: z.literal('stays'), tripId: z.string().uuid(), stopId: z.string().uuid(), nightlyCap: reais, budgetStyle: z.enum(['economico', 'equilibrado', 'conforto']).optional() }),
+  // Passeios no mapa: onde cada atividade acontece (e o trajeto, se for um percurso). Só devolve; quem grava é o app.
+  z.object({ kind: z.literal('locate'), tripId: z.string().uuid(), activityIds: z.array(z.string().uuid()).max(LOCATE_MAX).optional() }),
 ]);
 
 const fair = (s: string) => !claimsAction(s);
@@ -66,6 +71,10 @@ export async function POST(req: Request) {
     if (!aiConfigured().length) return NextResponse.json({ error: 'As sugestões precisam da IA, que não está configurada neste app.' }, { status: 503 });
     const { bundle, role } = await loadTripForUser(sb, user.id, q.tripId);
     if ((q.kind === 'places' || q.kind === 'route' || q.kind === 'profile') && role === 'viewer') throw new HttpError(403, 'Só quem edita a trilha monta o roteiro.');
+    if (q.kind === 'locate') {
+      if (role === 'viewer') throw new HttpError(403, 'Só quem edita a trilha põe os passeios no mapa.');
+      return locateActivities(q, bundle, sb);
+    }
     const { count } = await sb.from('trip_members').select('user_id', { count: 'exact', head: true }).eq('trip_id', q.tripId);
     // Pessoas na viagem: membros no app ou trips.party_size, o que for maior (planning §10.9).
     const people = headcount({ members: Array.from({ length: Math.max(1, count ?? 1) }) as never[], trip: bundle.trip });
@@ -445,4 +454,51 @@ JSON: {"name":"...","type":"bairro","parent":"...","country":"...","region":"...
   );
   if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
   return NextResponse.json({ data: { detail: res.data, asked: q.name }, by: 'ai', estimate: true, model: `${res.provider}:${res.model}` });
+}
+
+type LocateQ = { kind: 'locate'; tripId: string; activityIds?: string[] };
+
+/**
+ * Passeios no mapa: pergunta à IA onde cada atividade acontece e, quando é um percurso (trem panorâmico,
+ * barco, estrada cênica, bate-volta com várias paradas), o trajeto em ordem. O servidor descarta ponto
+ * ou trajeto a mais de 400 km da parada (lib/activityPlace.cleanPlace). Tudo volta como aproximado (by: 'ai');
+ * quem não é lugar volta como { none: true } para não ser perguntado de novo.
+ */
+async function locateActivities(q: LocateQ, bundle: Brief, sb: Parameters<typeof consumeQuota>[0]) {
+  const stops = bundle.stops ?? [];
+  const wanted = q.activityIds?.length ? new Set(q.activityIds) : null;
+  const pending = (bundle.activities ?? [])
+    .filter((a) => (wanted ? wanted.has(a.id) : needsLocate(a)) && stops.some((s) => s.id === a.stop_id))
+    .sort((x, y) => x.day.localeCompare(y.day) || x.position - y.position);
+  const list = pending.slice(0, LOCATE_MAX);
+  if (!list.length) return NextResponse.json({ data: { items: [], left: 0 } });
+  await consumeQuota(sb);
+  const stopOf = (id: string) => stops.find((s) => s.id === id)!;
+  const used = [...new Set(list.map((a) => a.stop_id))].map(stopOf);
+  const res = await runWithFallback(
+    'explore',
+    EXPLORE_RULES,
+    `Paradas da viagem: ${JSON.stringify(used.map((s) => ({ cidade: s.name, pais: s.country, lat: s.lat, lng: s.lng })))}.
+Atividades do roteiro (i = índice): ${JSON.stringify(list.map((a, i) => ({ i, atividade: a.title, cidade: stopOf(a.stop_id).name, notas: a.notes?.slice(0, 120) ?? null })))}.
+Para cada atividade, diga onde ela acontece, para mostrar num mapa:
+- "name" = o lugar principal, curto (ex.: "Galleria degli Uffizi", "Bernina Express", "Ilha de Murano").
+- "lat"/"lng" = coordenadas aproximadas do lugar principal. Bate-volta: o destino. Percurso: o ponto mais marcante do caminho.
+- "path" = SÓ quando a atividade é um percurso (trem panorâmico, barco, estrada cênica, trilha longa, bate-volta que passa por vários lugares): de 2 a 8 pontos em ordem, com nome e coordenadas aproximadas, começando de onde sai (a cidade da parada, se sair dela). Ex.: Bernina Express saindo de Milão → Milão, Tirano, Poschiavo, Alp Grüm, St. Moritz. Senão, null.
+- Atividade que não é um lugar (ex.: "tarde livre", "jantar", "chegada", "voo"): "lat" e "lng" null.
+JSON: {"items":[{"i":0,"name":"...","lat":0,"lng":0,"path":null}]}`,
+    (raw) => {
+      const v = locateSchema.safeParse(raw);
+      return v.success && v.data.items.length ? v.data.items : null;
+    },
+    { maxTokens: 2600, temperature: 0.2 },
+  );
+  if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
+  const items = list.map((a, i) => {
+    const r = res.data.find((x) => x.i === i);
+    if (!r) return null;
+    // Sem coordenadas (não é lugar) ou longe demais da parada (erro da IA): fica sem lugar, e a pessoa
+    // ainda pode escolher um na janela da atividade.
+    return { id: a.id, place: cleanPlace(r, stopOf(a.stop_id)) ?? { none: true, by: 'ai' as const } };
+  }).filter((x): x is NonNullable<typeof x> => !!x);
+  return NextResponse.json({ data: { items, left: Math.max(0, pending.length - list.length) }, by: 'ai', model: `${res.provider}:${res.model}` });
 }

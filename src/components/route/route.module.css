@@ -22,3 +22,7 @@
 .dayText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--mute); }
 .dayText b { font: 700 15px/1.3 var(--font-body); color: var(--ink); }
 .tagBrand { flex: none; padding: 4px 8px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-ink); font: 700 12px/1 var(--font-body); }
+/* Lugar da atividade no mapa (janela da atividade). */
+.placeNow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 10px 12px; border-radius: 14px; background: var(--field); font-size: 14px; }
+.placeText { flex: 1 1 240px; display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; }
+.placeText > svg { flex: none; margin-top: 2px; }

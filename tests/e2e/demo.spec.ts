@@ -357,6 +357,21 @@ test.describe('Roteiro e Parada (Fase 5)', () => {
     await expect(page.getByRole('region', { name: 'Mapa interativo das paradas' })).toBeVisible();
   });
 
+  test('mapa: passeio fora da cidade aparece com o trajeto e abre a atividade', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/demo/andes/roteiro');
+    const map = page.getByRole('region', { name: 'Mapa interativo das paradas' });
+    await expect(map.locator('.leaflet-marker-icon[title="Vale Sagrado: Pisac e Ollantaytambo"]')).toHaveCount(1);
+    // Passeio dentro da cidade só aparece de perto (não cobre o pino da parada).
+    await expect(map.locator('.leaflet-marker-icon[title^="San Blas"]')).toHaveCount(0);
+    await expect(page.getByText('trajeto de passeio')).toBeVisible();
+    await map.locator('.leaflet-marker-icon[title="Vale Sagrado: Pisac e Ollantaytambo"]').dispatchEvent('click');
+    const sheet = page.getByRole('dialog', { name: 'Atividade' });
+    await expect(sheet.getByText('Cusco → Pisac → Urubamba → Ollantaytambo')).toBeVisible();
+    await sheet.getByRole('button', { name: 'Tirar do mapa' }).click();
+    await expect(sheet.getByText('Fora do mapa.')).toBeVisible();
+  });
+
   test('parada: capa, fatos, bairro escolhido com Bom/Atenção e passeios', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/demo/andes/roteiro/${CUSCO}`);

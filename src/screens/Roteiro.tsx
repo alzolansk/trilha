@@ -10,7 +10,7 @@ import { ActivitySheet, AddStopSheet, ChooseDaySheet, EditStopSheet, TransportSh
 import { Badge, EstimateBadge } from '../components/ui/Badge';
 import { Button, IconButton } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
-import { useAction } from '../components/ui/feedback';
+import { useAction, useToast } from '../components/ui/feedback';
 import type { IconName } from '../components/ui/icons.data';
 import { ListRow } from '../components/ui/ListRow';
 import { Photo, type PhotoData } from '../components/ui/Photo';
@@ -19,9 +19,11 @@ import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { Segmented } from '../components/ui/Segmented';
 import { Sheet } from '../components/ui/Sheet';
 import { ScreenSkeleton } from '../components/ui/Skeleton';
+import { locateActivities } from '../data/activityPlaces';
 import { acceptSuggestion, voteSuggestions } from '../data/suggestionActions';
 import { useBundle } from '../data/TripContext';
 import type { Activity, Stop, Suggestion, Transport, TransportMode, TripBundle } from '../data/types';
+import { activityMarks, needsLocate, placeOf } from '../lib/activityPlace';
 import { sortedStops, stopNights, straightKm } from '../lib/derive';
 import { activityCapForStop } from '../lib/explore';
 import { dateSpan, hhmm } from '../lib/format';
@@ -119,12 +121,25 @@ function RouteList() {
     ? [`${totalDays} dias`, `${stops.length} ${stops.length === 1 ? 'parada' : 'paradas'}`, waiting ? `${waiting} ${waiting === 1 ? 'sugestão esperando' : 'sugestões esperando'}` : null].filter(Boolean).join(' · ')
     : 'Nenhuma parada ainda.';
   const km = straightKm(stops);
+  // Passeios no mapa: pino, trajeto (trem panorâmico, barco) e ligação com a parada de onde saem.
+  const marks = useMemo(() => activityMarks(b), [b]);
+  const openAct = (id: string) => {
+    const a = b.activities.find((x) => x.id === id);
+    const st = a ? stops.find((x) => x.id === a.stop_id) : null;
+    if (a && st) setOpen({ kind: 'act', stop: st, act: a });
+  };
   const mapNote = (
-    <p className={s.mapNote}>
-      A linha liga as paradas em ordem e não é o trajeto real.
-      {km.km > 0 ? ` ${km.km.toLocaleString('pt-BR')} km em linha reta${km.complete ? '' : ' (só entre paradas com coordenadas)'}.` : ''}
-      {stops.some((x) => x.lat == null) ? ' Paradas sem coordenadas não aparecem: edite a parada e escolha o lugar na busca.' : ''}
-    </p>
+    <>
+      <MapLegend marks={marks} />
+      <p className={s.mapNote}>
+        A linha liga as paradas em ordem e não é o trajeto real.
+        {km.km > 0 ? ` ${km.km.toLocaleString('pt-BR')} km em linha reta${km.complete ? '' : ' (só entre paradas com coordenadas)'}.` : ''}
+        {marks.some((m) => m.path && m.by === 'ai') ? ' Trajetos de passeio são aproximados (estimados pela Trilha).' : ''}
+        {marks.some((m) => !m.far) ? ' Aproxime o mapa para ver os passeios dentro de cada cidade.' : ''}
+        {stops.some((x) => x.lat == null) ? ' Paradas sem coordenadas não aparecem: edite a parada e escolha o lugar na busca.' : ''}
+      </p>
+      {canEdit ? <LocateActivities /> : null}
+    </>
   );
 
   return (
@@ -144,7 +159,7 @@ function RouteList() {
         />
       ) : vista === 'mapa' && !wide ? (
         <section className={s.mapFull} aria-label="Mapa da trilha">
-          <RouteMap stops={stops} accent={accent} height="calc(100dvh - 300px)" onOpen={openStop} focusId={focus} />
+          <RouteMap stops={stops} activities={marks} accent={accent} height="calc(100dvh - 300px)" onOpen={openStop} onOpenActivity={openAct} focusId={focus} />
           {mapNote}
         </section>
       ) : (
@@ -187,7 +202,7 @@ function RouteList() {
             </div>
             {wide ? (
               <aside className={s.aside} aria-label="Mapa da trilha">
-                <RouteMap stops={stops} accent={accent} height="min(70vh, 640px)" onOpen={openStop} focusId={focus} />
+                <RouteMap stops={stops} activities={marks} accent={accent} height="min(70vh, 640px)" onOpen={openStop} onOpenActivity={openAct} focusId={focus} />
                 {mapNote}
               </aside>
             ) : null}
@@ -202,6 +217,47 @@ function RouteList() {
       {open?.kind === 'edit' ? <EditStopSheet stop={open.stop} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'choose' ? <ChooseDaySheet suggestion={open.sg} stop={open.stop} initial={open.day} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'menu' ? <StopMenu stop={open.stop} stops={stops} base={base} onClose={() => setOpen(null)} onEdit={() => setOpen({ kind: 'edit', stop: open.stop })} onTransport={() => setOpen({ kind: 'transport', stop: open.stop })} /> : null}
+    </div>
+  );
+}
+
+/** Legenda do mapa: só o que está desenhado. */
+function MapLegend({ marks }: { marks: ReturnType<typeof activityMarks> }) {
+  if (!marks.length) return null;
+  return (
+    <div className={s.legend} aria-hidden="true">
+      <span><i data-k="stop" />paradas</span>
+      <span><i data-k="act" />passeios</span>
+      {marks.some((m) => m.path) ? <span><i data-k="path" />trajeto de passeio</span> : null}
+      {marks.some((m) => m.far) ? <span><i data-k="link" />saindo da parada</span> : null}
+    </div>
+  );
+}
+
+/**
+ * "Pôr passeios no mapa": a IA diz onde cada atividade acontece (e o trajeto, se for um percurso) e o app
+ * grava em activities.place. Aparece só para quem edita e só quando há atividade ainda não procurada.
+ */
+function LocateActivities() {
+  const { bundle: b, source, reload } = useBundle();
+  const { run, busy } = useAction();
+  const toast = useToast();
+  const pending = b.activities.filter(needsLocate);
+  if (!pending.length || source.kind === 'demo') return null;
+  const offMap = pending.filter((a) => !placeOf(b, a)).length;
+  const go = () => run(async () => {
+    const r = await locateActivities(source, b.trip.id);
+    await reload();
+    toast(r.placed
+      ? `${r.placed} ${r.placed === 1 ? 'passeio entrou' : 'passeios entraram'} no mapa${r.none ? `; ${r.none} não ${r.none === 1 ? 'é um lugar' : 'são lugares'} (ex.: tarde livre)` : ''}.`
+      : 'Nenhum passeio novo com lugar no mapa. Dá pra escolher o lugar na janela da atividade.');
+  });
+  return (
+    <div className={s.locate}>
+      <span>
+        {offMap ? `${offMap} ${offMap === 1 ? 'passeio ainda não aparece' : 'passeios ainda não aparecem'} no mapa.` : 'A Trilha pode desenhar o trajeto dos passeios (trem panorâmico, barco, bate-volta).'}
+      </span>
+      <Button size="sm" variant="secondary" icon="pin" onClick={() => void go()} disabled={busy}>{busy ? 'Procurando…' : 'Pôr passeios no mapa'}</Button>
     </div>
   );
 }

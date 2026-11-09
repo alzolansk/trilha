@@ -217,6 +217,21 @@ export const placeInfoSchema = z.object({
   })).min(1).max(8),
 });
 
+/**
+ * Passeios no mapa (ajuste de 09/11): onde cada atividade do roteiro acontece e, quando é um percurso,
+ * o trajeto em ordem. Coordenadas nulas = não é um lugar ("tarde livre"). O servidor confere a distância.
+ */
+const coordOrNull = (max: number) => z.number().min(-max).max(max).nullable().optional();
+export const locateSchema = z.object({
+  items: z.array(z.object({
+    i: z.number().int().min(0).max(99),
+    name: z.string().max(80).nullable().optional(),
+    lat: coordOrNull(90),
+    lng: coordOrNull(180),
+    path: z.array(z.object({ name: z.string().max(80).nullable().optional(), lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).max(12).nullable().optional(),
+  })).max(40),
+});
+
 /** Perfil da viagem a partir do texto livre do passo 2. */
 export const profileSchema = z.object({
   summary: z.string().min(10).max(320),

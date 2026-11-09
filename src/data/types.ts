@@ -553,6 +553,29 @@ export interface Activity extends Versioned {
   cost_currency?: string | null;
   cost_is_estimate?: boolean;
   photo?: PhotoRef | null;
+  /** onde o passeio acontece, para o mapa (migration 20261109000012). Ver lib/activityPlace.ts */
+  place?: ActivityPlace | null;
+}
+
+/** Ponto de um trajeto de passeio (trem panorâmico, barco, estrada cênica). */
+export interface PathPoint {
+  name: string;
+  lat: number;
+  lng: number;
+}
+/**
+ * Lugar de uma atividade no mapa. `none` = já se procurou e não é um lugar (ex.: "tarde livre"), para
+ * não perguntar de novo. `path` = trajeto aproximado, em ordem; `undefined` = ainda não se procurou
+ * um trajeto (ponto vindo da rota do onboarding), `null` = não é um percurso.
+ */
+export interface ActivityPlace {
+  name?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  path?: PathPoint[] | null;
+  /** de onde veio: IA (aproximado), busca do OpenStreetMap ou a rota do onboarding */
+  by?: 'ai' | 'osm' | 'route';
+  none?: boolean;
 }
 
 export interface DocumentRow extends Versioned {

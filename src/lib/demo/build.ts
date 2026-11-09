@@ -1,7 +1,7 @@
 // Converte os dados FICTÍCIOS do protótipo em TripBundle, para a área de demonstração/QA.
 // Nada daqui é gravado no banco nem misturado com viagens reais.
 import type {
-  Activity, BudgetCategory, BudgetPlan, DocCategory, DocumentRow, Expense, ExpenseShare, InspirationValue, InspirationVote, JournalEntry, Member,
+  Activity, ActivityPlace, BudgetCategory, BudgetPlan, DocCategory, DocumentRow, Expense, ExpenseShare, InspirationValue, InspirationVote, JournalEntry, Member,
   PackingCategory, PackingItem, Poll, PollOption, PollVote, PoolContribution, Profile, Stay, Stop, Suggestion, SuggestionPayload, Task, Transport,
   TransportMode, Trip, TripBundle, TripPreference,
 } from '../../data/types';
@@ -23,6 +23,27 @@ const COORDS: Record<string, [number, number]> = {
   Marrakech: [31.629, -7.981], 'Aït Benhaddou': [31.047, -7.13], Merzouga: [31.08, -4.013], Fez: [34.033, -5.0],
   Chefchaouen: [35.171, -5.27], Reykjavík: [64.146, -21.942], Vík: [63.419, -19.006], Höfn: [64.25, -15.21],
   'Jökulsárlón': [64.048, -16.179], Akureyri: [65.683, -18.09],
+};
+
+/** Passeios da demonstração com lugar e trajeto (aproximados), para o mapa mostrar bate-voltas e percursos. */
+const ACT_PLACE: Record<string, [RegExp, ActivityPlace][]> = {
+  andes: [
+    [/San Blas/, { name: 'San Blas', lat: -13.5155, lng: -71.9762, path: null, by: 'ai' }],
+    [/Vale Sagrado/, {
+      name: 'Vale Sagrado', lat: -13.305, lng: -72.116, by: 'ai',
+      path: [{ name: 'Cusco', lat: -13.532, lng: -71.967 }, { name: 'Pisac', lat: -13.422, lng: -71.857 }, { name: 'Urubamba', lat: -13.305, lng: -72.116 }, { name: 'Ollantaytambo', lat: -13.258, lng: -72.263 }],
+    }],
+    [/Montanha Colorida/, { name: 'Vinicunca (Montanha Colorida)', lat: -13.869, lng: -71.303, path: null, by: 'ai' }],
+    [/^21 .*Trem/, {
+      name: 'Trem pelo Vale Sagrado', lat: -13.19, lng: -72.43, by: 'ai',
+      path: [{ name: 'Ollantaytambo', lat: -13.258, lng: -72.263 }, { name: 'Km 104', lat: -13.19, lng: -72.43 }, { name: 'Aguas Calientes', lat: -13.155, lng: -72.525 }],
+    }],
+    [/Uros/, { name: 'Ilhas flutuantes dos Uros', lat: -15.818, lng: -69.969, path: null, by: 'ai' }],
+    [/Taquile/, {
+      name: 'Taquile e Amantaní', lat: -15.773, lng: -69.686, by: 'ai',
+      path: [{ name: 'Puno', lat: -15.84, lng: -70.022 }, { name: 'Uros', lat: -15.818, lng: -69.969 }, { name: 'Taquile', lat: -15.773, lng: -69.686 }, { name: 'Amantaní', lat: -15.66, lng: -69.72 }],
+    }],
+  ],
 };
 
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -181,6 +202,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
         day: m ? `${a.slice(0, 8)}${m[1].padStart(2, '0')}` : addDays(a, Math.min(j, Math.max(0, s.n - 1))),
         time: null, title: m ? m[2] : p, notes: null, position: j, suggested_by: null, from_entry_id: null, from_poll_id: null,
         cost_cents: cost != null ? cost * 100 : null, cost_currency: cost != null ? 'BRL' : null, cost_is_estimate: true, photo: null,
+        place: ACT_PLACE[key]?.find(([re]) => re.test(p))?.[1] ?? null,
       });
     });
   });

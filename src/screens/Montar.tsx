@@ -9,6 +9,7 @@ import type {
   BudgetPace, BudgetPlan, BudgetStyle, NearbyIdea, OnboardingPrefs, OnboardingState, OnboardingStep, PlaceDetail, PlaceIdea, PlaceInfo, PlaceMark,
   PlaceType, RouteLeg, RouteStop, RouteProposal, TourIdea, TransportMode, TravelProfile,
 } from '../data/types';
+import { locateActivities } from '../data/activityPlaces';
 import { useBundle } from '../data/TripContext';
 import { useAuth } from '../data/AuthContext';
 import { PHOTO_RADIUS, usePlacePhoto } from '../data/usePhoto';
@@ -1230,6 +1231,9 @@ function StepTours({ b, ob, persist, go, busy, run, money }: StepProps) {
     const plan: BudgetPlan = { ...(b.trip.budget_plan ?? { style: prefs.stay, pace: prefs.pace }), activities: skip ? undefined : ids };
     await persist({ ...ob, step: 6, tours, tour_pick: [...pick], tour_decisions: decisions, tours_applied: true }, { budget_plan: plan });
     await reload();
+    // Passeios no mapa: em segundo plano, a IA diz onde cada passeio acontece (e o trajeto do bate-volta).
+    // Falhou (sem IA, sem a migration 0012)? Tudo bem: o Roteiro oferece "Pôr passeios no mapa".
+    if (ids.length) void locateActivities(source, b.trip.id).then(reload, () => undefined);
     go(6);
   });
 

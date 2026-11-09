@@ -1,7 +1,10 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
+import type { ActivityMark } from '../../lib/activityPlace';
+import { dayWeekU } from '../../lib/format';
 import { fgOn } from '../../lib/identity/contrast';
+import { ICONS } from '../ui/icons.data';
 
 /** Ponto numerado da rota: uma parada gravada (`Stop`) ou uma parada da proposta do onboarding. */
 export interface MapStop {
@@ -27,6 +30,9 @@ export interface MapExtra {
 }
 
 const NO_EXTRAS: MapExtra[] = [];
+const NO_ACTS: ActivityMark[] = [];
+/** Zoom a partir do qual os passeios dentro da cidade aparecem (de longe eles cobririam o pino da parada). */
+export const NEAR_ZOOM = 11;
 const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
@@ -34,9 +40,12 @@ const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
  * da trilha (`accent`) e linha brand. A linha liga as paradas em ordem e NÃO é o trajeto real por estrada.
  * Tocar num pino chama `onOpen` (abre a parada); num ponto extra, `onOpenExtra`.
  */
-export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = 'min(60vh, 520px)', onOpen, onOpenExtra, focusId, label = 'Mapa interativo das paradas' }: {
+export default function RouteMap({ stops, extras = NO_EXTRAS, activities = NO_ACTS, accent, height = 'min(60vh, 520px)', onOpen, onOpenExtra, onOpenActivity, focusId, label = 'Mapa interativo das paradas' }: {
   stops: MapStop[];
   extras?: MapExtra[];
+  /** passeios do roteiro com lugar (lib/activityPlace.activityMarks): pino, trajeto e ligação com a parada */
+  activities?: ActivityMark[];
+  onOpenActivity?: (id: string) => void;
   accent: string;
   height?: string;
   onOpen?: (stopId: string) => void;
@@ -50,6 +59,8 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
   openRef.current = onOpen;
   const extraRef = useRef(onOpenExtra);
   extraRef.current = onOpenExtra;
+  const actRef = useRef(onOpenActivity);
+  actRef.current = onOpenActivity;
   useEffect(() => {
     let map: import('leaflet').Map | null = null;
     let alive = true;
@@ -101,6 +112,49 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
         });
       }
 
+      // Passeios: trajeto em linha cheia (cor da trilha com contorno branco), ligação pontilhada da parada
+      // até o passeio fora da cidade e um pino pequeno. Os de dentro da cidade só aparecem de perto.
+      const nearLayer = L.layerGroup();
+      const glyph = ICONS.ticket;
+      for (const a of activities) {
+        const layer: import('leaflet').Map | import('leaflet').LayerGroup = a.far ? map : nearLayer;
+        const open = () => actRef.current?.(a.id);
+        const where = a.pathLabel || a.place;
+        const tip = `<b>${esc(a.title)}</b><br><small>${esc(dayWeekU(a.day))}${where ? ` · ${esc(where)}` : ''}</small>`;
+        const home = pts.find((s) => s.id === a.stopId);
+        const start: [number, number] = a.path?.[0] ?? [a.lat, a.lng];
+        if (home && a.far) L.polyline([[home.lat as number, home.lng as number], start], { color: accent, weight: 2, opacity: 0.7, dashArray: '1 6', interactive: false }).addTo(layer);
+        if (a.path) {
+          L.polyline(a.path, { color: '#fff', weight: 8, opacity: 0.95, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(layer);
+          const line = L.polyline(a.path, { color: accent, weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(layer);
+          line.bindTooltip(`<b>${esc(a.title)}</b><br><small>${esc(a.pathLabel)}</small>`, { sticky: true });
+          line.on('click', open);
+          a.path.forEach((pt, i) => {
+            const c = L.circleMarker(pt, { radius: i === 0 || i === a.path!.length - 1 ? 4 : 3, color: accent, weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(layer);
+            const name = a.pathNames[i];
+            if (name) c.bindTooltip(esc(name), { direction: 'top' });
+          });
+        }
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:26px;height:26px;border-radius:9px;background:#fff;border:2.5px solid ${accent};color:${accent};display:grid;place-items:center;box-sizing:border-box;box-shadow:0 2px 8px rgba(13,16,23,.25)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${glyph}</svg></div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        });
+        const m = L.marker([a.lat, a.lng], { icon, title: a.title, alt: `Passeio: ${a.title}`, keyboard: true, zIndexOffset: 300 }).addTo(layer);
+        m.bindTooltip(tip, { direction: 'top', offset: [0, -13] });
+        m.on('click', open);
+        m.on('keypress', (e: { originalEvent?: KeyboardEvent }) => {
+          if (e.originalEvent?.key === 'Enter') open();
+        });
+      }
+      const syncNear = () => {
+        if (!map) return;
+        if (map.getZoom() >= NEAR_ZOOM) nearLayer.addTo(map);
+        else nearLayer.remove();
+      };
+      map.on('zoomend', syncNear);
+
       pts.forEach((s) => {
         const i = stops.indexOf(s);
         const big = s.id === focusId;
@@ -119,15 +173,21 @@ export default function RouteMap({ stops, extras = NO_EXTRAS, accent, height = '
         });
       });
       // Enquadra a rota e os bate-voltas; um lugar de fora em destaque entra no quadro (mostra o quanto foge da rota).
-      const frame = [...latlngs, ...extras.filter((x) => x.kind !== 'out').map((x) => [x.lat, x.lng] as [number, number])];
+      // Passeios fora da cidade (e o trajeto inteiro deles) também entram no quadro.
+      const frame = [
+        ...latlngs,
+        ...extras.filter((x) => x.kind !== 'out').map((x) => [x.lat, x.lng] as [number, number]),
+        ...activities.filter((a) => a.far).flatMap((a) => [[a.lat, a.lng] as [number, number], ...(a.path ?? [])]),
+      ];
       if (focusExtra) frame.push([focusExtra.lat, focusExtra.lng]);
       if (frame.length) map.fitBounds(L.latLngBounds(frame).pad(0.2), { maxZoom: 9 });
       else map.setView([0, 0], 2);
+      syncNear();
     })();
     return () => {
       alive = false;
       map?.remove();
     };
-  }, [stops, extras, accent, focusId]);
+  }, [stops, extras, activities, accent, focusId]);
   return <div ref={el} style={{ height, width: '100%', borderRadius: 'var(--r-card)', overflow: 'hidden', background: 'var(--field)' }} role="region" aria-label={label} />;
 }
