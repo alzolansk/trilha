@@ -1,0 +1,6 @@
+.track { position: relative; width: 100%; border-radius: 999px; overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; transition: width 240ms var(--ease); }
+.segs { display: flex; height: 100%; gap: 2px; }
+.segs i { display: block; height: 100%; transition: width 240ms var(--ease); }
+.segs i:first-child { border-radius: 999px 0 0 999px; }
+.segs i:last-child { border-radius: 0 999px 999px 0; }

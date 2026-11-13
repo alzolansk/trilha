@@ -1,11 +1,8 @@
 'use client';
-import { useEffect, useId, useMemo, useRef } from 'react';
-import { patternSvg } from '../../lib/identity/render';
-import type { DestinationIdentity } from '../../lib/identity/types';
-import { initials } from '../../lib/format';
+import { useEffect } from 'react';
 import { ICONS, type IconName } from './icons.data';
 
-export function Icon({ name, size = 20, sw = 1.8, fill = 'none', className }: { name: IconName; size?: number; sw?: number; fill?: string; className?: string }) {
+export function Icon({ name, size = 20, sw = 2, fill = 'none', className }: { name: IconName; size?: number; sw?: number; fill?: string; className?: string }) {
   return (
     <svg
       aria-hidden="true"
@@ -47,73 +44,7 @@ export function AiTag({ by = 'ai', solid = false }: { by?: 'ai' | 'rules'; solid
   );
 }
 
-export function Pattern({ identity, opacity, style }: { identity: DestinationIdentity; opacity?: number; style?: React.CSSProperties }) {
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const html = useMemo(() => patternSvg(identity, uid), [identity, uid]);
-  return <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity, ...style }} dangerouslySetInnerHTML={{ __html: html }} />;
-}
-
-export function Marquee({ words }: { words: string[] }) {
-  if (!words.length) return null;
-  const w = [...words, ...words, ...words];
-  return (
-    <div className="marquee" aria-hidden="true">
-      <div className="marquee-in">
-        {w.map((x, i) => (
-          <span key={i}>
-            {x}
-            <i />
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export type FloatSpot = [left: string, top: string, size: number, color: 'acc' | 'acc2' | 'acc3', opacity: number, speed: number];
-export const PAGE_FLOAT: FloatSpot[] = [
-  ['-60px', '160px', 160, 'acc2', 0.55, -0.25],
-  ['88%', '420px', 110, 'acc', 0.5, 0.15],
-  ['6%', '1100px', 90, 'acc3', 0.45, -0.2],
-  ['80%', '1500px', 180, 'acc2', 0.35, -0.3],
-  ['42%', '760px', 60, 'acc', 0.5, 0.2],
-];
-
-/** Motifs flutuantes de fundo com parallax (máx. 5 por página, SPEC §7). */
-export function Floaters({ spots = PAGE_FLOAT }: { spots?: FloatSpot[] }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const items = Array.from(el.querySelectorAll<HTMLElement>('.floater'));
-    let ticking = false;
-    const run = () => {
-      ticking = false;
-      const s = window.scrollY;
-      for (const f of items) f.style.transform = `translateY(${Math.round(s * Number(f.dataset.speed))}px)`;
-    };
-    const on = () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(run);
-      }
-    };
-    window.addEventListener('scroll', on, { passive: true });
-    run();
-    return () => window.removeEventListener('scroll', on);
-  }, []);
-  return (
-    <div className="floaters" aria-hidden="true" ref={ref}>
-      {spots.slice(0, 5).map((f, i) => (
-        <div key={i} className="floater" data-speed={f[5]} style={{ left: f[0], top: f[1], width: f[2], height: f[2] }}>
-          <i style={{ background: `var(--${f[3]})`, opacity: f[4], animationDelay: `-${i * 1.7}s`, animationDuration: `${7 + (i % 4)}s` }} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Revela elementos .rv uma única vez ao entrarem na tela (SPEC §10). */
+/** @deprecated reveal da fase rústica; no visual novo `.rv` já aparece direto. Sai com as telas antigas. */
 export function useReveal(deps: unknown[] = []) {
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>('.rv:not(.in)'));
@@ -143,29 +74,12 @@ export function useReveal(deps: unknown[] = []) {
   }, deps);
 }
 
-export function MotifCheck({ checked, onChange, label, disabled, children, type = 'checkbox', name, className }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; children?: React.ReactNode; type?: 'checkbox' | 'radio'; name?: string; className?: string }) {
-  return (
-    <label className={className ? `check ${className}` : 'check'}>
-      <input type={type} name={name} checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-      <span className="box" aria-hidden="true" />
-      <span className="lbl" style={{ flex: 1 }}>{label}</span>
-      {children}
-    </label>
-  );
-}
+// Avatar, Skeleton e ErrorBox ganharam arquivos próprios (Trilha 2.0); reexportados para as telas antigas.
+export { Avatar } from './Avatar';
+export { Skeleton } from './Skeleton';
+export { ErrorBox } from './ErrorBox';
 
-export function Avatar({ name, color, size = 36 }: { name: string; color: string; size?: number }) {
-  return (
-    <span className="av" title={name} style={{ width: size, height: size, background: color, color: 'var(--ink)' }}>
-      <span style={{ color: 'inherit', mixBlendMode: 'normal' }}>{initials(name)}</span>
-    </span>
-  );
-}
-
-export function Skeleton({ h = 120, w = '100%', r }: { h?: number | string; w?: number | string; r?: number }) {
-  return <div className="skel" aria-hidden="true" style={{ height: h, width: w, borderRadius: r }} />;
-}
-
+/** @deprecated use `ScreenHeader`. Mantido para as telas ainda não redesenhadas. */
 export function PageTitle({ eyebrow, title, sub, actions }: { eyebrow?: React.ReactNode; title: string; sub?: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <section className="page-title">
@@ -173,25 +87,10 @@ export function PageTitle({ eyebrow, title, sub, actions }: { eyebrow?: React.Re
         {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1 className="disp">
           {title}
-          <span className="motif" aria-hidden="true" />
         </h1>
         {sub ? <p>{sub}</p> : null}
       </div>
       {actions ? <div className="actions">{actions}</div> : null}
     </section>
-  );
-}
-
-export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
-  return (
-    <div className="errbox" role="alert">
-      <Icon name="alert" />
-      <span style={{ flex: 1 }}>{message}</span>
-      {onRetry ? (
-        <button className="btn btn-sm tap" onClick={onRetry}>
-          Tentar de novo
-        </button>
-      ) : null}
-    </div>
   );
 }

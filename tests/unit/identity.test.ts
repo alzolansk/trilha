@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contrast, fgOn, isDark } from '@/lib/identity/contrast';
 import { DICTIONARY, matchDictionary } from '@/lib/identity/dictionary';
-import { generateRulesIdentity } from '@/lib/identity/generate';
-import { patternDefs, landscapeInner } from '@/lib/identity/render';
-import { clipFor, motifArea, pathFractions, routePoints, smoothPath } from '@/lib/identity/shapes';
-import { themeVars } from '@/lib/identity/theme';
-import { checkContrasts, validateIdentity } from '@/lib/identity/validate';
+import { ACCENT_CHOICES, DEFAULT_ACCENT, DICTIONARY_ACCENT, safeAccent, tripAccent } from '@/lib/identity/accent';
 
 describe('dicionário bate com o SPEC §4.3', () => {
   const expected = {
@@ -21,7 +17,6 @@ describe('dicionário bate com o SPEC §4.3', () => {
       expect(id.display).toMatchObject({ family: e.font, weight: e.w });
       expect(id.slit).toBe(e.slit);
       expect(id.split).toBe(e.split);
-      expect(checkContrasts(id.palette)).toEqual([]);
     });
   }
   it('contrastes medidos da tabela (±0.1)', () => {
@@ -32,8 +27,6 @@ describe('dicionário bate com o SPEC §4.3', () => {
   it('Islândia é tema escuro e usa motif sólido hexagonal', () => {
     expect(isDark(DICTIONARY.islandia.palette.bg)).toBe(true);
     expect(DICTIONARY.islandia.motifSolid).toContain('93.3% 25%');
-    expect(motifArea(DICTIONARY.islandia.motif)!).toBeLessThan(0.55);
-    expect(themeVars(DICTIONARY.islandia)['--card']).toBe('#152A31');
   });
   it('reconhece destinos', () => {
     expect(matchDictionary('Machu Picchu')).toBe('andes');
@@ -44,80 +37,25 @@ describe('dicionário bate com o SPEC §4.3', () => {
   });
 });
 
-describe('fendas (SPEC §6.3)', () => {
-  it('diamond fechado e aberto', () => {
-    expect(clipFor('diamond', 0, 1000)).toBe('polygon(50% 26%, 51.4% 50%, 50% 74%, 48.6% 50%)');
-    expect(clipFor('diamond', 1, 1000)).toBe('polygon(50% -56%, 155.4% 50%, 50% 156%, -55.4% 50%)');
-  });
-  it('lens, arch, band', () => {
-    expect(clipFor('lens', 0, 1000)).toBe('ellipse(0.7% 24% at 50% 50%)');
-    expect(clipFor('arch', 1, 1000)).toBe('inset(0% 0% 0% 0% round 0px 0px 0 0)');
-    expect(clipFor('arch', 0, 1000)).toBe('inset(14% 48.6% 14% 48.6% round 14px 14px 0 0)');
-    expect(clipFor('band', 0, 1000)).toBe('inset(49.4% 6% 49.4% 6%)');
-  });
-});
 
-describe('rota', () => {
-  it('frações do protótipo Andes são reproduzidas pelo comprimento do caminho', () => {
-    const pts: [number, number][] = [[70, 420], [210, 250], [340, 380], [480, 170], [620, 300], [740, 90]];
-    const fr = pathFractions(pts);
-    expect(fr[0]).toBe(0);
-    expect(fr[fr.length - 1]).toBe(1);
-    // crescentes e não uniformes (não é divisão por índice)
-    for (let i = 1; i < fr.length; i++) expect(fr[i]).toBeGreaterThan(fr[i - 1]);
-    expect(Math.abs(fr[1] - 0.2)).toBeLessThan(0.06);
-    expect(smoothPath(pts).startsWith('M70 420 C')).toBe(true);
+describe('accent (Trilha 2.0)', () => {
+  it('as 8 cores aprovadas passam 4.5:1 com texto branco', () => {
+    expect(ACCENT_CHOICES).toHaveLength(8);
+    for (const c of ACCENT_CHOICES) expect(contrast(c.hex, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
   });
-  it('usa coordenadas reais quando todas as paradas têm', () => {
-    const r = routePoints([{ lat: -12.05, lng: -77.04 }, { lat: -13.53, lng: -71.97 }, { lat: -16.5, lng: -68.15 }]);
-    expect(r.geographic).toBe(true);
-    expect(r.pts[0][0]).toBeLessThan(r.pts[2][0]); // oeste → leste
-    expect(routePoints([{ lat: null, lng: null }, { lat: 1, lng: 1 }]).geographic).toBe(false);
+  it('cores do dicionário passam 3:1 com branco (placeholder e pino)', () => {
+    for (const hex of Object.values(DICTIONARY_ACCENT)) expect(contrast(hex, '#FFFFFF')).toBeGreaterThanOrEqual(3);
   });
-});
-
-describe('validação e gerador local', () => {
-  it('gera identidade válida e estável fora do dicionário', () => {
-    const a = generateRulesIdentity({ destination: 'Lisboa, Portugal', departDate: '2027-05-10', style: 'Cultural' });
-    const b = generateRulesIdentity({ destination: 'Lisboa, Portugal', departDate: '2027-05-10', style: 'Cultural' });
-    expect(a).toEqual(b);
-    expect(a.generatedBy).toBe('rules');
-    expect(checkContrasts(a.palette)).toEqual([]);
-    const c = generateRulesIdentity({ destination: 'Lisboa, Portugal', departDate: '2027-05-10', style: 'Cultural', version: 2 });
-    expect(c.palette.acc).not.toBe(a.palette.acc);
-    expect(c.version).toBe(2);
-    expect(patternDefs(a, 'x')).toContain('id="pat-x"');
-    expect(landscapeInner(a, 'x')).toContain('data-par="1"');
+  it('tripAccent: coluna accent > identidade antiga > dicionário pelo destino > padrão', () => {
+    expect(tripAccent({ accent: '#6A3FD1', identity: DICTIONARY.andes })).toBe('#6A3FD1');
+    expect(tripAccent({ identity: DICTIONARY.andes })).toBe(DICTIONARY_ACCENT.andes);
+    expect(tripAccent({ destinations: ['Kyoto'] })).toBe(DICTIONARY_ACCENT.japao);
+    expect(tripAccent({ destinations: ['Paraty'] })).toBe(DEFAULT_ACCENT);
+    expect(tripAccent(null)).toBe(DEFAULT_ACCENT);
   });
-  it('destino polar vira tema escuro com contraste válido', () => {
-    const t = generateRulesIdentity({ destination: 'Tromsø, Noruega', style: 'Aventura' });
-    expect(isDark(t.palette.bg)).toBe(true);
-    expect(checkContrasts(t.palette)).toEqual([]);
-  });
-  const base = {
-    idName: 'Teste & Cor',
-    palette: { bg: '#F5F0E6', ink: '#777777', mute: '#999999', acc: '#FFD84D', acc2: '#7FC8F8', acc3: '#9B7BFF', deep: '#1E3A5F', onDeep: '#F5F0E6', routeLine: '#F2B8C6' },
-    display: { family: 'Syne', weight: 700 },
-    motif: 'polygon(50% 0%, 58% 36.1%, 93.3% 25%, 66% 50%, 93.3% 75%, 58% 63.9%, 50% 100%, 42% 63.9%, 6.7% 75%, 34% 50%, 6.7% 25%, 42% 36.1%)',
-    pattern: { w: 40, h: 40, shapes: [{ t: 'circle', cx: 20, cy: 20, r: 6, fill: 'acc' }] },
-    slit: 'band',
-    landscape: { sky: ['#FFFFFF', '#F5F0E6'], sun: null, layers: [{ style: 'hills', color: 'acc3', base: 600, amp: 100, seed: 3 }] },
-    sources: ['a b', 'c d', 'e f', 'g h'],
-  };
-  it('corrige contraste, troca fonte proibida e gera motif sólido', () => {
-    const r = validateIdentity(base, { key: 'gen_x', generatedBy: 'ai', version: 1 });
-    expect(r.ok).toBe(true);
-    const id = r.identity!;
-    expect(checkContrasts(id.palette)).toEqual([]);
-    expect(id.display.family).not.toBe('Syne');
-    expect(id.motifSolid).not.toBe(id.motif);
-    expect(id.split).toBe('h');
-  });
-  it('rejeita formas e motifs fora da regra', () => {
-    expect(validateIdentity({ ...base, slit: 'star' }, { key: 'k', generatedBy: 'ai', version: 1 }).ok).toBe(false);
-    expect(validateIdentity({ ...base, motif: 'url(evil)' }, { key: 'k', generatedBy: 'ai', version: 1 }).ok).toBe(false);
-    const many = `polygon(${Array.from({ length: 25 }, (_, i) => `${i}% ${i}%`).join(', ')})`;
-    expect(validateIdentity({ ...base, motif: many }, { key: 'k', generatedBy: 'ai', version: 1 }).ok).toBe(false);
-    expect(validateIdentity({ ...base, pattern: { w: 40, h: 40, shapes: [{ t: 'script', src: 'x' }] } }, { key: 'k', generatedBy: 'ai', version: 1 }).ok).toBe(false);
+  it('safeAccent escurece cor clara demais e recusa hex inválido', () => {
+    const fixed = safeAccent('#FFE066');
+    expect(contrast(fixed, '#FFFFFF')).toBeGreaterThanOrEqual(3);
+    expect(safeAccent('vermelho')).toBe(DEFAULT_ACCENT);
   });
 });

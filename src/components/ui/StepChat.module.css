@@ -1,0 +1,8 @@
+.chat { display: flex; flex-direction: column; gap: var(--s3); }
+.trilha { display: flex; align-items: flex-start; gap: 10px; max-width: 92%; }
+.bubbleT { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 4px 18px 18px 18px; background: var(--surface); font-size: 15px; line-height: 1.45; }
+.step { font: 700 12px/1.2 var(--font-body); color: var(--brand); }
+.reply { display: flex; justify-content: flex-end; }
+.bubbleR { max-width: 80%; padding: 12px 14px; border: 0; border-radius: 18px 18px 4px 18px; background: var(--brand); color: var(--on-brand); font: 600 15px/1.4 var(--font-body); text-align: left; }
+button.bubbleR:active { transform: scale(.98); }
+.options { display: flex; flex-direction: column; gap: var(--s2); padding-left: 40px; }

@@ -107,7 +107,7 @@ export function pollPushes(
   for (const p of polls) {
     if (p.trip_id !== trip.id || p.status !== 'open' || !p.closes_at || !optionPollIds.has(p.id)) continue;
     const left = Date.parse(p.closes_at) - now;
-    const url = `/t/${trip.id}/turma#decisoes`;
+    const url = `/t/${trip.id}/turma/votos`;
     if (left > 0 && left <= 24 * 3600_000 && !votes.some((v) => v.poll_id === p.id && v.user_id === me.user_id)) {
       out.push({ title: `${trip.title}: falta seu voto`, body: p.question, url, tag: `poll-${p.id}` });
     } else if (left <= 0 && (me.role === 'organizer' || p.created_by === me.user_id)) {

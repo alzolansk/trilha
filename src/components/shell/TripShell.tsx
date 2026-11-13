@@ -1,122 +1,75 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '../../data/AuthContext';
 import { useTrip } from '../../data/TripContext';
 import { grantMissingKeys } from '../../data/docKeys';
 import { syncOffline } from '../../data/offlineSync';
+import { usePhotoBackfill } from '../../data/usePhotoBackfill';
 import { useVault } from '../../data/VaultContext';
 import { track } from '../../lib/analytics';
-import { DEMO_KEYS } from '../../lib/demo/build';
-import { DICTIONARY } from '../../lib/identity/dictionary';
-import { ErrorBox, Icon, Pattern, Skeleton } from '../ui/primitives';
+import { ErrorBox } from '../ui/ErrorBox';
+import { SideNav, SideNavLink } from '../ui/SideNav';
+import { ScreenSkeleton } from '../ui/Skeleton';
+import { TabBar, type NavItem } from '../ui/TabBar';
 import type { IconName } from '../ui/icons.data';
-import { ThemeApplier } from './ThemeApplier';
-import { cycleExtras, themeVars } from '../../lib/identity/theme';
-import { LOCAL_DISPLAY } from '../../lib/identity/fontmap';
-import { fallbackFor } from '../../lib/identity/validate';
 import { warmTripPages } from './ServiceWorker';
-import styles from './shell.module.css';
+import { ThemeApplier } from './ThemeApplier';
+import { TripSwitcherButton } from './TripSwitcher';
+import s from './shell.module.css';
 
-const NAV: [string, string, string, IconName][] = [
-  ['', 'Início', 'Início', 'home'],
-  ['/explorar', 'Explorar', 'Explorar', 'search'],
-  ['/roteiro', 'Roteiro', 'Roteiro', 'map'],
-  ['/documentos', 'Documentos', 'Docs', 'doc'],
-  ['/mala', 'Mala e gastos', 'Mala', 'bag'],
-  ['/diario', 'Diário', 'Diário', 'book'],
+/** As 4 abas (planning §4). `match`: prefixos de rota que ativam a aba. */
+const TABS: { path: string; label: string; icon: IconName; match: string[] }[] = [
+  { path: '', label: 'Início', icon: 'home', match: ['', '/descobrir'] },
+  { path: '/roteiro', label: 'Roteiro', icon: 'route', match: ['/roteiro'] },
+  { path: '/dinheiro', label: 'Dinheiro', icon: 'wallet', match: ['/dinheiro'] },
+  { path: '/turma', label: 'Turma', icon: 'users', match: ['/turma', '/ajustes'] },
 ];
 
-function IdentityMenu() {
-  const { identity, source, bundle } = useTrip();
-  const { trips, user } = useAuth();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+/** Subtelas com CTA fixa no rodapé escondem a TabBar (planning §4.1). */
+const HIDE_TABBAR = ['/dinheiro/orcamento', '/montar'];
+
+function activeTab(rel: string): number {
+  for (let i = TABS.length - 1; i > 0; i--) if (TABS[i].match.some((m) => rel === m || rel.startsWith(`${m}/`))) return i;
+  return 0;
+}
+
+/** Guarda a rolagem de cada aba e devolve ao voltar para ela (planning §4.1). */
+function useTabScroll(path: string) {
+  const pos = useRef(new Map<string, number>());
   useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    const y = pos.current.get(path);
+    if (y !== undefined) requestAnimationFrame(() => window.scrollTo(0, y));
+    else window.scrollTo(0, 0);
+    let t = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(t);
+      t = requestAnimationFrame(() => pos.current.set(path, window.scrollY));
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('click', onDoc);
-    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
-      document.removeEventListener('click', onDoc);
-      document.removeEventListener('keydown', onKey);
+      cancelAnimationFrame(t);
+      window.removeEventListener('scroll', onScroll);
     };
-  }, [open]);
-  const demo = source.kind === 'demo';
-  const planning = !!bundle && !bundle.trip.identity;
-  return (
-    <div ref={ref} className={styles.idwrap}>
-      <button className={`${styles.idpill} tap`} aria-haspopup="true" aria-expanded={open} aria-label={planning ? 'Planejando, sem identidade ainda: trocar de trilha' : `Identidade ${identity.idName}: trocar de trilha`} onClick={() => setOpen((v) => !v)}>
-        <span className={styles.dots} aria-hidden="true">
-          <span style={{ background: 'var(--acc)' }} />
-          <span style={{ background: 'var(--acc2)' }} />
-          <span style={{ background: 'var(--deep)' }} />
-        </span>
-        <span className={styles.lbl}>
-          {planning ? <b>Planejando</b> : <>Identidade <b>{identity.idName}</b></>}
-        </span>
-      </button>
-      {open ? (
-        <div className={styles.idmenu} role="menu">
-          {demo ? (
-            <>
-              <span className={styles.menuHead}>Demonstração · dados fictícios</span>
-              {DEMO_KEYS.map((k) => (
-                <Link key={k} role="menuitem" href={`/demo/${k}`} aria-current={bundle?.trip.identity?.key === k ? 'true' : undefined} onClick={() => setOpen(false)}>
-                  <span className={styles.sw} style={{ clipPath: DICTIONARY[k].motif, background: DICTIONARY[k].palette.acc }} />
-                  <span>
-                    <b>{k === 'andes' ? 'Peru + Bolívia' : k === 'japao' ? 'Japão' : k === 'marrocos' ? 'Marrocos' : 'Islândia'}</b>
-                    <br />
-                    <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{DICTIONARY[k].idName.toUpperCase()}</span>
-                  </span>
-                </Link>
-              ))}
-              {user ? <Link role="menuitem" href="/"><Icon name="home" />Minhas trilhas</Link> : <Link role="menuitem" href="/entrar"><Icon name="users" />Entrar</Link>}
-            </>
-          ) : (
-            <>
-              <span className={styles.menuHead}>Suas trilhas</span>
-              {(trips ?? []).map(({ trip }) => (
-                <Link key={trip.id} role="menuitem" href={`/t/${trip.id}`} aria-current={trip.id === source.tripId ? 'true' : undefined} onClick={() => setOpen(false)}>
-                  <span className={styles.sw} style={{ clipPath: trip.identity?.motif ?? 'circle(50%)', background: trip.identity?.palette.acc ?? 'var(--ink)' }} />
-                  <span>
-                    <b>{trip.title}</b>
-                    <br />
-                    <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{(trip.identity?.idName ?? 'Planejando').toUpperCase()}</span>
-                  </span>
-                </Link>
-              ))}
-              <Link role="menuitem" href={`/t/${source.tripId}/turma`}><Icon name="users" />Turma e convites</Link>
-              <Link role="menuitem" href={`/t/${source.tripId}/editar`}><Icon name="edit" />Dados da trilha</Link>
-              <Link role="menuitem" href="/nova-trilha"><Icon name="plus" />Nova trilha</Link>
-              <Link role="menuitem" href="/identidades"><Icon name="sparkle" />Ver todas as identidades</Link>
-              <Link role="menuitem" href="/conta"><Icon name="cal" />Conta e notificações</Link>
-            </>
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
+  }, [path]);
 }
 
 export function TripShell({ children }: { children: React.ReactNode }) {
-  const { base, bundle, identity, loading, error, reload, stale, source } = useTrip();
+  const { base, bundle, accent, loading, error, reload, stale, staleSince, source } = useTrip();
   const { online, user } = useAuth();
   const vault = useVault();
   const path = usePathname();
-  const rel = path.slice(base.length) || '';
-  const isHome = rel === '' || rel === '/';
-  // Trilha sem identidade (ainda sem destino): fica no tema neutro até o destino fechar.
-  const themed = !!bundle?.trip.identity;
-  // Fade de entrada só em navegações (no primeiro carregamento o HTML do servidor aparece direto).
+  const rel = path.slice(base.length).replace(/\/$/, '');
+  const isHome = rel === '';
+  const tab = activeTab(rel);
+  const demo = source.kind === 'demo';
+  // Fade curto só em navegações (no primeiro carregamento o HTML do servidor aparece direto).
   const firstPath = useRef(path);
   const navigated = path !== firstPath.current;
+  useTabScroll(path);
+  // Paradas e passeios sem foto ganham a foto conferida, gravada para a turma (Início e Roteiro deixam de ficar sem foto).
+  usePhotoBackfill();
 
   useEffect(() => {
     if (bundle && source.kind === 'supabase') {
@@ -143,76 +96,57 @@ export function TripShell({ children }: { children: React.ReactNode }) {
     };
   }, [isHome, rel]);
 
+  const items: NavItem[] = TABS.map((t, i) => ({ href: base + t.path, label: t.label, icon: t.icon, active: i === tab }));
   return (
-    <>
-      <ThemeApplier identity={themed ? identity : null} />
-      {themed ? (
-        // Tokens também no HTML do servidor: evita o "piscar" do tema neutro antes de hidratar.
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `:root{${Object.entries({ ...themeVars(identity), ...cycleExtras(identity), '--font-display': `${LOCAL_DISPLAY[identity.display.family] ? `${LOCAL_DISPLAY[identity.display.family]}, ` : ''}'${identity.display.family}', ${fallbackFor(identity.display.family)}` })
-              .map(([k, v]) => `${k}:${v.replace(/[<>{}]/g, '')}`)
-              .join(';')}}`,
-          }}
-        />
-      ) : null}
-      {themed ? (
-        <div className="bg-pattern">
-          <Pattern identity={identity} />
-        </div>
-      ) : null}
-      {source.kind === 'demo' ? (
-        <div className="banner-demo" role="note">
-          <span>DEMO<span className="demo-long">NSTRAÇÃO · DADOS FICTÍCIOS · NADA É SALVO</span></span>
-          <Link href="/nova-trilha" style={{ textDecoration: 'underline' }}>Criar trilha real</Link>
-        </div>
-      ) : null}
-      <header className={`${styles.top} ${isHome ? styles.fixed : ''}`}>
-        <div className={styles.topIn}>
-          <Link href={base} className={styles.logo}>
-            <span className="motif" aria-hidden="true" />
-            trilha
-          </Link>
-          <nav className={styles.nav} aria-label="Principal">
-            {NAV.map(([p, label]) => (
-              <Link key={p} href={base + p} aria-current={(p === '' ? isHome : rel.startsWith(p)) ? 'page' : undefined}>
-                {label}
-              </Link>
-            ))}
-          </nav>
-          {bundle ? <IdentityMenu /> : <span />}
-        </div>
-      </header>
-      {stale && online && bundle ? (
-        <div className={styles.stale} role="status">Mostrando a cópia salva neste aparelho. Atualizando…</div>
-      ) : null}
-      <main id="main" className={navigated ? 'view' : undefined} key={rel}>
-        {bundle ? (
-          children
-        ) : error ? (
-          <div className="wrap" style={{ paddingTop: 120 }}>
-            <ErrorBox message={error} onRetry={() => void reload()} />
-            <p style={{ marginTop: 20 }}>
-              <Link href="/">Voltar para minhas trilhas</Link>
-            </p>
-          </div>
-        ) : loading ? (
-          <div className="wrap" style={{ paddingTop: 120, display: 'grid', gap: 20 }} aria-busy="true">
-            <span className="sr">Carregando a trilha…</span>
-            <Skeleton h={90} w="60%" />
-            <Skeleton h={320} />
-            <Skeleton h={180} />
+    <div className={s.shell}>
+      <ThemeApplier accent={bundle ? accent : null} />
+      {/* --trip-accent também no HTML do servidor (sem piscar a cor padrão antes de hidratar). */}
+      {bundle ? <style dangerouslySetInnerHTML={{ __html: `:root{--trip-accent:${accent.replace(/[^#0-9a-fA-F]/g, '')}}` }} /> : null}
+
+      <SideNav
+        items={items}
+        home={base}
+        tripSwitcher={bundle ? <TripSwitcherButton variant="side" /> : null}
+        footer={
+          <>
+            {demo ? <span className={s.demoSide}>Demonstração · nada é salvo</span> : null}
+            {!demo ? <SideNavLink href={`${base}/ajustes`} icon="settings">Ajustes da trilha</SideNavLink> : null}
+            {demo ? <SideNavLink href="/nova-trilha" icon="plus">Criar trilha real</SideNavLink> : <SideNavLink href="/nova-trilha" icon="plus">Nova trilha</SideNavLink>}
+            {user ? <SideNavLink href="/conta" icon="users">Conta</SideNavLink> : <SideNavLink href="/entrar" icon="users">Entrar</SideNavLink>}
+          </>
+        }
+      />
+
+      <div className={s.content}>
+        {demo ? (
+          <div className={s.notice} role="note">
+            <span><b>Demonstração</b><span className={s.noticeLong}> · dados fictícios, nada é salvo</span></span>
+            <Link href="/nova-trilha">Criar trilha real</Link>
           </div>
         ) : null}
-      </main>
-      <nav className={styles.tabbar} aria-label="Principal (celular)">
-        {NAV.map(([p, , short, icon]) => (
-          <Link key={p} href={base + p} className="tap" aria-current={(p === '' ? isHome : rel.startsWith(p)) ? 'page' : undefined}>
-            <Icon name={icon} size={22} />
-            {short}
-          </Link>
-        ))}
-      </nav>
-    </>
+        {stale && bundle ? (
+          <div className={s.notice} role="status">
+            <span>{staleSince ? `Mostrando cópia salva de ${new Date(staleSince).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Mostrando a cópia salva neste aparelho'}{online ? '. Atualizando…' : '.'}</span>
+          </div>
+        ) : null}
+
+        <main id="main" className={`${s.main} ${navigated ? 'view' : ''}`} key={rel}>
+          {bundle ? (
+            children
+          ) : error ? (
+            <div className="wrap" style={{ paddingTop: 96 }}>
+              <ErrorBox message={error} onRetry={() => void reload()} />
+              <p style={{ marginTop: 20 }}>
+                <Link href="/">Voltar para minhas trilhas</Link>
+              </p>
+            </div>
+          ) : loading ? (
+            <ScreenSkeleton />
+          ) : null}
+        </main>
+      </div>
+
+      <TabBar items={items} hidden={HIDE_TABBAR.some((p) => rel === p)} />
+    </div>
   );
 }

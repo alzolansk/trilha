@@ -1,0 +1,11 @@
+.card { position: relative; background: var(--surface); border-radius: var(--r-card); overflow: hidden; }
+.inline { background: var(--suggest-bg); outline: 1.5px dashed var(--brand-on-dark); outline-offset: -1.5px; border-radius: 18px; }
+.body { display: flex; flex-direction: column; gap: var(--s2); padding: 14px var(--s4) var(--s4); }
+.reason { align-self: flex-start; font: 700 12px/1.25 var(--font-body); color: var(--brand); }
+.warn { color: var(--warn); }
+.onPhoto { position: absolute; left: 12px; top: 12px; padding: 5px 10px; border-radius: 999px; background: var(--surface); color: var(--ink); }
+.titleRow { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s2); }
+.title { margin: 0; font: var(--t-card); letter-spacing: -0.01em; }
+.text { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+.actions { display: flex; gap: var(--s2); padding-top: 4px; }
+.grow { flex: 1; }

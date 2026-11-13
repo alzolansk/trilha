@@ -1,18 +1,19 @@
-﻿/* Trilha Â· service worker
- * - Cacheia o "app shell": assets estÃ¡ticos do Next (imutÃ¡veis), pÃ¡ginas visitadas e fontes.
- * - NÃƒO cacheia dados nem arquivos de usuÃ¡rio (Supabase/API): esses ficam no IndexedDB por conta.
- * - Ao sair da conta, apaga as pÃ¡ginas cacheadas.
+/* Trilha · service worker
+ * - Cacheia o "app shell": assets estáticos do Next (imutáveis), páginas visitadas e fontes.
+ * - NÃO cacheia dados nem arquivos de usuário (Supabase/API): esses ficam no IndexedDB por conta.
+ * - Ao sair da conta, apaga as páginas cacheadas.
  */
-const VERSION = 'v1';
+const VERSION = 'v4'; // v4: miniaturas da Wikimedia também vêm de thumb.wikimedia.org
 const STATIC = `trilha-static-${VERSION}`;
 const PAGES = `trilha-pages-${VERSION}`;
 const FONTS = `trilha-fonts-${VERSION}`;
 const TILES = `trilha-tiles-${VERSION}`;
-const KEEP = [STATIC, PAGES, FONTS, TILES];
+const PHOTOS = `trilha-photos-${VERSION}`;
+const KEEP = [STATIC, PAGES, FONTS, TILES, PHOTOS];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(PAGES).then((c) => c.addAll(['/', '/entrar', '/offline', '/grain.png']).catch(() => undefined)).then(() => self.skipWaiting()),
+    caches.open(PAGES).then((c) => c.addAll(['/', '/entrar', '/offline']).catch(() => undefined)).then(() => self.skipWaiting()),
   );
 });
 
@@ -82,14 +83,19 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.hostname.endsWith('tile.openstreetmap.org')) {
     event.respondWith(cacheFirst(req, TILES, 400));
+    return;
   }
-  // Supabase e demais origens: rede direta (dados de usuÃ¡rio nÃ£o passam pelo cache do SW).
+  // Fotos públicas da Wikimedia (crédito vai junto no dado): cache-first, ~300 entradas.
+  if (url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') {
+    event.respondWith(cacheFirst(req, PHOTOS, 300));
+  }
+  // Supabase e demais origens: rede direta (dados de usuário não passam pelo cache do SW).
 });
 
 self.addEventListener('message', (event) => {
   const msg = event.data || {};
   if (msg.type === 'warm' && Array.isArray(msg.urls)) {
-    // PrÃ©-carrega as telas da trilha para abrirem offline.
+    // Pré-carrega as telas da trilha para abrirem offline.
     event.waitUntil(
       caches.open(PAGES).then((c) =>
         Promise.all(

@@ -56,9 +56,13 @@ describe('regras de alerta (dados reais, nada inventado)', () => {
     expect(ruleAlerts(b).some((x) => x.key === 'insurance-gap')).toBe(false);
   });
   it('hospedagem pendente e orçamento estourado por categoria', () => {
-    const a = ruleAlerts(andes());
+    const b = andes();
+    expect(ruleAlerts(b).some((x) => x.key.startsWith('budget-cat-'))).toBe(false);
+    // demo Trilha 2.0: R$ 1.160 já gastos em hospedagem; com R$ 1.000 previstos passa 16%
+    b.budgetCategories = b.budgetCategories.map((c) => (c.name === 'Hospedagem' ? { ...c, planned: 1000 } : c));
+    const a = ruleAlerts(b);
     expect(a.some((x) => x.key.startsWith('stay-missing-') && /Aguas Calientes/.test(x.title))).toBe(true);
-    expect(a.find((x) => x.key.startsWith('budget-cat-'))?.title).toBe('Hospedagem passou 12% do previsto');
+    expect(a.find((x) => x.key.startsWith('budget-cat-'))?.title).toBe('Hospedagem passou 16% do previsto');
   });
   it('dica por regra usa a altitude salva, sem inventar', () => {
     const b = andes();

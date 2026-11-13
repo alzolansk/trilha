@@ -4,7 +4,7 @@ import 'server-only';
 // entra em "resfriamento" e a próxima chamada pula para o seguinte (preserva cotas).
 
 export type ProviderId = 'gemini' | 'groq' | 'openrouter';
-export type TaskKind = 'identity' | 'tips' | 'packing' | 'classify' | 'alerts' | 'retro' | 'explore';
+export type TaskKind = 'tips' | 'packing' | 'classify' | 'alerts' | 'retro' | 'explore';
 
 interface Provider {
   id: ProviderId;
@@ -16,11 +16,9 @@ interface Provider {
 const cooldown = new Map<ProviderId, number>();
 
 // Por que essa ordem:
-// - identity: Gemini Flash segue bem o schema e tem cota diária maior no nível gratuito;
 // - tips/packing/alerts/retro: Groq (gpt-oss-120b) é rápido e bom em pt-BR curto; Gemini como reserva;
 // - classify: texto curto e frequente → Gemma no OpenRouter (gratuito) primeiro, poupando Groq/Gemini.
 export const ORDER: Record<TaskKind, ProviderId[]> = {
-  identity: ['gemini', 'groq', 'openrouter'],
   tips: ['groq', 'gemini', 'openrouter'],
   packing: ['groq', 'gemini', 'openrouter'],
   alerts: ['groq', 'gemini', 'openrouter'],

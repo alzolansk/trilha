@@ -1,0 +1,233 @@
+.page { display: flex; flex-direction: column; gap: var(--s5); max-width: 760px; margin: 0 auto; padding-bottom: var(--s8); }
+.top { display: flex; flex-direction: column; gap: var(--s2); }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--brand); transition: width var(--dur) var(--ease); }
+.topRow { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); font: var(--t-small); color: var(--mute); }
+.skip { min-height: 44px; border: 0; background: none; color: var(--brand); font: inherit; font-weight: 600; cursor: pointer; }
+.stack { display: flex; flex-direction: column; gap: var(--s3); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.label { font: var(--t-micro); letter-spacing: .06em; text-transform: uppercase; color: var(--mute); margin: var(--s2) 0 0; }
+.note { margin: 0; padding: 12px 14px; border-radius: 14px; background: var(--sun-soft); color: var(--sun-ink); font-size: 14px; }
+.muted { margin: 0; color: var(--mute); font-size: 14px; overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.place { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--r-card); background: var(--surface); min-width: 0; }
+.placeHead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.placeHead h3 { margin: 0; font: var(--t-card); overflow-wrap: anywhere; }
+.placeHead small { color: var(--mute); white-space: nowrap; font-size: 13px; }
+.why { margin: 0; color: var(--ink-2); font-size: 14px; overflow-wrap: anywhere; }
+.highlights { margin: 0; padding-left: 18px; color: var(--mute); font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s3); }
+
+.wishRow { display: flex; gap: 8px; align-items: flex-end; }
+.wishRow > :first-child { flex: 1; min-width: 0; }
+
+.timeline { display: flex; flex-direction: column; }
+
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--brand); background: var(--surface); }
+.stopName { display: flex; flex-direction: column; min-width: 0; }
+.stopName b { overflow-wrap: anywhere; }
+.stopName small { color: var(--mute); font-size: 13px; }
+.stopCtl { grid-column: 2; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+@media (min-width: 560px) { .stopCtl { grid-column: 3; justify-content: flex-end; } }
+.nights { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.ctl { min-width: 36px; min-height: 36px; border-radius: 10px; border: 0; background: var(--field); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.ctl:disabled { opacity: .4; cursor: default; }
+
+.dayTrips { grid-column: 2 / -1; font-size: 13px; color: var(--mute); margin: -4px 0 0; }
+
+.city { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: var(--r-card); background: var(--surface); }
+.city h3 { margin: 0 0 4px; font: var(--t-card); }
+.tour { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line-2); }
+.tour:last-child { border-bottom: 0; }
+.tourText { display: flex; flex-direction: column; min-width: 0; }
+.tourText small { color: var(--mute); font-size: 12.5px; }
+.price { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
+.wish { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok-ink); font-size: 11.5px; font-weight: 700; }
+.foot { position: sticky; bottom: env(safe-area-inset-bottom, 0px); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-float); }
+
+.lines { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.line { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.line span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.line span:last-child { white-space: nowrap; }
+.cut { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: var(--surface); }
+
+/* Escolha com ícone e cor (Indispensável / Talvez / Pular) */
+.marks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 14px; background: var(--field); }
+.mark { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; border: 0; border-radius: 10px; background: transparent; color: var(--mute); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.mark:hover { color: var(--ink); }
+.mark:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.mark[aria-checked='true'][data-mark='must'] { background: var(--ok); color: #fff; }
+.mark[aria-checked='true'][data-mark='maybe'] { background: var(--brand-soft); color: var(--brand-ink); }
+.mark[aria-checked='true'][data-mark='skip'] { background: var(--surface); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+/* Cartão estreito (celular ou grade de 2 colunas): ícone em cima do texto, para "Indispensável" caber inteiro.
+   Container query: depende da largura do cartão, não da tela. */
+.place { container-type: inline-size; }
+.mark { min-width: 0; white-space: nowrap; overflow: hidden; }
+@container (max-width: 420px) { .mark { flex-direction: column; gap: 2px; min-height: 52px; font-size: 12px; padding: 4px 2px; } }
+
+/* O cartão acompanha a escolha */
+.place { border: 2px solid transparent; transition: border-color var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+.place[data-mark='must'] { border-color: var(--ok); background: color-mix(in oklab, var(--ok-soft) 45%, var(--surface)); }
+.place[data-mark='skip'] { opacity: .62; }
+.place[data-mark='skip']:hover, .place[data-mark='skip']:focus-within { opacity: 1; }
+.placeHead { align-items: center; }
+.photoBtn { display: block; padding: 0; border: 0; background: none; cursor: pointer; border-radius: var(--r-thumb); }
+.photoBtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Janela de detalhes do lugar */
+.sheetBody { display: flex; flex-direction: column; gap: var(--s4); }
+.facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.attractions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.attraction { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: center; }
+.attraction span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.attraction small { color: var(--mute); font-size: 13px; overflow-wrap: anywhere; }
+.attractionPhoto { width: 88px; }
+.tip { margin: 0; display: flex; gap: 8px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--suggest-bg); color: var(--ink-2); font-size: 14px; }
+
+/* Passo 4: roteiro visual */
+.timeline { gap: 0; }
+.leg { display: flex; align-items: center; gap: 10px; margin-left: 22px; padding: 10px 0 10px 18px; border-left: 2px dashed var(--line); font-size: 13px; color: var(--mute); flex-wrap: wrap; }
+.legIcon { width: 30px; height: 30px; margin-left: -34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--brand); box-shadow: 0 0 0 2px var(--bg); flex: none; }
+.legText { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.legPrice { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.stopCard { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-float); min-width: 0; }
+.stopTop { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 12px; align-items: center; }
+.stopPhoto { width: 104px; }
+.stopInfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative; }
+.stopInfo h3 { margin: 0; font: var(--t-card); font-size: 19px; overflow-wrap: anywhere; }
+.stopInfo small { color: var(--mute); font-size: 13px; }
+.stopNum { position: absolute; top: -4px; right: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 800; }
+.stopRow { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border-radius: 12px; background: var(--field); }
+.stepper .nights { display: inline-flex; align-items: center; gap: 5px; min-width: 52px; justify-content: center; }
+.stopMove { display: inline-flex; gap: 4px; }
+.stopCost { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px; background: var(--suggest-bg); }
+.stopCost b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.stopCost b small { font-weight: 500; color: var(--mute); font-size: 13px; }
+.costChips { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.costChips span { display: inline-flex; align-items: center; gap: 4px; }
+.origin { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--field); color: var(--ink-2); }
+.origin[data-tone='ok'] { background: var(--ok-soft); color: var(--ok-ink); }
+.origin[data-tone='brand'] { background: var(--brand-soft); color: var(--brand-ink); }
+.origin[data-tone='sun'] { background: var(--sun-soft); color: var(--sun-ink); }
+.feedback { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--surface); border: 2px dashed var(--brand-soft); }
+.feedback h2 { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); }
+.feedbackInput { width: 100%; min-height: 64px; resize: vertical; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--field); color: var(--ink); font: inherit; font-size: 15px; }
+.feedbackInput:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* Passo 5: baralho de passeios */
+.deckWrap { display: flex; flex-direction: column; gap: var(--s4); align-items: stretch; }
+.deckProgress { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font: var(--t-small); color: var(--mute); }
+.deckDots { display: flex; gap: 6px; }
+.deckDots i { width: 22px; height: 6px; border-radius: 3px; background: var(--line); }
+.deckDots i[data-state='doing'] { background: var(--brand-soft); }
+.deckDots i[data-state='done'] { background: var(--brand); }
+.deckDots i[data-state='loading'] { background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 8px); }
+.deck { position: relative; display: grid; width: 100%; max-width: 420px; margin: 0 auto; padding-bottom: 24px; }
+/* Pilha em grid: todas as cartas na mesma célula, e a área cresce com a carta mais alta (nada fica por baixo dos botões). */
+.tourCard { grid-area: 1 / 1; align-self: start; position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: var(--r-card-lg); background: var(--surface); box-shadow: 0 10px 30px rgba(13, 16, 23, .12); touch-action: pan-y; user-select: none; transition: transform 260ms var(--ease), opacity 260ms var(--ease); }
+.tourCard[data-top='true'] { cursor: grab; }
+.tourCard[data-top='true']:active { cursor: grabbing; }
+.tourCard img { pointer-events: none; -webkit-user-drag: none; }
+.tourBody { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 18px; }
+.tourCity { display: inline-flex; align-items: center; gap: 4px; font: var(--t-micro); letter-spacing: .04em; text-transform: uppercase; color: var(--brand); }
+.tourTitle { margin: 0; font: var(--t-title); font-size: 22px; overflow-wrap: anywhere; }
+.tourHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.tourHead .tourTitle { min-width: 0; }
+.tourPrice { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tourPrice small { font-size: 13px; font-weight: 500; color: var(--mute); }
+.stamp { position: absolute; top: 18px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 12px; border: 3px solid currentColor; background: rgba(255, 255, 255, .92); font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: .04em; opacity: 0; transform: scale(.8); transition: opacity 150ms, transform 150ms; }
+.stamp[data-kind='yes'] { left: 16px; color: var(--ok); transform: rotate(-10deg) scale(.8); }
+.stamp[data-kind='no'] { right: 16px; color: var(--warn); transform: rotate(10deg) scale(.8); }
+.stamp[data-show='true'][data-kind='yes'] { opacity: 1; transform: rotate(-10deg) scale(1); }
+.stamp[data-show='true'][data-kind='no'] { opacity: 1; transform: rotate(10deg) scale(1); }
+.deckEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 260px; padding: 24px; border-radius: var(--r-card-lg); border: 2px dashed var(--line); color: var(--mute); text-align: center; }
+.deckEmpty b { color: var(--ink); font-size: 18px; }
+.deckButtons { display: flex; justify-content: center; align-items: center; gap: 20px; }
+.deckBtn { width: 64px; height: 64px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; background: var(--surface); box-shadow: var(--shadow-float); transition: transform 150ms var(--ease-spring); }
+.deckBtn:hover { transform: scale(1.08); }
+.deckBtn:active { transform: scale(.94); }
+.deckBtn:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
+.deckBtn[data-kind='no'] { color: var(--warn); }
+.deckBtn[data-kind='yes'] { color: #fff; background: var(--ok); }
+.deckUndo { min-height: 44px; border: 0; background: none; color: var(--mute); font: inherit; font-weight: 600; cursor: pointer; }
+.deckUndo:disabled { opacity: .4; cursor: default; }
+.pickChip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--mute); font: inherit; font-size: 14px; cursor: pointer; text-decoration: line-through; }
+.pickChip small { color: inherit; opacity: .8; }
+.pickChip[aria-pressed='true'] { border-color: var(--ok); background: var(--ok-soft); color: var(--ok-ink); font-weight: 600; text-decoration: none; }
+@media (prefers-reduced-motion: reduce) {
+  .tourCard, .stamp, .deckBtn { transition: opacity 60ms linear; }
+}
+
+/* No baralho, os botões quero/pular são a ação principal: o rodapé não fica por cima deles */
+.foot[data-static='true'] { position: static; box-shadow: none; }
+
+/* Passos navegáveis (dá pra voltar a qualquer passo já feito) */
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.stepBtn { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--mute); font: inherit; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; min-width: 0; }
+.stepBtn i { display: block; height: 6px; border-radius: 3px; background: var(--line); transition: background var(--dur) var(--ease); }
+.stepBtn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepBtn[data-done='true'] i { background: var(--brand-soft); }
+.stepBtn[data-done='true'] { color: var(--ink-2); }
+.stepBtn[data-done='true']:hover:not(:disabled) span { color: var(--brand); text-decoration: underline; }
+.stepBtn[aria-current='step'] i { background: var(--brand); }
+.stepBtn[aria-current='step'] { color: var(--brand); cursor: default; }
+.stepBtn:disabled { cursor: default; opacity: .55; }
+.stepBtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+/* Passo 4: resumo da parada, bate-voltas clicáveis, desejos e mapa */
+.stopWhy { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.stopSights { margin: -4px 0 0; display: flex; gap: 6px; align-items: baseline; color: var(--mute); font-size: 13px; overflow-wrap: anywhere; }
+.more { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: -6px; padding: 0; border: 0; background: none; color: var(--brand); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.more:focus-visible, .linkBtn:focus-visible, .tripChip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.tripChip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 999px; background: var(--field); color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.tripChip:hover { background: var(--brand-soft); color: var(--brand-ink); }
+.tripChip[data-wish='true'] { background: var(--ok-soft); color: var(--ok-ink); }
+.wishHere { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: var(--ok-soft); color: var(--ok-ink); font-size: 13.5px; }
+.wishHere span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wishHere small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.wishRowCard { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 14px; background: var(--surface); flex-wrap: wrap; }
+.wishRowCard[data-fits='false'] { background: var(--sun-soft); }
+.wishIcon { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--ok-soft); color: var(--ok-ink); }
+.wishRowCard[data-fits='false'] .wishIcon { background: var(--surface); color: var(--sun-ink); }
+.wishText { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.wishText small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.cut { flex-wrap: wrap; }
+.cut[data-focus='true'] { box-shadow: inset 0 0 0 2px var(--sun); }
+.cutActions { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.sacrifice { color: var(--sun-ink); font-size: 13px; overflow-wrap: anywhere; }
+.linkBtn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; text-align: left; }
+.linkBtn:hover { color: var(--brand); }
+.outWhy { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--sun-soft); color: var(--sun-ink); font-size: 14px; }
+.outWhy p { margin: 0; overflow-wrap: anywhere; }
+/* O resumo do roteiro fica no lugar (não acompanha a rolagem nem passa por baixo do mapa). */
+section.fixedSummary { position: static; }
+.mapBox { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 80px; }
+.mapLegend { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.mapLegend span { display: inline-flex; align-items: center; gap: 6px; }
+.mapLegend i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-sizing: border-box; }
+.mapLegend i[data-k='stop'] { background: var(--trip-accent, var(--brand)); }
+.mapLegend i[data-k='trip'] { background: var(--surface); border: 2.5px solid var(--trip-accent, var(--brand)); }
+.mapLegend i[data-k='out'] { background: var(--surface); border: 2px dashed var(--sun); }
+.mapLegend i[data-k='base'] { background: var(--trip-accent, var(--brand)); border-radius: 3px; }
+
+/* Dormir numa cidade vizinha mais barata (sugestão opcional) */
+.stayAlt { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--suggest-bg); border: 1.5px dashed var(--brand-soft); }
+.stayAlt[data-on='true'] { border-style: solid; border-color: var(--brand); }
+.stayAltHead { margin: 0; display: flex; gap: 8px; align-items: flex-start; color: var(--brand-ink); font-size: 14px; }
+.stayAltHead span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stayAltHead small { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.sleepsAt { display: inline-flex; align-items: center; gap: 4px; color: var(--brand-ink) !important; font-weight: 600; }
+
+/* Recomendações pessoais (09/11/2026): tipo do lugar, "por que combina" no cartão, parada sem foto conferida. */
+.placeMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: -4px; }
+.fitLine { margin: 0; display: flex; gap: 6px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; background: var(--suggest-bg); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; }
+.fitLine svg { flex: none; margin-top: 2px; color: var(--brand); }
+.place .more { margin-top: -2px; }
+.stopTile { width: 104px; height: 84px; border-radius: var(--r-thumb); background: var(--field); color: var(--mute); display: flex; align-items: center; justify-content: center; }
+.note:has(button) { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--suggest-bg); color: var(--ink-2); }
+
+/* Passo 6: tipo de hospedagem e como a turma divide o quarto (ajuste de 09/11/2026). */
+.stayBox { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--surface); }
+.stayBox .label { margin: 0; }

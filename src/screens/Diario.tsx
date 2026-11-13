@@ -3,18 +3,20 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, Floaters, Icon, PageTitle, Pattern, useReveal } from '../components/ui/primitives';
+import { AiNote, Icon } from '../components/ui/primitives';
+import { AI_STEPS, AiBusy, AiThinking, Busy } from '../components/ui/Loader';
 import { useBundle } from '../data/TripContext';
 import type { InspirationValue, JournalEntry, JournalPhoto, Stop, TripBundle } from '../data/types';
 import { callAi } from '../lib/ai/client';
 import { track } from '../lib/analytics';
 import { sortedStops, stopDates, stopIndexOn, tripPhase } from '../lib/derive';
 import { dayMonth, initials, plural } from '../lib/format';
-import { colorCycle } from '../lib/identity/theme';
+import { CYCLE } from '../lib/identity/accent';
 import { compressImage } from '../lib/image';
 import { inspirationScore, myInspirationVote } from '../lib/polls';
 import { ruleRetro } from '../lib/rules';
 import { dateRange, todayIn } from '../lib/time';
+import { Badge, Button, Card, Chip, EmptyState, Field, FieldGrid, IconButton, ScreenHeader, Segmented } from '../components/ui';
 import s from './diario.module.css';
 
 type Tab = 'antes' | 'durante' | 'depois';
@@ -23,7 +25,6 @@ const TABS: [Tab, string, string, string, string][] = [
   ['durante', 'Durante', 'Um registro por dia', 'Escreva uma linha sobre o dia e junte as fotos. Fica organizado por parada.', 'Escrever hoje'],
   ['depois', 'Depois', 'Sua retrospectiva', 'Quando a viagem acaba, montamos um resumo com o trajeto, as melhores fotos e os números, na identidade da sua trilha.', 'Gerar retrospectiva'],
 ];
-const SHAPES = ['var(--motif)', 'inset(0 round 28px)', 'inset(0 round 50% 50% 24px 24px)', 'var(--motif)', 'ellipse(50% 50% at 50% 50%)', 'inset(0 round 24px 90px 24px 90px)'];
 
 /** URLs temporárias (assinadas) das fotos do diário, com cache em memória. */
 const urlCache = new Map<string, { url: string; exp: number }>();
@@ -47,7 +48,7 @@ function usePhotoUrl(path: string | null | undefined) {
 }
 
 export default function Diario() {
-  const { bundle: b, identity, canEdit, source, reload, me } = useBundle();
+  const { bundle: b, canEdit, source, reload, me } = useBundle();
   const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
@@ -57,11 +58,10 @@ export default function Diario() {
   const tab: Tab = tabParam && ['antes', 'durante', 'depois'].includes(tabParam) ? tabParam : phase.kind === 'after' ? 'depois' : phase.kind === 'before' ? 'antes' : 'durante';
   const t = TABS.find((x) => x[0] === tab)!;
   const stops = useMemo(() => sortedStops(b), [b]);
-  const cols = colorCycle(identity);
+  const cols = CYCLE;
   const [entryDlg, setEntryDlg] = useState<{ entry: JournalEntry | null; stopId: string | null } | null>(null);
   const [stopDlg, setStopDlg] = useState<Stop | null>(null);
   const [genBusy, setGenBusy] = useState(false);
-  useReveal([tab, b.journalEntries.length]);
 
   const kind = tab === 'antes' ? 'inspiracao' : 'registro';
   const entries = b.journalEntries.filter((e) => e.kind === kind);
@@ -87,35 +87,22 @@ export default function Diario() {
 
   return (
     <div className="wrap">
-      <Floaters />
-      <PageTitle
+      <ScreenHeader
         title="Diário"
         eyebrow={b.trip.title}
-        sub="Fotos e memórias organizadas por parada."
-        actions={
-          <div role="group" aria-label="Momento" className={s.tabs}>
-            {TABS.map((x) => (
-              <button key={x[0]} className="chip tap" style={{ border: 0 }} aria-pressed={x[0] === tab} onClick={() => setTab(x[0])}>{x[1]}</button>
-            ))}
-          </div>
-        }
+        subtitle="Fotos e memórias organizadas por parada."
+        action={<Segmented label="Momento" value={tab} onChange={setTab} options={TABS.map((x) => ({ value: x[0], label: x[1] }))} />}
       />
-      <div className={`${s.banner} rv`}>
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.12 }}><Pattern identity={identity} /></div>
-        <div aria-hidden="true" style={{ position: 'absolute', right: -40, top: -60, width: 220, height: 220, clipPath: 'var(--motif)', background: 'var(--acc)', opacity: 0.7, animation: 'floaty 8s ease-in-out infinite' }} />
-        <div style={{ position: 'relative', flex: '1 1 420px' }}>
-          <div className="disp" style={{ fontSize: 34 }}>{t[2]}</div>
-          <p style={{ margin: '10px 0 0', fontSize: 17, maxWidth: 620 }}>{t[3]}</p>
+      <Card variant="dark" pad="lg" className={s.banner}>
+        <div className={s.bannerText}>
+          <h2 className={s.bannerTitle}>{t[2]}</h2>
+          <p>{t[3]}</p>
         </div>
-        {canEdit ? (
-          <button className="btn tap" style={{ position: 'relative', background: 'var(--acc2)', color: 'var(--fg-acc2)', border: 0 }} onClick={cta} disabled={genBusy}>
-            <Icon name="sparkle" size={16} sw={1.4} fill="currentColor" />
-            {genBusy ? 'Gerando…' : tab === 'depois' && b.retro ? 'Gerar de novo' : t[4]}
-          </button>
-        ) : null}
-      </div>
+        {canEdit ? <Button variant="primary" icon={genBusy ? undefined : 'sparkle'} onClick={cta} disabled={genBusy}>{genBusy ? <AiBusy steps={['Gerando', 'Escrevendo']} /> : tab === 'depois' && b.retro ? 'Gerar de novo' : t[4]}</Button> : null}
+      </Card>
 
-      {tab === 'depois' ? <Retro /> : null}
+      {tab === 'depois' && genBusy ? <AiThinking steps={AI_STEPS.retro} title="A IA está escrevendo a retrospectiva" lines={4} /> : null}
+      {tab === 'depois' && !genBusy ? <Retro /> : null}
 
       {stops.length ? (
         <section aria-label="Paradas" className={s.grid}>
@@ -124,26 +111,26 @@ export default function Diario() {
             const photos = b.journalPhotos.filter((p) => es.some((e) => e.id === p.entry_id));
             const last = es.at(-1);
             return (
-              <DiaryCard key={st.id} stop={st} i={i} color={cols[i % 4]} entry={last ?? null} photos={photos} count={es.length} tab={tab} summary={tab === 'antes' ? favoriteSummary(b, es) : null}
+              <DiaryCard key={st.id} stop={st} color={cols[i % 4]} entry={last ?? null} photos={photos} count={es.length} tab={tab} summary={tab === 'antes' ? favoriteSummary(b, es) : null}
                 onOpen={() => setStopDlg(st)} onFav={last ? () => void favorite(last) : undefined} />
             );
           })}
         </section>
       ) : (
-        <div className="empty" style={{ marginTop: 40 }}><h2 className="disp">Sem paradas ainda</h2><p style={{ margin: 0 }}>O diário se organiza pelas paradas do roteiro.</p></div>
+        <EmptyState icon="route" title="Sem paradas ainda" text="O diário se organiza pelas paradas do roteiro." />
       )}
       {entries.some((e) => !e.stop_id) ? (
-        <section style={{ marginTop: 48 }}>
-          <h2 className="disp" style={{ fontSize: 30 }}>Sem parada</h2>
+        <section className={s.loose}>
+          <h2 className={s.h2}>Sem parada</h2>
           <EntryList entries={entries.filter((e) => !e.stop_id)} onEdit={(e) => setEntryDlg({ entry: e, stopId: null })} />
         </section>
       ) : null}
 
       {stopDlg ? (
         <Dialog open onClose={() => setStopDlg(null)} title={stopDlg.name}>
-          <span className="mono" style={{ fontSize: 12 }}>{stopDates(stopDlg, true)} · {tab === 'antes' ? 'INSPIRAÇÕES' : 'REGISTROS'}</span>
+          <span className={s.mono}>{stopDates(stopDlg, true)} · {tab === 'antes' ? 'INSPIRAÇÕES' : 'REGISTROS'}</span>
           <EntryList entries={byScore(b, entries.filter((e) => e.stop_id === stopDlg.id), tab === 'antes')} onEdit={(e) => { setStopDlg(null); setEntryDlg({ entry: e, stopId: stopDlg.id }); }} />
-          {canEdit ? <button className="btn btn-primary tap" onClick={() => { setEntryDlg({ entry: null, stopId: stopDlg.id }); setStopDlg(null); }}><Icon name="plus" size={16} />{tab === 'antes' ? 'Nova inspiração' : 'Novo registro'}</button> : null}
+          {canEdit ? <Button icon="plus" onClick={() => { setEntryDlg({ entry: null, stopId: stopDlg.id }); setStopDlg(null); }}>{tab === 'antes' ? 'Nova inspiração' : 'Novo registro'}</Button> : null}
         </Dialog>
       ) : null}
       {entryDlg ? <EntryDialog entry={entryDlg.entry} stopId={entryDlg.stopId} kind={kind} phase={tab} onClose={() => setEntryDlg(null)} me={me} /> : null}
@@ -168,33 +155,31 @@ function favoriteSummary(b: TripBundle, es: JournalEntry[]): string | null {
 
 const entryTitle = (e: JournalEntry) => e.title || e.place_name || (e.entry_date ? dayMonth(e.entry_date) : 'Registro');
 
-function DiaryCard({ stop, i, color, entry, photos, count, tab, summary, onOpen, onFav }: { stop: Stop; i: number; color: string; entry: JournalEntry | null; photos: JournalPhoto[]; count: number; tab: Tab; summary: string | null; onOpen: () => void; onFav?: () => void }) {
+function DiaryCard({ stop, color, entry, photos, count, tab, summary, onOpen, onFav }: { stop: Stop; color: string; entry: JournalEntry | null; photos: JournalPhoto[]; count: number; tab: Tab; summary: string | null; onOpen: () => void; onFav?: () => void }) {
   const url = usePhotoUrl(photos[0]?.storage_path);
   return (
-    <article className="rv lift card" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 18, borderRadius: 28, transform: `rotate(${[-2, 1.5, -1, 2, -1.5, 1][i % 6]}deg)` }}>
+    <Card as="article" pad="md" className={s.stopCard}>
       <button className={s.cardBtn} onClick={onOpen} aria-label={`Abrir ${tab === 'antes' ? 'inspirações' : 'registros'} de ${stop.name}`}>
-        <div style={{ position: 'relative', aspectRatio: '4/3', display: 'grid', placeItems: 'center' }}>
-          <div style={{ position: 'absolute', inset: 0, clipPath: SHAPES[i % 6], background: url ? `center/cover no-repeat url("${url}")` : `repeating-linear-gradient(135deg, ${color} 0 16px, var(--bg) 16px 32px)` }} />
-          {!url ? <span style={{ position: 'relative', display: 'flex', padding: 10, borderRadius: '50%', background: 'var(--card)' }}><Icon name="camera" size={26} /></span> : null}
+        <div className={s.cover} style={url ? { background: `center/cover no-repeat url("${url}")` } : { background: `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 22%, var(--field)) 0 16px, var(--field) 16px 32px)` }}>
+          {!url ? <span className={s.coverIcon}><Icon name="camera" size={26} /></span> : null}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginTop: 14 }}>
-          <h2 className="disp" style={{ margin: 0, fontSize: 28 }}>{stop.name}</h2>
-          <span className="mono" style={{ fontSize: 12 }}>{stopDates(stop, true)}</span>
+        <div className={s.cardHead}>
+          <h2 className={s.cardTitle}>{stop.name}</h2>
+          <span className={s.mono}>{stopDates(stop, true)}</span>
         </div>
-        <p style={{ margin: '10px 0 0', fontSize: 15, color: 'var(--mute)', textAlign: 'left' }}>
+        <p className={s.cardText}>
           {entry?.body?.slice(0, 140) || entry?.title || (tab === 'antes' ? `[Salve lugares que quer ver em ${stop.name}]` : `[Escreva como foi em ${stop.name}]`)}
         </p>
-        {summary ? <p className="mono" style={{ margin: '8px 0 0', fontSize: 12, textAlign: 'left' }}>{summary}</p> : null}
+        {summary ? <p className={`${s.mono} ${s.summary}`}>{summary}</p> : null}
       </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="pill">{photos.length} {photos.length === 1 ? 'FOTO' : 'FOTOS'}</span>
-        {count > 1 ? <span className="pill">{count} REGISTROS</span> : null}
-        <button aria-label="Favoritar" aria-pressed={!!entry?.favorite} disabled={!onFav} className="tap" onClick={onFav}
-          style={{ marginLeft: 'auto', width: 44, height: 44, borderRadius: '50%', border: '1px solid var(--line)', background: entry?.favorite ? 'var(--acc)' : 'transparent', color: entry?.favorite ? 'var(--fg-acc)' : 'inherit', cursor: onFav ? 'pointer' : 'default', display: 'grid', placeItems: 'center' }}>
+      <div className={s.cardFoot}>
+        <Badge upper>{photos.length} {photos.length === 1 ? 'FOTO' : 'FOTOS'}</Badge>
+        {count > 1 ? <Badge upper>{count} REGISTROS</Badge> : null}
+        <button aria-label="Favoritar" aria-pressed={!!entry?.favorite} disabled={!onFav} className={s.fav} onClick={onFav}>
           <Icon name="heart" size={20} fill={entry?.favorite ? 'currentColor' : 'none'} />
         </button>
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -204,30 +189,30 @@ function Photo({ p, onDelete }: { p: JournalPhoto; onDelete?: () => void }) {
     <figure className={s.photo}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {url ? <img src={url} alt={p.caption ?? 'Foto do diário'} loading="lazy" /> : <div className="skel" style={{ height: '100%' }} />}
-      {onDelete ? <button className="btn btn-icon btn-sm" aria-label="Remover foto" onClick={onDelete}>✕</button> : null}
+      {onDelete ? <IconButton icon="close" label="Remover foto" variant="light" size={40} className={s.rm} onClick={onDelete} /> : null}
     </figure>
   );
 }
 
 function EntryList({ entries, onEdit }: { entries: JournalEntry[]; onEdit: (e: JournalEntry) => void }) {
   const { bundle: b, me, profileOf, canEdit } = useBundle();
-  if (!entries.length) return <p className="muted" style={{ margin: 0 }}>Nada por aqui ainda.</p>;
+  if (!entries.length) return <p className={s.none}>Nada por aqui ainda.</p>;
   return (
     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
       {entries.map((e) => (
         <li key={e.id} className={s.entry}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
             <b>{entryTitle(e)}</b>
-            <span className="mono" style={{ fontSize: 11 }}>{profileOf(e.author_id)?.display_name ?? ''}{e.favorite ? ' · ♥' : ''}</span>
+            <span className={s.mono}>{profileOf(e.author_id)?.display_name ?? ''}{e.favorite ? ' · ♥' : ''}</span>
           </div>
           {e.body ? <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{e.body}</p> : null}
-          {e.place_name ? <span className="pill">{e.place_name}</span> : null}
+          {e.place_name ? <Badge>{e.place_name}</Badge> : null}
           {e.link_url ? <a href={e.link_url} target="_blank" rel="noopener noreferrer nofollow" style={{ wordBreak: 'break-all' }}>{e.link_url}</a> : null}
           <div className={s.photos}>{b.journalPhotos.filter((p) => p.entry_id === e.id).map((p) => <Photo key={p.id} p={p} />)}</div>
           {e.kind === 'inspiracao' ? <Reactions entry={e} /> : null}
           <div className={s.entryActions}>
             {e.kind === 'inspiracao' ? <InRoute entry={e} /> : null}
-            {canEdit && e.author_id === me ? <button className="btn btn-sm tap" onClick={() => onEdit(e)}>Editar</button> : null}
+            {canEdit && e.author_id === me ? <Button variant="secondary" size="sm" onClick={() => onEdit(e)}>Editar</Button> : null}
           </div>
         </li>
       ))}
@@ -258,14 +243,14 @@ function Reactions({ entry }: { entry: JournalEntry }) {
     <div className={s.reactions}>
       <div role="group" aria-label={`Termômetro da turma para ${entryTitle(entry)}`} className={s.reactBtns}>
         {REACTIONS.map(([v, label]) => (
-          <button key={v} type="button" className="chip tap" aria-pressed={mine === v} disabled={!role || busy} onClick={() => void react(v)}
+          <Chip key={v} size="sm" selected={mine === v} disabled={!role || busy} onClick={() => void react(v)} count={who[v].length}
             aria-label={`${label}, ${plural(who[v].length, 'pessoa', 'pessoas')}`}>
-            {label}<small>{who[v].length}</small>
-          </button>
+            {label}
+          </Chip>
         ))}
       </div>
       {t.muito.length + t.topo.length + t.passo.length ? (
-        <p className={`mono ${s.voters}`}>
+        <p className={s.voters}>
           {REACTIONS.filter(([v]) => who[v].length).map(([v, , tag], i) => (
             <span key={v}>
               {i ? ' · ' : ''}{tag}:{' '}
@@ -285,7 +270,7 @@ function InRoute({ entry }: { entry: JournalEntry }) {
   const act = b.activities.find((a) => a.from_entry_id === entry.id);
   if (act) {
     return (
-      <Link className={`pill ${s.inRoute}`} data-tone="acc2" href={`${base}/roteiro?parada=${act.stop_id}`}>
+      <Link className={s.inRoute} href={`${base}/roteiro/${act.stop_id}`}>
         NO ROTEIRO · {dayMonth(act.day).toUpperCase()}
       </Link>
     );
@@ -293,7 +278,7 @@ function InRoute({ entry }: { entry: JournalEntry }) {
   if (!canEdit || !b.stops.length) return null;
   return (
     <>
-      <button type="button" className="btn btn-sm tap" onClick={() => setOpen(true)}><Icon name="plus" size={16} />Levar pro roteiro</button>
+      <Button size="sm" variant="secondary" icon="plus" onClick={() => setOpen(true)}>Levar pro roteiro</Button>
       {open ? <PromoteDialog entry={entry} onClose={() => setOpen(false)} /> : null}
     </>
   );
@@ -322,23 +307,23 @@ function PromoteDialog({ entry, onClose }: { entry: JournalEntry; onClose: () =>
   };
   return (
     <Dialog open onClose={onClose} title="Levar pro roteiro" footer={<>
-      <button className="btn tap" onClick={onClose}>Cancelar</button>
-      <button className="btn btn-primary tap" disabled={busy || !v.day} onClick={() => void save()}>{busy ? 'Salvando…' : 'Levar pro roteiro'}</button>
+      <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+      <Button disabled={busy || !v.day} onClick={() => void save()}>{busy ? <Busy>Salvando</Busy> : 'Levar pro roteiro'}</Button>
     </>}>
       <p style={{ margin: 0 }}><b>{entryTitle(entry)}</b> vira uma atividade no plano da parada. Dá pra editar ou excluir depois no Roteiro.</p>
-      <label className="field">Parada
+      <Field label="Parada">
         <select value={v.stop_id} onChange={(e) => { const st = stops.find((x) => x.id === e.target.value)!; setV({ ...v, stop_id: st.id, day: defaultDay(st) }); }}>
           {stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
         </select>
-      </label>
-      <div className="grid2">
-        <label className="field">Dia
+      </Field>
+      <FieldGrid>
+        <Field label="Dia">
           <select value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })}>
             {dateRange(stop.arrival_date, stop.departure_date).map((d) => <option key={d} value={d}>{dayMonth(d)}</option>)}
           </select>
-        </label>
-        <label className="field">Horário (opcional)<input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /></label>
-      </div>
+        </Field>
+        <Field label="Horário (opcional)"><input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /></Field>
+      </FieldGrid>
     </Dialog>
   );
 }
@@ -399,33 +384,32 @@ function EntryDialog({ entry, stopId, kind, phase, onClose, me }: { entry: Journ
   };
   return (
     <Dialog open onClose={onClose} title={entry ? 'Editar' : kind === 'inspiracao' ? 'Nova inspiração' : 'Novo registro'} footer={<>
-      {entry ? <button className="btn btn-danger tap" onClick={del}>Excluir</button> : null}
-      <button className="btn tap" onClick={onClose}>Cancelar</button>
-      <button className="btn btn-primary tap" disabled={busy || !linkOk || !(v.body.trim() || v.title.trim() || v.link_url.trim() || files.length)} onClick={save}>{busy ? 'Salvando…' : 'Salvar'}</button>
+      {entry ? <Button variant="secondary" className={s.danger} onClick={del}>Excluir</Button> : null}
+      <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+      <Button disabled={busy || !linkOk || !(v.body.trim() || v.title.trim() || v.link_url.trim() || files.length)} onClick={save}>{busy ? <Busy>Salvando</Busy> : 'Salvar'}</Button>
     </>}>
-      <div className="grid2">
-        <label className="field">Parada<select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}><option value="">Sem parada</option>{stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label className="field">Dia<input type="date" value={v.entry_date} onChange={(e) => setV({ ...v, entry_date: e.target.value })} /></label>
-      </div>
-      <label className="field">{kind === 'inspiracao' ? 'Lugar ou ideia' : 'Título (opcional)'}<input value={v.title} maxLength={120} onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
-      <label className="field">{kind === 'inspiracao' ? 'Por que quer ver' : 'Como foi'}<textarea rows={4} maxLength={10000} value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} /></label>
+      <FieldGrid>
+        <Field label="Parada"><select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}><option value="">Sem parada</option>{stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+        <Field label="Dia"><input type="date" value={v.entry_date} onChange={(e) => setV({ ...v, entry_date: e.target.value })} /></Field>
+      </FieldGrid>
+      <Field label={kind === 'inspiracao' ? 'Lugar ou ideia' : 'Título (opcional)'}><input value={v.title} maxLength={120} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
+      <Field label={kind === 'inspiracao' ? 'Por que quer ver' : 'Como foi'}><textarea rows={4} maxLength={10000} value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} /></Field>
       {kind === 'inspiracao' ? (
-        <div className="grid2">
-          <label className="field">Link<input type="url" value={v.link_url} maxLength={500} onChange={(e) => setV({ ...v, link_url: e.target.value })} placeholder="https://" />{!linkOk ? <span className="err">Use um link http(s).</span> : null}</label>
-          <label className="field">Nome do lugar<input value={v.place_name} maxLength={120} onChange={(e) => setV({ ...v, place_name: e.target.value })} /></label>
-        </div>
+        <FieldGrid>
+          <Field label="Link" error={!linkOk ? 'Use um link http(s).' : undefined}><input type="url" value={v.link_url} maxLength={500} onChange={(e) => setV({ ...v, link_url: e.target.value })} placeholder="https://" /></Field>
+          <Field label="Nome do lugar"><input value={v.place_name} maxLength={120} onChange={(e) => setV({ ...v, place_name: e.target.value })} /></Field>
+        </FieldGrid>
       ) : null}
       {photos.length ? <div className={s.photos}>{photos.map((p) => <Photo key={p.id} p={p} onDelete={() => void delPhoto(p)} />)}</div> : null}
-      <label className="field">Fotos (comprimidas para economizar espaço)
+      <Field label="Fotos (comprimidas para economizar espaço)" hint={files.length ? `${files.length} foto(s) serão enviadas ao salvar.` : undefined}>
         <input type="file" accept="image/*,.heic,.heif" multiple onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 12))} />
-        {files.length ? <span className="hint">{files.length} foto(s) serão enviadas ao salvar.</span> : null}
-      </label>
+      </Field>
     </Dialog>
   );
 }
 
 function Retro() {
-  const { bundle: b, identity } = useBundle();
+  const { bundle: b } = useBundle();
   const r = b.retro?.content ?? null;
   const fallback = useMemo(() => ruleRetro(b), [b]);
   const favs = b.journalEntries.filter((e) => e.favorite);
@@ -439,32 +423,33 @@ function Retro() {
     c.width = W;
     c.height = H;
     const ctx = c.getContext('2d')!;
-    const p = identity.palette;
+    // Paleta fixa da Trilha 2.0 (tokens de globals.css).
+    const p = { bg: '#F5F6F8', deep: '#0D1017', onDeep: '#FFFFFF', routeLine: '#8E9BFF', ink: '#0D1017', mute: '#5B6270' };
     ctx.fillStyle = p.bg;
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = p.deep;
     ctx.fillRect(0, 0, W, 520);
     await document.fonts.ready;
-    const disp = getComputedStyle(document.documentElement).getPropertyValue('--font-display');
+    const disp = getComputedStyle(document.documentElement).getPropertyValue('--font-title');
     ctx.fillStyle = p.onDeep;
-    ctx.font = `${identity.display.weight} 84px ${disp}`;
+    ctx.font = `800 84px ${disp}`;
     wrap(ctx, b.trip.title, 80, 200, W - 160, 92);
-    ctx.font = `500 26px ${getComputedStyle(document.documentElement).getPropertyValue('--font-mono')}`;
+    ctx.font = `500 26px ${getComputedStyle(document.documentElement).getPropertyValue('--font-body')}`;
     ctx.fillStyle = p.routeLine;
     ctx.fillText(`${dayMonth(b.trip.start_date).toUpperCase()} → ${dayMonth(b.trip.end_date).toUpperCase()}`, 80, 120);
     ctx.fillStyle = p.ink;
     ctx.font = `400 30px ${getComputedStyle(document.body).fontFamily}`;
     let y = wrap(ctx, content.intro, 80, 600, W - 160, 40) + 30;
     content.chapters.slice(0, 6).forEach((ch, i) => {
-      ctx.fillStyle = [p.acc, p.acc2, p.acc3, p.deep][i % 4];
+      ctx.fillStyle = CYCLE[i % CYCLE.length];
       ctx.fillRect(80, y - 22, 18, 18);
       ctx.fillStyle = p.ink;
-      ctx.font = `${identity.display.weight} 36px ${disp}`;
+      ctx.font = `800 36px ${disp}`;
       ctx.fillText(ch.heading, 116, y);
       ctx.font = `400 24px ${getComputedStyle(document.body).fontFamily}`;
       y = wrap(ctx, ch.text, 116, y + 36, W - 200, 32) + 26;
     });
-    ctx.font = `500 24px ${getComputedStyle(document.documentElement).getPropertyValue('--font-mono')}`;
+    ctx.font = `500 24px ${getComputedStyle(document.documentElement).getPropertyValue('--font-body')}`;
     ctx.fillStyle = p.mute;
     ctx.fillText(`${content.closing} · trilha`, 80, H - 70);
     c.toBlob((blob) => {
@@ -478,18 +463,18 @@ function Retro() {
   };
 
   return (
-    <section className={`${s.retro} rv`} aria-label="Retrospectiva">
+    <section className={s.retro} aria-label="Retrospectiva">
       <AiNote by={by}>{b.retro ? (by === 'ai' ? 'Roteiro da retrospectiva gerado por IA a partir do seu diário. Edite o diário e gere de novo quando quiser.' : 'Resumo montado por regras a partir dos seus dados.') : 'Prévia por regras: ainda não foi gerada uma retrospectiva.'}</AiNote>
-      <h2 className="disp" style={{ margin: 0, fontSize: 'clamp(36px,5vw,64px)', lineHeight: 0.95 }}>{content.title}</h2>
+      <h2 className={s.retroTitle}>{content.title}</h2>
       <p style={{ margin: 0, fontSize: 18 }}>{content.intro}</p>
       <ol className={s.chapters}>
         {content.chapters.map((ch, i) => (
-          <li key={i}><b className="disp">{ch.heading}</b><span>{ch.text}</span></li>
+          <li key={i}><b>{ch.heading}</b><span>{ch.text}</span></li>
         ))}
       </ol>
-      {favPhotos.length ? <div className={s.photos}>{favPhotos.map((p) => <Photo key={p.id} p={p} />)}</div> : <p className="muted" style={{ margin: 0 }}>Marque registros com ♥ para as melhores fotos entrarem aqui.</p>}
-      <p className="mono" style={{ margin: 0, fontSize: 12 }}>{content.closing}</p>
-      <button className="btn btn-ink tap" style={{ alignSelf: 'flex-start' }} onClick={() => void exportPng()}><Icon name="upload" size={16} />Exportar como imagem</button>
+      {favPhotos.length ? <div className={s.photos}>{favPhotos.map((p) => <Photo key={p.id} p={p} />)}</div> : <p className={s.none}>Marque registros com ♥ para as melhores fotos entrarem aqui.</p>}
+      <p className={s.mono} style={{ margin: 0 }}>{content.closing}</p>
+      <Button variant="dark" icon="upload" className={s.exportBtn} onClick={() => void exportPng()}>Exportar como imagem</Button>
     </section>
   );
 }

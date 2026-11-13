@@ -1,159 +1,446 @@
 'use client';
+// Roteiro (planning §5.2, canvas Roteiro.dc.html): faixa de paradas, parada em foco com capa e dias,
+// sugestões encaixadas nos dias vazios/com folga, trechos entre paradas e o mapa (?vista=mapa).
+// A página de cada parada fica em /roteiro/[stopId] (Parada.tsx).
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PlaceSearch, type Place } from '../components/forms/PlaceSearch';
-import { StopSuggestions } from '../components/plan/StopSuggestions';
-import { useDraft } from '../components/forms/useDraft';
-import { Dialog, useAction, useConfirm, useToast } from '../components/ui/feedback';
-import { AiNote, Floaters, Icon, PageTitle, Pattern, useReveal } from '../components/ui/primitives';
+import { ActivitySheet, AddStopSheet, ChooseDaySheet, EditStopSheet, TransportSheet } from '../components/route/RouteSheets';
+import { Badge, EstimateBadge } from '../components/ui/Badge';
+import { Button, IconButton } from '../components/ui/Button';
+import { EmptyState } from '../components/ui/EmptyState';
+import { useAction, useToast } from '../components/ui/feedback';
+import type { IconName } from '../components/ui/icons.data';
+import { ListRow } from '../components/ui/ListRow';
+import { Photo, type PhotoData } from '../components/ui/Photo';
+import { Icon } from '../components/ui/primitives';
+import { ScreenHeader } from '../components/ui/ScreenHeader';
+import { Segmented } from '../components/ui/Segmented';
+import { Sheet } from '../components/ui/Sheet';
+import { ScreenSkeleton } from '../components/ui/Skeleton';
+import { locateActivities } from '../data/activityPlaces';
+import { acceptSuggestion, voteSuggestions } from '../data/suggestionActions';
 import { useBundle } from '../data/TripContext';
-import type { Activity, Stay, Stop, Transport, TransportMode } from '../data/types';
-import { callAi } from '../lib/ai/client';
-import {
-  arrivalOf, docsOfStop, durationLabel, legToNext, sortedStops, stayOf, stayStatusLabel, stopCode, stopDates, stopMeta,
-  stopNights, straightKm, ticketTimes, transportMinutes, tripPhase, tripTarget,
-} from '../lib/derive';
-import { dateRange, daysBetween, isValidTimeZone, listTimeZones } from '../lib/time';
-import { dayWeekU, hhmm, MODE_LABEL, MODE_SHORT } from '../lib/format';
-import { fgOn } from '../lib/identity/contrast';
-import { colorCycle } from '../lib/identity/theme';
-import { ruleTip } from '../lib/rules';
-import { countdown } from '../lib/time';
+import type { Activity, Stop, Suggestion, Transport, TransportMode, TripBundle } from '../data/types';
+import { activityMarks, needsLocate, placeOf } from '../lib/activityPlace';
+import { sortedStops, stopNights, straightKm } from '../lib/derive';
+import { activityCapForStop } from '../lib/explore';
+import { dateSpan, hhmm } from '../lib/format';
+import { formatMoney } from '../lib/money';
+import { dayPending, focusStopId, legInto, placeDaySuggestions, returnLeg, stopBadge, waitingCount, type Leg } from '../lib/route';
+import { isRestDay, stopSlots, type DaySlot } from '../lib/suggestions';
+import { daysBetween, todayIn } from '../lib/time';
 import s from './roteiro.module.css';
 
-const RouteMap = dynamic(() => import('../components/map/RouteMap'), { ssr: false, loading: () => <div className="skel" style={{ height: 420 }} /> });
+const RouteMap = dynamic(() => import('../components/map/RouteMap'), { ssr: false, loading: () => <div className="skel" style={{ height: 420, borderRadius: 22 }} /> });
 
-const MODES: TransportMode[] = ['bus', 'plane', 'train', 'car', 'boat', 'walk', 'other'];
-const nn = (v: string) => (v.trim() === '' ? null : v.trim());
+const MODE_ICON: Record<TransportMode, IconName> = { plane: 'plane', train: 'train', bus: 'bus', boat: 'route', car: 'route', walk: 'route', other: 'route' };
 
-function useStopsState() {
-  const ctx = useBundle();
-  const stops = useMemo(() => sortedStops(ctx.bundle), [ctx.bundle]);
-  return { ...ctx, stops };
+type Open =
+  | { kind: 'add' }
+  | { kind: 'transport'; stop: Stop }
+  | { kind: 'return'; stop: Stop; t: Transport }
+  | { kind: 'act'; stop: Stop; act: Activity | null; day?: string }
+  | { kind: 'menu'; stop: Stop }
+  | { kind: 'edit'; stop: Stop }
+  | { kind: 'choose'; stop: Stop; sg: Suggestion; day: string | null }
+  | null;
+
+/** Desktop (> 820 px): lista e mapa lado a lado. */
+function useWide() {
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 821px)');
+    const on = () => setWide(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return wide;
 }
 
 export default function Roteiro() {
-  const { bundle: b, identity, canEdit, stops } = useStopsState();
+  const { bundle: b, base } = useBundle();
   const params = useSearchParams();
   const router = useRouter();
-  const cols = colorCycle(identity);
-  const [mapOpen, setMapOpen] = useState(false);
-  const sel = Math.max(0, stops.findIndex((x) => x.id === params.get('parada')));
-  const detailRef = useRef<HTMLElement>(null);
-  useReveal([stops.length]);
+  const legacy = params.get('parada');
+  // Link antigo (?parada=X) → página da parada (planning §4.3).
+  useEffect(() => {
+    if (legacy) router.replace(`${base}/roteiro/${encodeURIComponent(legacy)}`);
+  }, [legacy, base, router]);
+  if (legacy && b.stops.some((x) => x.id === legacy)) return <ScreenSkeleton />;
+  return <RouteList />;
+}
 
-  const select = (i: number) => {
-    const q = new URLSearchParams(params.toString());
-    q.set('parada', stops[i].id);
-    router.replace(`?${q.toString()}`, { scroll: false });
-    if (window.matchMedia('(max-width: 1023px)').matches) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+function RouteList() {
+  const { bundle: b, base, canEdit, accent } = useBundle();
+  const params = useSearchParams();
+  const router = useRouter();
+  const path = usePathname();
+  const wide = useWide();
+  const stops = useMemo(() => sortedStops(b), [b]);
+  const vista = params.get('vista') === 'mapa' ? 'mapa' : 'lista';
+  const today = todayIn(b.trip.departure_tz || 'America/Sao_Paulo');
+  const focusKey = `trilha.roteiro.focus.${b.trip.id}`;
+  const [focus, setFocusState] = useState<string | null>(null);
+  const [open, setOpen] = useState<Open>(null);
+  const refs = useRef(new Map<string, HTMLElement>());
+
+  // Foco: o último escolhido nesta sessão (volta da Parada no mesmo lugar); senão a parada de hoje ou a próxima.
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem(focusKey);
+    } catch {
+      /* sem storage */
+    }
+    setFocusState((cur) => (cur && stops.some((x) => x.id === cur) ? cur : saved && stops.some((x) => x.id === saved) ? saved : focusStopId(stops, today)));
+  }, [stops, focusKey, today]);
+
+  const setFocus = (id: string, scroll = true) => {
+    setFocusState(id);
+    try {
+      sessionStorage.setItem(focusKey, id);
+    } catch {
+      /* sem storage */
+    }
+    if (scroll) setTimeout(() => refs.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
+  const setVista = (v: 'lista' | 'mapa') => {
+    const q = new URLSearchParams(params.toString());
+    if (v === 'mapa') q.set('vista', 'mapa');
+    else q.delete('vista');
+    router.replace(q.size ? `${path}?${q}` : path, { scroll: false });
+  };
+  const openStop = (id: string) => router.push(`${base}/roteiro/${id}`);
 
-  const phase = tripPhase(b.trip);
-  const days = countdown(Date.now(), tripTarget(b.trip), b.trip.departure_tz).totalDays;
-  const eyebrow = `${b.trip.title} · ${phase.kind === 'before' ? `faltam ${days} dias` : phase.kind === 'after' ? 'viagem concluída' : 'em andamento'}`;
   const totalDays = daysBetween(b.trip.start_date, b.trip.end_date) + 1;
+  const waiting = waitingCount(b);
+  const subtitle = stops.length
+    ? [`${totalDays} dias`, `${stops.length} ${stops.length === 1 ? 'parada' : 'paradas'}`, waiting ? `${waiting} ${waiting === 1 ? 'sugestão esperando' : 'sugestões esperando'}` : null].filter(Boolean).join(' · ')
+    : 'Nenhuma parada ainda.';
   const km = straightKm(stops);
+  // Passeios no mapa: pino, trajeto (trem panorâmico, barco) e ligação com a parada de onde saem.
+  const marks = useMemo(() => activityMarks(b), [b]);
+  const openAct = (id: string) => {
+    const a = b.activities.find((x) => x.id === id);
+    const st = a ? stops.find((x) => x.id === a.stop_id) : null;
+    if (a && st) setOpen({ kind: 'act', stop: st, act: a });
+  };
+  const mapNote = (
+    <>
+      <MapLegend marks={marks} />
+      <p className={s.mapNote}>
+        A linha liga as paradas em ordem e não é o trajeto real.
+        {km.km > 0 ? ` ${km.km.toLocaleString('pt-BR')} km em linha reta${km.complete ? '' : ' (só entre paradas com coordenadas)'}.` : ''}
+        {marks.some((m) => m.path && m.by === 'ai') ? ' Trajetos de passeio são aproximados (estimados pela Trilha).' : ''}
+        {marks.some((m) => !m.far) ? ' Aproxime o mapa para ver os passeios dentro de cada cidade.' : ''}
+        {stops.some((x) => x.lat == null) ? ' Paradas sem coordenadas não aparecem: edite a parada e escolha o lugar na busca.' : ''}
+      </p>
+      {canEdit ? <LocateActivities /> : null}
+    </>
+  );
 
   return (
-    <div className="wrap">
-      <Floaters />
-      <PageTitle
-        eyebrow={eyebrow}
+    <div className={s.page}>
+      <ScreenHeader
         title="Roteiro"
-        sub={stops.length ? `${stops.length} ${stops.length === 1 ? 'parada' : 'paradas'}, ${totalDays} dias, uma linha. Toque numa parada pra ver tudo dela.` : 'Nenhuma parada ainda. Comece pela primeira cidade.'}
-        actions={
-          <>
-            <button className="btn tap lift" onClick={() => setMapOpen(true)} disabled={!stops.length}>
-              <Icon name="map" size={18} />
-              Ver no mapa
-            </button>
-            {canEdit ? (
-              <a className="btn btn-primary tap lift" href="#nova">
-                <Icon name="plus" size={18} />
-                Adicionar parada
-              </a>
-            ) : null}
-          </>
-        }
+        subtitle={subtitle}
+        action={stops.length && !wide ? <Segmented label="Ver como" value={vista} onChange={setVista} options={[{ value: 'lista', label: 'Lista' }, { value: 'mapa', label: 'Mapa' }]} /> : canEdit && wide ? <Button icon="plus" onClick={() => setOpen({ kind: 'add' })}>Adicionar parada</Button> : null}
       />
 
-      {stops.length ? (
-        <div className={s.segbar} role="group" aria-label="Paradas">
-          {stops.map((st, i) => {
-            const c = cols[i % 4];
-            return (
-              <button key={st.id} className="tap" aria-pressed={i === sel} onClick={() => select(i)} style={{ flex: `${Math.max(1, daysBetween(st.arrival_date, st.departure_date))} 1 0`, background: c, color: fgOn(c) }}>
-                <b>{stopCode(st)}</b>
-                <span>{stopNights(st)}</span>
+      {!stops.length ? (
+        <EmptyState
+          icon="route"
+          title="Nenhuma parada ainda"
+          text={canEdit ? 'Comece pela primeira cidade: nome e datas. Trecho, hospedagem e passeios vêm depois.' : 'Quem organiza ainda não adicionou paradas.'}
+          action={canEdit ? <Button icon="plus" onClick={() => setOpen({ kind: 'add' })}>Adicionar parada</Button> : undefined}
+        />
+      ) : vista === 'mapa' && !wide ? (
+        <section className={s.mapFull} aria-label="Mapa da trilha">
+          <RouteMap stops={stops} activities={marks} accent={accent} height="calc(100dvh - 300px)" onOpen={openStop} onOpenActivity={openAct} focusId={focus} />
+          {mapNote}
+        </section>
+      ) : (
+        <>
+          <nav className={s.strip} aria-label="Paradas">
+            {stops.map((st) => (
+              <button key={st.id} type="button" className={s.stripItem} aria-current={st.id === focus ? 'true' : undefined} onClick={() => setFocus(st.id)}>
+                <Photo photo={st.photo?.url ? (st.photo as PhotoData) : null} place={st.name} alt="" height={76} radius="18px" caption={false} className={s.stripThumb} />
+                <span className={s.stripName}>{st.name}</span>
               </button>
-            );
-          })}
-        </div>
-      ) : null}
+            ))}
+            {canEdit ? (
+              <button type="button" className={s.stripItem} onClick={() => setOpen({ kind: 'add' })}>
+                <span className={s.stripAdd} aria-hidden="true"><Icon name="plus" size={24} /></span>
+                <span className={s.stripName}>parada</span>
+                <span className="sr">Adicionar parada</span>
+              </button>
+            ) : null}
+          </nav>
 
-      {/* No celular o detalhe da parada vem logo depois da barra de paradas; lista e "Nova parada" descem (roteiro.module.css). */}
-      <section className={`split ${s.layout}`}>
-        <div className={`col-side ${s.side}`}>
-          {stops.length ? (
+          <div className={s.layout}>
             <div className={s.list}>
-              <h3 className={`h3 ${s.listHead}`}>Ordem das paradas</h3>
               {stops.map((st, i) => {
-                const c = cols[i % 4];
-                const leg = legToNext(b, stops, i);
+                const leg = legInto(b, stops, i);
                 return (
-                  <div key={st.id} className="rv">
-                    <div className={s.stopRow}>
-                      <button className={`${s.stopBtn} lift tap`} aria-pressed={i === sel} onClick={() => select(i)}>
-                        <span className="num">
-                          <i style={{ background: c }} />
-                          <b style={{ color: fgOn(c) }}>{i + 1}</b>
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span className={`disp ${s.stopName}`}>{st.name}</span>
-                          <span className="mono" style={{ display: 'block', fontSize: 12, marginTop: 4, opacity: 0.8 }}>
-                            {stopDates(st)} · {stopNights(st)}
-                          </span>
-                        </span>
-                      </button>
-                      {canEdit ? <Reorder stops={stops} i={i} /> : null}
-                    </div>
-                    {leg ? (
-                      <div className={s.leg}>
-                        <svg aria-hidden="true" width="4" height="44" viewBox="0 0 4 44">
-                          <path className="dm" d="M2 0 V44" stroke="currentColor" strokeWidth="2.5" strokeOpacity=".5" />
-                        </svg>
-                        <span>{leg}</span>
-                      </div>
-                    ) : i < stops.length - 1 ? <div style={{ height: 12 }} /> : null}
+                  <div key={st.id} className={s.block} ref={(el) => { if (el) refs.current.set(st.id, el); else refs.current.delete(st.id); }}>
+                    {leg ? <LegLine leg={leg} onEdit={canEdit ? () => setOpen({ kind: 'transport', stop: st }) : undefined} /> : null}
+                    {st.id === focus ? (
+                      <StopFocus b={b} stop={st} base={base} canEdit={canEdit} setOpen={setOpen} />
+                    ) : (
+                      <StopCompact b={b} stop={st} onFocus={() => setFocus(st.id)} onMenu={canEdit ? () => setOpen({ kind: 'menu', stop: st }) : undefined} />
+                    )}
                   </div>
                 );
               })}
+              {(() => {
+                const ret = returnLeg(b, stops);
+                return ret?.transport ? <div className={s.block}><LegLine leg={ret} onEdit={canEdit ? () => setOpen({ kind: 'return', stop: stops[stops.length - 1], t: ret.transport! }) : undefined} /></div> : null;
+              })()}
             </div>
-          ) : null}
-          {canEdit ? <NewStopForm stops={stops} onCreated={(id) => router.replace(`?parada=${id}`, { scroll: false })} /> : null}
-          {!canEdit && !stops.length ? <div className="empty"><h3 className="disp">Roteiro vazio</h3><p style={{ margin: 0 }}>Quem organiza ainda não adicionou paradas.</p></div> : null}
-        </div>
-        {stops.length ? <StopDetail key={stops[sel].id} stop={stops[sel]} index={sel} total={stops.length} color={cols[sel % 4]} refEl={detailRef} /> : null}
-      </section>
+            {wide ? (
+              <aside className={s.aside} aria-label="Mapa da trilha">
+                <RouteMap stops={stops} activities={marks} accent={accent} height="min(70vh, 640px)" onOpen={openStop} onOpenActivity={openAct} focusId={focus} />
+                {mapNote}
+              </aside>
+            ) : null}
+          </div>
+        </>
+      )}
 
-      <Dialog open={mapOpen} onClose={() => setMapOpen(false)} title="Mapa da trilha">
-        {mapOpen ? <RouteMap stops={stops} colors={cols} line={identity.palette.acc} /> : null}
-        <p className="mono" style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>
-          A LINHA LIGA AS PARADAS EM ORDEM E NÃO É O TRAJETO REAL.{' '}
-          {km.km > 0 ? `${km.km.toLocaleString('pt-BR')} KM EM LINHA RETA${km.complete ? '' : ' (SÓ ENTRE PARADAS COM COORDENADAS)'}.` : ''}
-          {stops.some((x) => x.lat == null) ? ' PARADAS SEM COORDENADAS NÃO APARECEM: EDITE A PARADA E ESCOLHA O LUGAR NA BUSCA.' : ''}
-        </p>
-      </Dialog>
+      <AddStopSheet open={open?.kind === 'add'} onClose={() => setOpen(null)} stops={stops} onCreated={(id) => setFocus(id)} />
+      {open?.kind === 'transport' ? <TransportSheet stop={open.stop} t={b.transports.find((t) => t.stop_id === open.stop.id && !t.is_return) ?? null} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'return' ? <TransportSheet stop={open.stop} t={open.t} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'act' ? <ActivitySheet stop={open.stop} act={open.act} day={open.day} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'edit' ? <EditStopSheet stop={open.stop} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'choose' ? <ChooseDaySheet suggestion={open.sg} stop={open.stop} initial={open.day} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'menu' ? <StopMenu stop={open.stop} stops={stops} base={base} onClose={() => setOpen(null)} onEdit={() => setOpen({ kind: 'edit', stop: open.stop })} onTransport={() => setOpen({ kind: 'transport', stop: open.stop })} /> : null}
     </div>
   );
 }
 
-function Reorder({ stops, i }: { stops: Stop[]; i: number }) {
+/** Legenda do mapa: só o que está desenhado. */
+function MapLegend({ marks }: { marks: ReturnType<typeof activityMarks> }) {
+  if (!marks.length) return null;
+  return (
+    <div className={s.legend} aria-hidden="true">
+      <span><i data-k="stop" />paradas</span>
+      <span><i data-k="act" />passeios</span>
+      {marks.some((m) => m.path) ? <span><i data-k="path" />trajeto de passeio</span> : null}
+      {marks.some((m) => m.far) ? <span><i data-k="link" />saindo da parada</span> : null}
+    </div>
+  );
+}
+
+/**
+ * "Pôr passeios no mapa": a IA diz onde cada atividade acontece (e o trajeto, se for um percurso) e o app
+ * grava em activities.place. Aparece só para quem edita e só quando há atividade ainda não procurada.
+ */
+function LocateActivities() {
+  const { bundle: b, source, reload } = useBundle();
+  const { run, busy } = useAction();
+  const toast = useToast();
+  const pending = b.activities.filter(needsLocate);
+  if (!pending.length || source.kind === 'demo') return null;
+  const offMap = pending.filter((a) => !placeOf(b, a)).length;
+  const go = () => run(async () => {
+    const r = await locateActivities(source, b.trip.id);
+    await reload();
+    toast(r.placed
+      ? `${r.placed} ${r.placed === 1 ? 'passeio entrou' : 'passeios entraram'} no mapa${r.none ? `; ${r.none} não ${r.none === 1 ? 'é um lugar' : 'são lugares'} (ex.: tarde livre)` : ''}.`
+      : 'Nenhum passeio novo com lugar no mapa. Dá pra escolher o lugar na janela da atividade.');
+  });
+  return (
+    <div className={s.locate}>
+      <span>
+        {offMap ? `${offMap} ${offMap === 1 ? 'passeio ainda não aparece' : 'passeios ainda não aparecem'} no mapa.` : 'A Trilha pode desenhar o trajeto dos passeios (trem panorâmico, barco, bate-volta).'}
+      </span>
+      <Button size="sm" variant="secondary" icon="pin" onClick={() => void go()} disabled={busy}>{busy ? 'Procurando…' : 'Pôr passeios no mapa'}</Button>
+    </div>
+  );
+}
+
+/** Linha entre paradas: "Voo Lima → Cusco · 1h20 · R$ 520 / pessoa" e o selo "não reservado". */
+function LegLine({ leg, onEdit }: { leg: Leg; onEdit?: () => void }) {
+  const body = (
+    <>
+      <Icon name={MODE_ICON[leg.mode]} size={18} className={s.legIcon} />
+      <span className={s.legText}>
+        {leg.title}
+        {leg.duration ? ` · ${leg.duration}` : ''}
+        {leg.priceCents != null ? <> · <b className="num">{formatMoney(leg.priceCents, leg.currency, { compact: true })} / pessoa</b></> : null}
+      </span>
+      {leg.priceCents != null && leg.estimate ? <EstimateBadge /> : null}
+      {leg.notBooked ? <Badge tone="warn">não reservado</Badge> : null}
+      {!leg.transport && onEdit ? <Badge tone="neutral">definir trecho</Badge> : null}
+    </>
+  );
+  return onEdit ? (
+    <button type="button" className={s.leg} onClick={onEdit} aria-label={`Trecho: ${leg.title}. Editar`}>{body}</button>
+  ) : (
+    <div className={s.leg}>{body}</div>
+  );
+}
+
+/** Parada fora de foco: linha compacta com miniatura, "datas · noites · bairro" e selo. */
+function StopCompact({ b, stop, onFocus, onMenu }: { b: TripBundle; stop: Stop; onFocus: () => void; onMenu?: () => void }) {
+  const badge = stopBadge(b, stop);
+  return (
+    <article className={s.compact} aria-label={`Parada ${stop.name}`}>
+      <button type="button" className={s.compactMain} onClick={onFocus} aria-expanded={false}>
+        <Photo photo={stop.photo?.url ? (stop.photo as PhotoData) : null} place={stop.name} alt="" height={52} radius="14px" caption={false} className={s.compactThumb} />
+        <span className={s.compactText}>
+          <span className={s.compactName}>{stop.name}</span>
+          <span className={s.compactSub}>{[dateSpan(stop.arrival_date, stop.departure_date), stopNights(stop), stop.stay_base?.name ? `dorme em ${stop.stay_base.name}` : stop.area].filter(Boolean).join(' · ')}</span>
+        </span>
+        <Badge tone={badge.tone}>{badge.label}</Badge>
+      </button>
+      {onMenu ? <IconButton icon="more" label={`Mais ações de ${stop.name}`} variant="ghost" onClick={onMenu} /> : null}
+    </article>
+  );
+}
+
+/** Parada em foco: capa (leva à página da parada) e os dias com atividades e sugestões. */
+function StopFocus({ b, stop, base, canEdit, setOpen }: { b: TripBundle; stop: Stop; base: string; canEdit: boolean; setOpen: (o: Open) => void }) {
+  const slots = stopSlots(b, stop);
+  const placed = useMemo(() => placeDaySuggestions(b, stop, activityCapForStop(b, stop)), [b, stop]);
+  return (
+    <article className={s.focus} aria-label={`Parada ${stop.name}`}>
+      <Link href={`${base}/roteiro/${stop.id}`} className={s.cover} aria-label={`Ver a cidade: ${stop.name}${stop.area ? `, fiquem em ${stop.area}` : ''}`}>
+        <Photo photo={stop.photo?.url ? (stop.photo as PhotoData) : null} place={stop.name} height="100%" radius="0" overlay>
+          <div className={s.coverBase}>
+            <span className={s.coverLine}>{dateSpan(stop.arrival_date, stop.departure_date)} · {stopNights(stop)}</span>
+            <h2 className={s.coverName}>{stop.name}</h2>
+            <span className={s.coverChips}>
+              {stop.stay_base?.name ? <span className={s.chipLight}>Dormem em {stop.stay_base.name}</span> : stop.area ? <span className={s.chipLight}>Fiquem em {stop.area}</span> : null}
+              <span className={s.chipDark}>Ver a cidade →</span>
+            </span>
+          </div>
+        </Photo>
+      </Link>
+      {canEdit ? (
+        <div className={s.focusTools}>
+          <Button size="sm" variant="secondary" icon="edit" onClick={() => setOpen({ kind: 'edit', stop })}>Editar parada</Button>
+          <IconButton icon="more" label={`Mais ações de ${stop.name}`} variant="ghost" onClick={() => setOpen({ kind: 'menu', stop })} />
+        </div>
+      ) : null}
+      <div className={s.days}>
+        {slots.map((slot) => (
+          <DayRow key={slot.date} b={b} stop={stop} slot={slot} suggestions={placed.get(slot.date) ?? []} canEdit={canEdit} setOpen={setOpen} />
+        ))}
+        {canEdit ? <Button variant="dashed" size="sm" icon="plus" block onClick={() => setOpen({ kind: 'act', stop, act: null })} className={s.addAct}>Atividade</Button> : null}
+      </div>
+    </article>
+  );
+}
+
+function DayRow({ b, stop, slot, suggestions, canEdit, setOpen }: { b: TripBundle; stop: Stop; slot: DaySlot; suggestions: Suggestion[]; canEdit: boolean; setOpen: (o: Open) => void }) {
+  const { source, reload, me } = useBundle();
+  const { run, busy } = useAction();
+  const acts = b.activities.filter((a) => a.stop_id === stop.id && a.day === slot.date).sort((x, y) => (x.time ?? '99').localeCompare(y.time ?? '99') || x.position - y.position);
+  const pending = dayPending(b, stop, slot.date);
+  const accept = (sg: Suggestion) =>
+    run(async () => {
+      await acceptSuggestion(source, b, sg, slot.date);
+      await reload();
+    }, { success: `${sg.payload.title} entrou no dia ${slot.dayNumber}.` });
+  const vote = (list: Suggestion[]) =>
+    run(async () => {
+      await voteSuggestions(source, b, list, me);
+      await reload();
+    }, { success: 'Votação criada com os preços. A turma vota em Turma › Votos.' });
+  const empty = !acts.length;
+
+  return (
+    <div className={s.day}>
+      <div className={s.dayNum} aria-hidden="true"><small>DIA</small>{slot.dayNumber}</div>
+      <div className={s.dayBody}>
+        <span className="sr">Dia {slot.dayNumber}</span>
+        {acts.map((a) => {
+          const inner = (
+            <>
+              <span className={s.actTitle}>{a.time ? <span className={`${s.actTime} num`}>{hhmm(a.time)}</span> : null}{a.title}</span>
+              {a.notes ? <span className={s.actNote}>{a.notes}</span> : null}
+            </>
+          );
+          return canEdit ? (
+            <button key={a.id} type="button" className={s.act} onClick={() => setOpen({ kind: 'act', stop, act: a })} aria-label={`${a.title}. Editar atividade`}>{inner}</button>
+          ) : (
+            <div key={a.id} className={s.act}>{inner}</div>
+          );
+        })}
+        {empty && slot.state === 'aclimatar' ? <><span className={s.actTitle}>Chegada e aclimatação</span><span className={s.actNote}>Primeiro dia acima de 2.500 m: nada de esforço.</span></> : null}
+        {empty && slot.state === 'viagem' ? <span className={`${s.actTitle} ${s.muted}`}>Dia de viagem</span> : null}
+        {empty && slot.state === 'vazio' ? <span className={`${s.actTitle} ${s.muted}`}>Dia vazio</span> : null}
+
+        {suggestions.length === 1 || (suggestions.length && slot.state === 'folga') ? (
+          <Inline sg={suggestions[0]} slot={slot} free={slot.state === 'folga' ? freeLabel(acts) : null} canEdit={canEdit} busy={busy} onAdd={() => void accept(suggestions[0])} />
+        ) : suggestions.length > 1 ? (
+          <div className={s.options}>
+            <span className={s.optionsLead}>A Trilha separou {suggestions.length} opções para esse dia:</span>
+            <div className={s.minis}>
+              {suggestions.map((sg) => {
+                const card = (
+                  <>
+                    <Photo photo={sg.payload.photo?.url ? (sg.payload.photo as PhotoData) : null} place={sg.payload.photo_query ?? sg.payload.title} alt="" height={70} radius="0" caption={false} />
+                    <span className={s.miniText}><b>{sg.payload.title}</b><span>{fitLabel(sg)}</span></span>
+                  </>
+                );
+                return canEdit ? (
+                  <button key={sg.id} type="button" className={s.mini} onClick={() => setOpen({ kind: 'choose', stop, sg, day: slot.date })} aria-label={`${sg.payload.title}: pôr no roteiro`}>{card}</button>
+                ) : (
+                  <div key={sg.id} className={s.mini}>{card}</div>
+                );
+              })}
+            </div>
+            {canEdit ? <Button variant="dark" size="sm" onClick={() => void vote(suggestions)} disabled={busy}>Mandar as {suggestions.length} para votação</Button> : null}
+          </div>
+        ) : null}
+
+        {pending.map((p) => <span key={p} className={s.pending}>{p}</span>)}
+        {isRestDay(stop, slot.date) && !empty ? <span className={s.actNote}>Chegada a {stop.altitude_m?.toLocaleString('pt-BR')} m: dia leve pra aclimatar.</span> : null}
+      </div>
+    </div>
+  );
+}
+
+const FIT: Record<string, string> = { manha: 'manhã', tarde: 'tarde', noite: 'noite', dia_todo: 'dia todo' };
+const fitLabel = (sg: Suggestion) => (sg.payload.day_fit ? FIT[sg.payload.day_fit] : sg.payload.duration ?? '');
+/** "tarde livre": quando a atividade do dia tem horário de manhã, sobra a tarde (e vice-versa). */
+function freeLabel(acts: Activity[]): string {
+  const t = acts.find((a) => a.time)?.time;
+  if (!t) return 'tempo livre';
+  return Number(t.slice(0, 2)) < 12 ? 'tarde livre' : 'manhã livre';
+}
+
+/** Sugestão tracejada dentro do dia, com o botão + de 44 px. */
+function Inline({ sg, slot, free, canEdit, busy, onAdd }: { sg: Suggestion; slot: DaySlot; free: string | null; canEdit: boolean; busy: boolean; onAdd: () => void }) {
+  const p = sg.payload;
+  const cost = p.cost_high != null ? (p.cost_high > 0 ? `≈ ${formatMoney(Math.round(((p.cost_low ?? p.cost_high) + p.cost_high) / 2), p.currency ?? 'BRL', { compact: true })}/pessoa` : 'grátis') : null;
+  return (
+    <div className={s.inline}>
+      <Photo photo={p.photo?.url ? (p.photo as PhotoData) : null} place={p.photo_query ?? p.title} alt="" height={56} radius="12px" caption={false} className={s.inlineThumb} />
+      <span className={s.inlineText}>
+        <span className={s.inlineReason}>Sugestão · {free ?? fitLabel(sg)}</span>
+        <b>{p.title}</b>
+        <span className={s.inlineMeta}>{[p.duration, cost].filter(Boolean).join(' · ')}{p.cost_high ? <> <EstimateBadge /></> : null}</span>
+      </span>
+      {canEdit ? (
+        <button type="button" className={s.plus} onClick={onAdd} disabled={busy} aria-label={`Adicionar ${p.title} ao dia ${slot.dayNumber}`}>
+          <Icon name="plus" size={20} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** "⋯" da parada: abrir, editar, trecho e mover para cima/baixo. */
+function StopMenu({ stop, stops, base, onClose, onEdit, onTransport }: { stop: Stop; stops: Stop[]; base: string; onClose: () => void; onEdit: () => void; onTransport: () => void }) {
   const { source, reload } = useBundle();
   const { run, busy } = useAction();
+  const i = stops.findIndex((x) => x.id === stop.id);
   const move = (d: -1 | 1) =>
     run(async () => {
       const a = stops[i];
@@ -161,456 +448,17 @@ function Reorder({ stops, i }: { stops: Stop[]; i: number }) {
       await source.update('stops', a.id, { position: c.position === a.position ? a.position + d : c.position }, a.version);
       await source.update('stops', c.id, { position: a.position }, c.version);
       await reload();
-    });
-  return (
-    <div className={s.reorder}>
-      <button aria-label={`Mover ${stops[i].name} para cima`} disabled={busy || i === 0} onClick={() => move(-1)}>↑</button>
-      <button aria-label={`Mover ${stops[i].name} para baixo`} disabled={busy || i === stops.length - 1} onClick={() => move(1)}>↓</button>
-    </div>
-  );
-}
-
-function NewStopForm({ stops, onCreated }: { stops: Stop[]; onCreated: (id: string) => void }) {
-  const { bundle: b, source, reload } = useBundle();
-  const { run, busy } = useAction();
-  const last = stops.at(-1);
-  const d = useDraft(`stop-new-${b.trip.id}`, { name: '', a: last?.departure_date ?? b.trip.start_date, b: last?.departure_date ?? b.trip.start_date, mode: 'bus' as TransportMode, country: '', lat: '', lng: '', alt: '' });
-  const v = d.value;
-  const valid = v.name.trim() && v.a && v.b && v.b >= v.a;
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valid) return;
-    void run(async () => {
-      const pos = (last?.position ?? -1) + 1;
-      const stop = await source.insert<Stop>('stops', {
-        trip_id: b.trip.id, position: pos, name: v.name.trim(), country: nn(v.country), arrival_date: v.a, departure_date: v.b,
-        arrival_mode: v.mode, lat: v.lat ? Number(v.lat) : null, lng: v.lng ? Number(v.lng) : null, altitude_m: v.alt ? Number(v.alt) : null,
-      });
-      await source.insert('transports', { trip_id: b.trip.id, stop_id: stop.id, mode: v.mode, origin_name: last?.name ?? b.trip.origin ?? null, origin_code: last?.code ?? (last ? null : b.trip.origin), dest_name: stop.name, depart_date: v.a });
-      d.clear();
-      d.setValue({ name: '', a: v.b, b: v.b, mode: 'bus', country: '', lat: '', lng: '', alt: '' });
-      await reload();
-      onCreated(stop.id);
-      // Dica da IA assíncrona: se falhar, nada aparece (nunca bloqueia).
-      if (source.kind === 'supabase') {
-        void callAi('tips', { tripId: b.trip.id, stopId: stop.id }).then((r) => r && reload());
-      }
-    }, { success: `${v.name.trim()} entrou no roteiro.` });
-  };
-
-  return (
-    <form id="nova" className={`${s.newStop} rv`} onSubmit={submit} aria-label="Nova parada">
-      <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Nova parada</h2>
-      {d.restored && v.name ? <span className="pill">RASCUNHO RECUPERADO</span> : null}
-      <PlaceSearch
-        label="Cidade ou lugar"
-        value={v.name}
-        required
-        placeholder="Digite um lugar"
-        enabled={source.kind === 'supabase'}
-        onText={(t) => d.setValue({ ...v, name: t, lat: '', lng: '' })}
-        onPick={(p: Place) => d.setValue({ ...v, name: p.name, country: p.country ?? v.country, lat: String(p.lat), lng: String(p.lng), alt: p.altitude != null ? String(p.altitude) : '' })}
-      />
-      <div className="grid2">
-        <label className="field">Chegada<input type="date" required value={v.a} min={b.trip.start_date} max={b.trip.end_date} onChange={(e) => d.set('a', e.target.value)} /></label>
-        <label className="field">Saída<input type="date" required value={v.b} min={v.a} onChange={(e) => d.set('b', e.target.value)} /></label>
-      </div>
-      {v.b < v.a ? <span className="field"><span className="err">A saída precisa ser no dia da chegada ou depois.</span></span> : null}
-      <label className="field">Como você chega
-        <select value={v.mode} onChange={(e) => d.set('mode', e.target.value as TransportMode)}>
-          {MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}
-        </select>
-      </label>
-      {v.lat ? <span className="hint mono" style={{ fontSize: 11 }}>{v.country ? `${v.country} · ` : ''}COORDENADAS {Number(v.lat).toFixed(3)}, {Number(v.lng).toFixed(3)}{v.alt ? ` · ALTITUDE ${v.alt} M (OSM)` : ''}</span> : null}
-      <button className="btn btn-ink tap" style={{ justifyContent: 'center' }} disabled={busy || !valid}>
-        {busy ? 'Salvando…' : 'Salvar parada'}
-      </button>
-    </form>
-  );
-}
-
-function Weather({ stop }: { stop: Stop }) {
-  const [data, setData] = useState<{ days: { d: string; max: number; min: number; rain: number | null }[] } | null>(null);
-  useEffect(() => {
-    if (stop.lat == null || stop.lng == null) return;
-    const today = new Date().toISOString().slice(0, 10);
-    const limit = new Date(Date.now() + 15 * 864e5).toISOString().slice(0, 10);
-    if (stop.departure_date < today || stop.arrival_date > limit) return;
-    const start = stop.arrival_date < today ? today : stop.arrival_date;
-    const end = stop.departure_date > limit ? limit : stop.departure_date;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${stop.lat}&longitude=${stop.lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&start_date=${start}&end_date=${end}`;
-    fetch(url)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!j?.daily) return;
-        setData({ days: j.daily.time.map((d: string, i: number) => ({ d, max: Math.round(j.daily.temperature_2m_max[i]), min: Math.round(j.daily.temperature_2m_min[i]), rain: j.daily.precipitation_probability_max?.[i] ?? null })) });
-      })
-      .catch(() => undefined);
-  }, [stop.lat, stop.lng, stop.arrival_date, stop.departure_date]);
-  if (!data?.days.length) return null;
-  return (
-    <div>
-      <h3 className="h3"><Icon name="sun" size={18} />Previsão do tempo</h3>
-      <div className={s.weather}>
-        {data.days.map((x) => (
-          <div key={x.d}>
-            <b>{dayWeekU(x.d)}</b>
-            <span>{x.min}° / {x.max}°</span>
-            {x.rain != null ? <span>chuva {x.rain}%</span> : null}
-          </div>
-        ))}
-      </div>
-      <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: 'var(--mute)' }}>PREVISÃO OPEN-METEO.COM (CC BY 4.0) · ATUALIZA AO ABRIR</p>
-    </div>
-  );
-}
-
-function StopDetail({ stop, index, total, color, refEl }: { stop: Stop; index: number; total: number; color: string; refEl: React.RefObject<HTMLElement | null> }) {
-  const { bundle: b, identity, canEdit, source, reload, base } = useBundle();
-  const { run, busy } = useAction();
-  const confirm = useConfirm();
-  const toast = useToast();
-  const router = useRouter();
-  const t = arrivalOf(b, stop.id);
-  const stay = stayOf(b, stop.id);
-  const docs = docsOfStop(b, stop.id);
-  const status = stayStatusLabel(b, stay);
-  const acts = b.activities.filter((a) => a.stop_id === stop.id).sort((x, y) => x.day.localeCompare(y.day) || x.position - y.position);
-  // abertas ou aguardando decisão (prazo vencido não fecha sozinho)
-  const openPolls = (b.polls ?? []).filter((p) => p.stop_id === stop.id && p.status === 'open').length;
-  const tip = stop.tip ?? (ruleTip(b, stop) ? { ...ruleTip(b, stop)!, by: 'rules' as const, source: undefined } : null);
-  const [edit, setEdit] = useState<null | 'stop' | 'transport' | 'stay' | { act: Activity | null }>(null);
-  const [notes, setNotes] = useState(stop.notes ?? '');
-  const [tipBusy, setTipBusy] = useState(false);
-  const times = ticketTimes(t);
-  const fg = fgOn(color);
-
-  const saveNotes = () => {
-    if ((stop.notes ?? '') === notes) return;
-    void run(() => source.update('stops', stop.id, { notes: nn(notes) }, stop.version).then(reload), {
-      success: 'Notas salvas.',
-      onConflict: () => source.update('stops', stop.id, { notes: nn(notes) }).then(reload),
-    });
-  };
-
-  const removeStop = async () => {
-    const ok = await confirm({ title: `Excluir ${stop.name}?`, message: 'A parada sai do roteiro junto com trecho, hospedagem e plano. Documentos ligados continuam no hub, só perdem o vínculo.' });
-    if (!ok) return;
-    await run(async () => {
-      await source.remove('stops', { id: stop.id });
-      await reload();
-      router.replace('?', { scroll: false });
-    }, { success: `${stop.name} saiu do roteiro.` });
-  };
-
-  const askTip = async () => {
-    setTipBusy(true);
-    const r = await callAi('tips', { tripId: b.trip.id, stopId: stop.id });
-    setTipBusy(false);
-    if (r) await reload();
-    else toast('A IA não respondeu agora. Tente mais tarde; o resto funciona normal.');
-  };
-
-  return (
-    <article className={`${s.detail} card col-main`} ref={refEl as React.RefObject<HTMLElement>} aria-label={`Parada ${stop.name}`}>
-      <div className={s.detailHead} style={{ background: color, color: fg }}>
-        <Pattern identity={identity} opacity={0.18} />
-        <div aria-hidden="true" style={{ position: 'absolute', right: -40, top: -50, width: 220, height: 220, clipPath: 'var(--motif)', background: 'var(--bg)', opacity: 0.35, animation: 'floaty 8s ease-in-out infinite' }} />
-        <div className="mono" style={{ position: 'relative', fontSize: 12, letterSpacing: '.2em' }}>
-          PARADA {index + 1} DE {total}{stop.country ? ` · ${stop.country.toUpperCase()}` : ''}
-        </div>
-        <h2 className="disp">{stop.name}</h2>
-        <div className="mono" style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', gap: '8px 22px', marginTop: 16, fontSize: 14 }}>
-          <span>{stopDates(stop)}</span>
-          <span>{stopNights(stop)}</span>
-          {stopMeta(stop) ? <span>{stopMeta(stop)}</span> : null}
-          {stop.tz ? <span>FUSO {stop.tz}</span> : null}
-        </div>
-        {openPolls ? (
-          <Link href={`${base}/turma#decisoes`} className="chip tap" style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, textDecoration: 'none' }}>
-            <Icon name="users" size={16} />{openPolls} {openPolls === 1 ? 'votação aberta' : 'votações abertas'}
-          </Link>
-        ) : null}
-        {canEdit ? (
-          <div style={{ position: 'relative', display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
-            <button className="btn btn-sm tap" onClick={() => setEdit('stop')}><Icon name="edit" size={16} />Editar parada</button>
-            <button className="btn btn-sm btn-danger tap" style={{ background: 'var(--card)' }} onClick={removeStop} disabled={busy}>Excluir</button>
-          </div>
-        ) : null}
-      </div>
-      <div className={s.detailBody}>
-        {tip ? (
-          <AiNote by={tip.by} source={'source' in tip && tip.source ? tip.source : null}>{tip.text}</AiNote>
-        ) : canEdit && source.kind === 'supabase' ? (
-          <button className="btn btn-sm btn-ghost tap" onClick={askTip} disabled={tipBusy} style={{ alignSelf: 'flex-start' }}>
-            <Icon name="sparkle" size={14} fill="currentColor" />
-            {tipBusy ? 'Pedindo dica…' : 'Pedir dica à IA'}
-          </button>
-        ) : null}
-
-        <Weather stop={stop} />
-
-        <div>
-          <div className={s.secHead}>
-            <h3 className="h3">Como chego</h3>
-            {canEdit ? <button className="btn btn-sm tap" onClick={() => setEdit('transport')}><Icon name="edit" size={16} />{t ? 'Editar trecho' : 'Adicionar trecho'}</button> : null}
-          </div>
-          <div className={s.pass} style={{ marginTop: 12 }}>
-            <span className="notch l" />
-            <span className="notch r" />
-            <div className={s.passMain}>
-              <div>
-                <div className={s.code}>{t?.origin_code || '[ORIGEM]'}</div>
-                <div className="mono" style={{ fontSize: 14, marginTop: 6 }}>{times.dep}</div>
-                {t?.origin_name ? <div style={{ fontSize: 13, color: 'var(--mute)' }}>{t.origin_name}</div> : null}
-              </div>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 80 }}>
-                <span className="mono" style={{ fontSize: 11, letterSpacing: '.14em', padding: '4px 10px', borderRadius: 999, background: 'var(--ink)', color: 'var(--bg)' }}>{MODE_SHORT[t?.mode ?? stop.arrival_mode ?? 'other']}</span>
-                <svg aria-hidden="true" width="100%" height="10" preserveAspectRatio="none" viewBox="0 0 100 10">
-                  <path className="dm" d="M0 5 H100" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-                </svg>
-                {t && transportMinutes(t) ? <span className="mono" style={{ fontSize: 11 }}>{durationLabel(transportMinutes(t))}</span> : null}
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className={s.code}>{t?.dest_code || stopCode(stop)}</div>
-                <div className="mono" style={{ fontSize: 14, marginTop: 6 }}>{times.arr}</div>
-                {t?.dest_name ? <div style={{ fontSize: 13, color: 'var(--mute)' }}>{t.dest_name}</div> : null}
-              </div>
-            </div>
-            <div className={`${s.passSide} mono`}>
-              <span>LOC {t?.booking_ref || '[CÓDIGO]'}</span>
-              <span>LUGAR {t?.seat || '[ASSENTO]'}</span>
-              <span>{t?.depart_date ? stopDates({ ...stop, arrival_date: t.depart_date, departure_date: t.arrive_date ?? t.depart_date }) : '[DATA]'}</span>
-            </div>
-          </div>
-          {!t?.dest_code && !stop.code ? <p className="mono" style={{ margin: '6px 0 0', fontSize: 10, color: 'var(--mute)' }}>CÓDIGO {stopCode(stop)} DERIVADO DO NOME · INFORME O IATA/ABREVIAÇÃO AO EDITAR</p> : null}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(240px,100%),1fr))', gap: 18 }}>
-          <div className={`${s.box} lift`}>
-            <h3 className="h3"><Icon name="bed" size={18} />Onde durmo</h3>
-            <div style={{ fontWeight: 600, fontSize: 18 }}>{stay?.name ?? 'Ainda sem hospedagem'}</div>
-            {stay ? <div style={{ fontSize: 14, color: 'var(--mute)', marginTop: 4 }}>{[stay.checkin_time ? `Check-in ${hhmm(stay.checkin_time)}` : null, stay.address].filter(Boolean).join(' · ')}</div> : null}
-            <span className="pill" data-tone={status.tone} style={{ marginTop: 12 }}>{status.label.toUpperCase()}</span>
-            {stay?.suggested_by ? <span className="tag" data-src={stay.suggested_by} style={{ marginLeft: 8 }}>{stay.suggested_by === 'ai' ? 'SUGESTÃO IA' : 'AUTO'}</span> : null}
-            {stay?.from_poll_id ? <div className="mono" style={{ marginTop: 8, fontSize: 11, letterSpacing: '.12em' }}>ESCOLHIDA NA VOTAÇÃO</div> : null}
-            {canEdit ? <div style={{ marginTop: 12 }}><button className="btn btn-sm tap" onClick={() => setEdit('stay')}>{stay ? 'Editar' : 'Adicionar'}</button></div> : null}
-          </div>
-          <div className={`${s.box} lift`}>
-            <h3 className="h3"><Icon name="doc" size={18} />Documentos</h3>
-            {docs.length ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {docs.map((d) => (
-                  <Link key={d.id} href={`${base}/documentos?doc=${d.id}`} style={{ fontSize: 14, padding: '8px 12px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--line)', textDecoration: 'none' }}>{d.title}</Link>
-                ))}
-              </div>
-            ) : (
-              <Link href={`${base}/documentos?parada=${stop.id}`}>Anexar um documento</Link>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className={s.secHead}>
-            <h3 className="h3">Plano</h3>
-            {canEdit ? <button className="btn btn-sm tap" onClick={() => setEdit({ act: null })}><Icon name="plus" size={16} />Atividade</button> : null}
-          </div>
-          {acts.length ? (
-            <ol className={s.plan} style={{ marginTop: 12 }}>
-              {acts.map((a) => (
-                <li key={a.id}>
-                  <i className="bullet" style={{ background: color }} />
-                  <span className="mono" style={{ fontSize: 12, minWidth: 56 }}>{dayWeekU(a.day)}{a.time ? ` ${hhmm(a.time)}` : ''}</span>
-                  <span style={{ flex: 1 }}>{a.title}{a.notes ? <span style={{ display: 'block', fontSize: 13, color: 'var(--mute)' }}>{a.notes}</span> : null}</span>
-                  {a.suggested_by ? <span className="tag" data-src={a.suggested_by}>{a.suggested_by === 'ai' ? 'IA' : 'AUTO'}</span> : null}
-                  {a.from_entry_id ? <span className="tag" data-src="rules">DA INSPIRAÇÃO</span> : null}
-                  {a.from_poll_id ? <span className="tag" data-src="rules">DA VOTAÇÃO</span> : null}
-                  {canEdit ? <button className="btn btn-icon btn-sm tap" aria-label={`Editar ${a.title}`} onClick={() => setEdit({ act: a })}><Icon name="edit" size={16} /></button> : null}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p style={{ margin: '12px 0 0', color: 'var(--mute)' }}>Nenhuma atividade planejada.</p>
-          )}
-        </div>
-
-        <StopSuggestions key={stop.id} stop={stop} />
-
-        <label className="field">
-          <span className="h3" style={{ margin: 0 }}>Notas</span>
-          <textarea rows={3} placeholder={canEdit ? 'Anote o que quiser sobre esta parada' : 'Sem notas'} value={notes} readOnly={!canEdit} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} maxLength={4000} />
-        </label>
-      </div>
-
-      {edit === 'stop' ? <StopEditDialog stop={stop} onClose={() => setEdit(null)} /> : null}
-      {edit === 'transport' ? <TransportDialog stop={stop} t={t} onClose={() => setEdit(null)} /> : null}
-      {edit === 'stay' ? <StayDialog stop={stop} stay={stay} onClose={() => setEdit(null)} /> : null}
-      {edit && typeof edit === 'object' ? <ActivityDialog stop={stop} act={edit.act} onClose={() => setEdit(null)} /> : null}
-    </article>
-  );
-}
-
-function StopEditDialog({ stop, onClose }: { stop: Stop; onClose: () => void }) {
-  const { source, reload, bundle: b } = useBundle();
-  const { run, busy } = useAction();
-  const [v, setV] = useState({
-    name: stop.name, country: stop.country ?? '', code: stop.code ?? '', a: stop.arrival_date, b: stop.departure_date, tz: stop.tz ?? '',
-    alt: stop.altitude_m != null ? String(stop.altitude_m) : '', lat: stop.lat != null ? String(stop.lat) : '', lng: stop.lng != null ? String(stop.lng) : '',
-    mode: stop.arrival_mode ?? 'bus', meta: stop.meta ?? '',
-  });
-  const tzs = useMemo(() => listTimeZones(), []);
-  const codeOk = !v.code || /^[A-Za-z0-9]{2,4}$/.test(v.code);
-  const tzOk = !v.tz || isValidTimeZone(v.tz);
-  const ok = v.name.trim() && v.b >= v.a && codeOk && tzOk && (!v.lat === !v.lng);
-  const patch = () => ({
-    name: v.name.trim(), country: nn(v.country), code: v.code ? v.code.toUpperCase() : null, arrival_date: v.a, departure_date: v.b, tz: nn(v.tz),
-    altitude_m: v.alt ? Math.round(Number(v.alt)) : null, lat: v.lat ? Number(v.lat) : null, lng: v.lng ? Number(v.lng) : null, arrival_mode: v.mode, meta: nn(v.meta),
-  });
-  const save = () =>
-    run(() => source.update('stops', stop.id, patch(), stop.version).then(reload).then(onClose), {
-      success: 'Parada atualizada.',
-      onConflict: () => source.update('stops', stop.id, patch()).then(reload).then(onClose),
-    });
-  return (
-    <Dialog open onClose={onClose} title="Editar parada" footer={<><button className="btn tap" onClick={onClose}>Cancelar</button><button className="btn btn-primary tap" disabled={!ok || busy} onClick={save}>Salvar</button></>}>
-      <PlaceSearch label="Cidade ou lugar" value={v.name} enabled={source.kind === 'supabase'} onText={(t) => setV({ ...v, name: t })} onPick={(p) => setV({ ...v, name: p.name, country: p.country ?? v.country, lat: String(p.lat), lng: String(p.lng), alt: p.altitude != null ? String(p.altitude) : v.alt })} />
-      <div className="grid2">
-        <label className="field">País<input value={v.country} maxLength={60} onChange={(e) => setV({ ...v, country: e.target.value })} /></label>
-        <label className="field">Código (IATA ou abreviação)<input value={v.code} maxLength={4} onChange={(e) => setV({ ...v, code: e.target.value.toUpperCase() })} placeholder="CUZ" />{!codeOk ? <span className="err">2 a 4 letras ou números.</span> : null}</label>
-        <label className="field">Chegada<input type="date" value={v.a} onChange={(e) => setV({ ...v, a: e.target.value })} /></label>
-        <label className="field">Saída<input type="date" value={v.b} min={v.a} onChange={(e) => setV({ ...v, b: e.target.value })} /></label>
-        <label className="field">Fuso horário<input list="tzlist" value={v.tz} onChange={(e) => setV({ ...v, tz: e.target.value })} placeholder={b.trip.home_tz} />{!tzOk ? <span className="err">Fuso desconhecido (ex.: America/Lima).</span> : null}</label>
-        <label className="field">Altitude (m)<input type="number" value={v.alt} min={-500} max={9000} onChange={(e) => setV({ ...v, alt: e.target.value })} placeholder="só se souber" /></label>
-        <label className="field">Como chega<select value={v.mode} onChange={(e) => setV({ ...v, mode: e.target.value as TransportMode })}>{MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
-        <label className="field">Linha curta<input value={v.meta} maxLength={80} onChange={(e) => setV({ ...v, meta: e.target.value })} placeholder="medina e souks" /></label>
-      </div>
-      <datalist id="tzlist">{tzs.map((z) => <option key={z} value={z} />)}</datalist>
-      <span className="hint mono" style={{ fontSize: 11, color: 'var(--mute)' }}>{v.lat ? `COORDENADAS ${Number(v.lat).toFixed(4)}, ${Number(v.lng).toFixed(4)}` : 'SEM COORDENADAS: ESCOLHA O LUGAR NA BUSCA PARA APARECER NO MAPA'}{v.lat ? <button type="button" className="btn btn-sm" style={{ marginLeft: 8, minHeight: 30 }} onClick={() => setV({ ...v, lat: '', lng: '' })}>Remover</button> : null}</span>
-    </Dialog>
-  );
-}
-
-function TransportDialog({ stop, t, onClose }: { stop: Stop; t: Transport | null; onClose: () => void }) {
-  const { source, reload, bundle: b } = useBundle();
-  const { run, busy } = useAction();
-  const confirm = useConfirm();
-  const passDocs = b.documents.filter((d) => d.category === 'passagem' && d.status === 'ready');
-  const [v, setV] = useState({
-    mode: t?.mode ?? stop.arrival_mode ?? 'bus', origin_code: t?.origin_code ?? '', origin_name: t?.origin_name ?? '', dest_code: t?.dest_code ?? stop.code ?? '', dest_name: t?.dest_name ?? stop.name,
-    depart_date: t?.depart_date ?? stop.arrival_date, depart_time: hhmm(t?.depart_time), depart_tz: t?.depart_tz ?? '', arrive_date: t?.arrive_date ?? stop.arrival_date, arrive_time: hhmm(t?.arrive_time),
-    arrive_tz: t?.arrive_tz ?? stop.tz ?? '', booking_ref: t?.booking_ref ?? '', seat: t?.seat ?? '', duration: t?.duration_min ? String(t.duration_min) : '', document_id: t?.document_id ?? '', notes: t?.notes ?? '',
-  });
-  const okTz = (!v.depart_tz || isValidTimeZone(v.depart_tz)) && (!v.arrive_tz || isValidTimeZone(v.arrive_tz));
-  const row = () => ({
-    mode: v.mode, origin_code: nn(v.origin_code.toUpperCase()), origin_name: nn(v.origin_name), dest_code: nn(v.dest_code.toUpperCase()), dest_name: nn(v.dest_name),
-    depart_date: nn(v.depart_date), depart_time: nn(v.depart_time), depart_tz: nn(v.depart_tz), arrive_date: nn(v.arrive_date), arrive_time: nn(v.arrive_time), arrive_tz: nn(v.arrive_tz),
-    booking_ref: nn(v.booking_ref), seat: nn(v.seat), duration_min: v.duration ? Number(v.duration) : null, document_id: nn(v.document_id), notes: nn(v.notes),
-  });
-  const save = () =>
-    run(async () => {
-      if (t) await source.update('transports', t.id, row(), t.version);
-      else await source.insert('transports', { ...row(), trip_id: b.trip.id, stop_id: stop.id });
-      await reload();
       onClose();
-    }, { success: 'Trecho salvo.', onConflict: async () => { if (t) await source.update('transports', t.id, row()); await reload(); onClose(); } });
-  const del = async () => {
-    if (!t || !(await confirm({ title: 'Excluir trecho?', message: 'Os dados do bilhete deste trecho serão apagados.' }))) return;
-    await run(() => source.remove('transports', { id: t.id }).then(reload).then(onClose), { success: 'Trecho excluído.' });
-  };
-  const f = (k: keyof typeof v, label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <label className="field">{label}<input value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} {...extra} /></label>
-  );
+    }, { success: `${stop.name} foi para ${d < 0 ? 'cima' : 'baixo'}.` });
   return (
-    <Dialog open onClose={onClose} title={`Como chego em ${stop.name}`} footer={<>{t ? <button className="btn btn-danger tap" onClick={del}>Excluir</button> : null}<button className="btn tap" onClick={onClose}>Cancelar</button><button className="btn btn-primary tap" disabled={busy || !okTz} onClick={save}>Salvar</button></>}>
-      <label className="field">Meio de transporte<select value={v.mode} onChange={(e) => setV({ ...v, mode: e.target.value as TransportMode })}>{MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></label>
-      <div className="grid2">
-        {f('origin_code', 'Origem (código)', { maxLength: 8, placeholder: 'GRU' })}
-        {f('origin_name', 'Origem (nome)', { maxLength: 80 })}
-        {f('dest_code', 'Destino (código)', { maxLength: 8 })}
-        {f('dest_name', 'Destino (nome)', { maxLength: 80 })}
-        {f('depart_date', 'Data de saída', { type: 'date' })}
-        {f('depart_time', 'Horário de saída (local)', { type: 'time' })}
-        {f('arrive_date', 'Data de chegada', { type: 'date' })}
-        {f('arrive_time', 'Horário de chegada (local)', { type: 'time' })}
-        {f('depart_tz', 'Fuso da saída', { list: 'tzlist2', placeholder: 'America/Sao_Paulo' })}
-        {f('arrive_tz', 'Fuso da chegada', { list: 'tzlist2', placeholder: 'America/Lima' })}
-        {f('booking_ref', 'Localizador', { maxLength: 40 })}
-        {f('seat', 'Assento / poltrona', { maxLength: 40 })}
-        {f('duration', 'Duração em minutos (se souber)', { type: 'number', min: 1, max: 10080 })}
-        <label className="field">Passagem anexada<select value={v.document_id} onChange={(e) => setV({ ...v, document_id: e.target.value })}><option value="">Nenhuma</option>{passDocs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label>
+    <Sheet open onClose={onClose} title={stop.name} description={`Parada ${i + 1} de ${stops.length}`}>
+      <div className={s.menu}>
+        <ListRow icon="pin" title="Abrir a parada" href={`${base}/roteiro/${stop.id}`} />
+        <ListRow icon="edit" title="Editar parada" onClick={onEdit} />
+        <ListRow icon="route" title="Como chego (trecho)" onClick={onTransport} />
+        {i > 0 ? <ListRow icon="back" title="Mover para cima" onClick={busy ? undefined : () => void move(-1)} /> : null}
+        {i < stops.length - 1 ? <ListRow icon="next" title="Mover para baixo" onClick={busy ? undefined : () => void move(1)} /> : null}
       </div>
-      <datalist id="tzlist2">{listTimeZones().map((z) => <option key={z} value={z} />)}</datalist>
-      {!okTz ? <span className="field"><span className="err">Fuso desconhecido.</span></span> : null}
-      <p className="hint" style={{ margin: 0, fontSize: 13, color: 'var(--mute)' }}>A duração só é calculada quando datas, horários e fusos das duas pontas estão preenchidos.</p>
-    </Dialog>
-  );
-}
-
-function StayDialog({ stop, stay, onClose }: { stop: Stop; stay: Stay | null; onClose: () => void }) {
-  const { source, reload, bundle: b } = useBundle();
-  const { run, busy } = useAction();
-  const confirm = useConfirm();
-  const resDocs = b.documents.filter((d) => d.category === 'reserva' && d.status === 'ready');
-  const [v, setV] = useState({
-    name: stay?.name ?? '', address: stay?.address ?? '', checkin_date: stay?.checkin_date ?? stop.arrival_date, checkin_time: hhmm(stay?.checkin_time), checkout_date: stay?.checkout_date ?? stop.departure_date,
-    checkout_time: hhmm(stay?.checkout_time), status: stay?.status ?? 'pending', notes: stay?.notes ?? '', document_id: stay?.document_id ?? '',
-  });
-  const row = () => ({ name: v.name.trim(), address: nn(v.address), checkin_date: nn(v.checkin_date), checkin_time: nn(v.checkin_time), checkout_date: nn(v.checkout_date), checkout_time: nn(v.checkout_time), status: v.status, notes: nn(v.notes), document_id: nn(v.document_id), suggested_by: null });
-  const save = () =>
-    run(async () => {
-      if (stay) await source.update('stays', stay.id, row(), stay.version);
-      else await source.insert('stays', { ...row(), trip_id: b.trip.id, stop_id: stop.id });
-      await reload();
-      onClose();
-    }, { success: 'Hospedagem salva.', onConflict: async () => { if (stay) await source.update('stays', stay.id, row()); await reload(); onClose(); } });
-  const del = async () => {
-    if (!stay || !(await confirm({ title: 'Excluir hospedagem?', message: `${stay.name} sai desta parada.` }))) return;
-    await run(() => source.remove('stays', { id: stay.id }).then(reload).then(onClose), { success: 'Hospedagem excluída.' });
-  };
-  return (
-    <Dialog open onClose={onClose} title={`Onde durmo em ${stop.name}`} footer={<>{stay ? <button className="btn btn-danger tap" onClick={del}>Excluir</button> : null}<button className="btn tap" onClick={onClose}>Cancelar</button><button className="btn btn-primary tap" disabled={busy || !v.name.trim()} onClick={save}>Salvar</button></>}>
-      <label className="field">Nome<input value={v.name} maxLength={120} required onChange={(e) => setV({ ...v, name: e.target.value })} /></label>
-      <label className="field">Endereço<input value={v.address} maxLength={200} onChange={(e) => setV({ ...v, address: e.target.value })} /></label>
-      <div className="grid2">
-        <label className="field">Check-in<input type="date" value={v.checkin_date} onChange={(e) => setV({ ...v, checkin_date: e.target.value })} /></label>
-        <label className="field">Horário do check-in<input type="time" value={v.checkin_time} onChange={(e) => setV({ ...v, checkin_time: e.target.value })} /></label>
-        <label className="field">Check-out<input type="date" value={v.checkout_date} onChange={(e) => setV({ ...v, checkout_date: e.target.value })} /></label>
-        <label className="field">Horário do check-out<input type="time" value={v.checkout_time} onChange={(e) => setV({ ...v, checkout_time: e.target.value })} /></label>
-        <label className="field">Estado<select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value as Stay['status'] })}><option value="pending">Sem reserva</option><option value="booked">Reservado</option></select></label>
-        <label className="field">Comprovante<select value={v.document_id} onChange={(e) => setV({ ...v, document_id: e.target.value })}><option value="">Nenhum</option>{resDocs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label>
-      </div>
-      <label className="field">Observações<textarea rows={2} value={v.notes} maxLength={2000} onChange={(e) => setV({ ...v, notes: e.target.value })} /></label>
-    </Dialog>
-  );
-}
-
-function ActivityDialog({ stop, act, onClose }: { stop: Stop; act: Activity | null; onClose: () => void }) {
-  const { source, reload, bundle: b } = useBundle();
-  const { run, busy } = useAction();
-  const confirm = useConfirm();
-  const days = dateRange(stop.arrival_date, stop.departure_date);
-  const [v, setV] = useState({ day: act?.day ?? stop.arrival_date, time: hhmm(act?.time), title: act?.title ?? '', notes: act?.notes ?? '' });
-  const row = () => ({ day: v.day, time: nn(v.time), title: v.title.trim(), notes: nn(v.notes), suggested_by: null });
-  const save = () =>
-    run(async () => {
-      if (act) await source.update('activities', act.id, row(), act.version);
-      else await source.insert('activities', { ...row(), trip_id: b.trip.id, stop_id: stop.id, position: b.activities.filter((a) => a.stop_id === stop.id && a.day === v.day).length });
-      await reload();
-      onClose();
-    }, { success: 'Plano atualizado.', onConflict: async () => { if (act) await source.update('activities', act.id, row()); await reload(); onClose(); } });
-  const del = async () => {
-    if (!act || !(await confirm({ title: 'Excluir atividade?', message: act.title }))) return;
-    await run(() => source.remove('activities', { id: act.id }).then(reload).then(onClose), { success: 'Atividade excluída.' });
-  };
-  return (
-    <Dialog open onClose={onClose} title={act ? 'Editar atividade' : 'Nova atividade'} footer={<>{act ? <button className="btn btn-danger tap" onClick={del}>Excluir</button> : null}<button className="btn tap" onClick={onClose}>Cancelar</button><button className="btn btn-primary tap" disabled={busy || !v.title.trim()} onClick={save}>Salvar</button></>}>
-      <div className="grid2">
-        <label className="field">Dia<select value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })}>{days.map((d) => <option key={d} value={d}>{dayWeekU(d)}</option>)}</select></label>
-        <label className="field">Horário (opcional)<input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /></label>
-      </div>
-      <label className="field">O que fazer<input value={v.title} maxLength={160} required onChange={(e) => setV({ ...v, title: e.target.value })} /></label>
-      <label className="field">Notas<textarea rows={2} value={v.notes} maxLength={2000} onChange={(e) => setV({ ...v, notes: e.target.value })} /></label>
-    </Dialog>
+    </Sheet>
   );
 }

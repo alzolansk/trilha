@@ -1,0 +1,12 @@
+.check { position: relative; display: flex; align-items: center; gap: var(--s3); min-height: 44px; cursor: pointer; }
+.check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.box { width: 24px; height: 24px; flex: none; border-radius: 7px; border: 2px solid var(--line); background: var(--surface); display: grid; place-items: center; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.check input[type=radio] + .box { border-radius: 999px; }
+.check input:checked + .box { background: var(--brand); border-color: var(--brand); }
+.check input:checked + .box::after { content: ""; width: 10px; height: 6px; border: solid var(--on-brand); border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); }
+.check input[type=radio]:checked + .box::after { width: 8px; height: 8px; border: 0; border-radius: 999px; background: var(--on-brand); transform: none; }
+.check input:focus-visible + .box { outline: 2.5px solid var(--brand); outline-offset: 2px; }
+.check input:disabled + .box { opacity: .5; }
+.check:has(input:disabled) { cursor: not-allowed; }
+.lbl { flex: 1; min-width: 0; font-size: 15px; }
+.strike input:checked ~ .lbl { text-decoration: line-through; color: var(--mute); }

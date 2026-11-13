@@ -1,5 +1,7 @@
 # TRILHA · Especificação para desenvolvimento
 
+> **Trilha 2.0 — precedência:** este SPEC continua valendo para dados, segurança, IA e acessibilidade. **Para visual, navegação e telas, valem o [`planning.md`](../planning.md) e o canvas do redesign.** Paletas por destino, motifs, grão, fendas e a página de identidades (§3–§7 e §10 deste documento) foram substituídos.
+
 > Documento de handoff para a IA (ou pessoa) que vai construir o produto em **Next.js + React + TypeScript**.
 > Leia inteiro antes de escrever código. Quando algo aqui e o protótipo divergirem, **este documento vence**; quando este documento for omisso, **o protótipo é a referência visual e de comportamento**.
 

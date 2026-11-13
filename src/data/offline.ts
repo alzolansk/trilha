@@ -40,7 +40,9 @@ export const offlineSupported = () => typeof indexedDB !== 'undefined';
 export async function saveBundle(userId: string, bundle: TripBundle) {
   if (!offlineSupported()) return;
   try {
-    await (await open(userId)).put('bundles', bundle, bundle.trip.id);
+    const db = await open(userId);
+    await db.put('bundles', bundle, bundle.trip.id);
+    await db.put('kv', new Date().toISOString(), `saved-at:${bundle.trip.id}`);
   } catch {
     /* sem espaço: o app continua online */
   }
@@ -55,12 +57,24 @@ export async function getBundle(userId: string, tripId: string): Promise<TripBun
   }
 }
 
+/** Quando a cópia local desta trilha foi gravada (para a faixa "Mostrando cópia salva de {hora}"). */
+export async function getBundleSavedAt(userId: string, tripId: string): Promise<string | null> {
+  if (!offlineSupported()) return null;
+  try {
+    return ((await (await open(userId)).get('kv', `saved-at:${tripId}`)) as string | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cópias salvas antes de uma tabela nova existir não têm a lista: trata como vazia. */
 function upgradeBundle(b: TripBundle): TripBundle {
   b.inspirationVotes ??= [];
   b.polls ??= [];
   b.pollOptions ??= [];
   b.pollVotes ??= [];
+  b.suggestions ??= [];
+  b.tripPreferences ??= [];
   return b;
 }
 export async function deleteBundle(userId: string, tripId: string) {

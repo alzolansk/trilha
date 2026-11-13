@@ -1,41 +1,27 @@
 'use client';
 import { useEffect } from 'react';
-import { isDark } from '../../lib/identity/contrast';
-import { googleFontHref, LOCAL_DISPLAY } from '../../lib/identity/fontmap';
-import { cycleExtras, NEUTRAL_VARS, themeVars } from '../../lib/identity/theme';
-import type { DestinationIdentity } from '../../lib/identity/types';
-import { fallbackFor } from '../../lib/identity/validate';
+import { fgOn } from '../../lib/identity/accent';
 
-/** Injeta os tokens da identidade no <html> (fundo, barra do navegador e todas as telas). */
-export function applyIdentity(id: DestinationIdentity | null) {
+const DEFAULT_THEME_COLOR = '#F5F6F8';
+
+/** Aplica só o que varia por trilha: `--trip-accent` e a cor da barra do navegador (planning §1). */
+export function applyAccent(accent: string | null, themeColor: string = DEFAULT_THEME_COLOR) {
   const root = document.documentElement;
-  const vars = id ? { ...themeVars(id), ...cycleExtras(id) } : NEUTRAL_VARS;
-  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
-  if (id) {
-    const local = LOCAL_DISPLAY[id.display.family];
-    root.style.setProperty('--font-display', `${local ? `${local}, ` : ''}'${id.display.family}', ${fallbackFor(id.display.family)}`);
-    if (!local) {
-      const href = googleFontHref(id.display.family, id.display.weight);
-      let link = document.getElementById('display-font') as HTMLLinkElement | null;
-      if (!link) {
-        link = document.createElement('link');
-        link.id = 'display-font';
-        link.rel = 'stylesheet';
-        document.head.appendChild(link);
-      }
-      if (link.href !== href) link.href = href;
-    }
+  if (accent) {
+    root.style.setProperty('--trip-accent', accent);
+    root.style.setProperty('--trip-accent-fg', fgOn(accent));
+  } else {
+    root.style.removeProperty('--trip-accent');
+    root.style.removeProperty('--trip-accent-fg');
   }
-  if (id && isDark(id.palette.bg)) root.setAttribute('data-dark', '');
-  else root.removeAttribute('data-dark');
   const meta = document.querySelector('meta[name=theme-color]');
-  if (meta) meta.setAttribute('content', id ? id.palette.bg : NEUTRAL_VARS['--bg']);
+  if (meta) meta.setAttribute('content', themeColor);
 }
 
-export function ThemeApplier({ identity }: { identity: DestinationIdentity | null }) {
+export function ThemeApplier({ accent, themeColor }: { accent: string | null; themeColor?: string }) {
   useEffect(() => {
-    applyIdentity(identity);
-  }, [identity]);
-  useEffect(() => () => applyIdentity(null), []);
+    applyAccent(accent, themeColor);
+  }, [accent, themeColor]);
+  useEffect(() => () => applyAccent(null), []);
   return null;
 }

@@ -26,6 +26,8 @@ const CHILD_TABLES: { table: TableName; key: keyof TripBundle; order?: [string, 
   { table: 'polls', key: 'polls', order: [['created_at', false]], optional: true },
   { table: 'poll_options', key: 'pollOptions', order: [['position', true]], optional: true },
   { table: 'poll_votes', key: 'pollVotes', optional: true },
+  { table: 'suggestions', key: 'suggestions', order: [['created_at', false]], optional: true },
+  { table: 'trip_preferences', key: 'tripPreferences', optional: true },
 ];
 
 /** Tabela inexistente: PGRST205 (PostgREST, fora do cache do esquema) ou 42P01 (Postgres). */
@@ -37,7 +39,7 @@ const REALTIME_TABLES = [
   'trip_members', 'stops', 'transports', 'stays', 'activities', 'documents',
   'packing_categories', 'packing_items', 'tasks', 'budget_categories', 'expenses', 'expense_shares',
   'settlements', 'pool_contributions', 'journal_entries', 'journal_photos', 'trip_retros',
-  'inspiration_votes', 'polls', 'poll_options', 'poll_votes',
+  'inspiration_votes', 'polls', 'poll_options', 'poll_votes', 'suggestions', 'trip_preferences',
 ];
 
 function ensureOnline() {

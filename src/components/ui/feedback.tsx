@@ -1,5 +1,6 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { Sheet } from './Sheet';
 import { ConflictError, humanError } from '../../data/source';
 
 // ───── Toast (SPEC §7) ─────
@@ -26,45 +27,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 export const useToast = () => useContext(ToastCtx);
 
-// ───── Diálogo modal nativo ─────
-export function Dialog({ open, onClose, title, children, footer, labelledBy }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode; labelledBy?: string }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-  const id = labelledBy ?? `dlg-${title.replace(/\W+/g, '-').toLowerCase()}`;
-  return (
-    <dialog
-      ref={ref}
-      className="dlg"
-      aria-labelledby={id}
-      onClose={onClose}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      onClick={(e) => {
-        if (e.target === ref.current) onClose();
-      }}
-    >
-      {open ? (
-        <div className="dlg-in">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <h2 id={id} className="disp">{title}</h2>
-            <button className="btn btn-icon btn-sm tap" aria-label="Fechar" onClick={onClose}>
-              ✕
-            </button>
-          </div>
-          {children}
-          {footer ? <div className="dlg-foot">{footer}</div> : null}
-        </div>
-      ) : null}
-    </dialog>
-  );
-}
+// ───── Diálogo → Sheet ─────
+// Todos os formulários usam o Sheet (bottom sheet no celular, modal no desktop). `Dialog`
+// fica como alias com a mesma API para as telas antigas (planning §3.3 / Fase 2).
+export { Sheet as Dialog } from './Sheet';
 
 // ───── Confirmação de exclusão ─────
 interface ConfirmOpts {
@@ -89,10 +55,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   return (
     <ConfirmCtx.Provider value={ask}>
       {children}
-      <Dialog
+      <Sheet
         open={!!opts}
         onClose={() => done(false)}
         title={opts?.title ?? ''}
+        closeOnBack={false}
         footer={
           <>
             <button className="btn tap" onClick={() => done(false)}>
@@ -105,7 +72,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         }
       >
         <div style={{ fontSize: 16 }}>{opts?.message}</div>
-      </Dialog>
+      </Sheet>
     </ConfirmCtx.Provider>
   );
 }

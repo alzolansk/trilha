@@ -14,6 +14,7 @@ export function ServiceWorker() {
 /** Pede ao SW para guardar as telas de uma trilha (abrem sem internet depois). */
 export function warmTripPages(base: string) {
   if (!('serviceWorker' in navigator)) return;
-  const urls = ['', '/roteiro', '/documentos', '/mala', '/diario', '/turma'].map((p) => base + p);
+  // Rotas da Trilha 2.0 (planning §4.3): as 4 abas e as subtelas mais usadas sem internet.
+  const urls = ['', '/roteiro', '/dinheiro', '/turma', '/turma/documentos', '/turma/mala', '/turma/diario', '/turma/votos'].map((p) => base + p);
   navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: 'warm', urls })).catch(() => undefined);
 }

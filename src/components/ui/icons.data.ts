@@ -1,4 +1,5 @@
-// Gerado a partir de ref/trilha-prototipo.html (window.TRILHA_DATA). Não editar à mão.
+// Ícones de traço (24×24, 2 px, cantos redondos). Base gerada do protótipo antigo; a Trilha 2.0
+// acrescenta os ícones do canvas (route, back, next, close, info, more, lock, list, minus, settings).
 export const ICONS = {
  "plane": "<path d=\"M10.5 13.5 3 11l18-8-8 18-2.5-7.5Z\"></path>",
  "bus": "<rect x=\"4\" y=\"3\" width=\"16\" height=\"15\" rx=\"3\"></rect><path d=\"M4 11h16M8 18v3M16 18v3\"></path>",
@@ -16,17 +17,28 @@ export const ICONS = {
  "upload": "<path d=\"M12 16V4M7 9l5-5 5 5M4 16v4h16v-4\"></path>",
  "arrow": "<path d=\"M5 12h14M13 6l6 6-6 6\"></path>",
  "bed": "<path d=\"M3 18V6M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5\"></path><circle cx=\"7\" cy=\"11\" r=\"2\"></circle>",
- "map": "<path d=\"M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z\"></path><path d=\"M9 4v14M15 6v14\"></path>",
  "home": "<path d=\"M4 11 12 4l8 7v9h-5v-6H9v6H4z\"></path>",
  "search": "<circle cx=\"11\" cy=\"11\" r=\"6.5\"></circle><path d=\"m16 16 4.5 4.5\"></path>",
- "book": "<path d=\"M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z\"></path><path d=\"M4 19V5\"></path>",
  "cloud": "<path d=\"M7 18a4.5 4.5 0 1 1 .9-8.9A6 6 0 0 1 19 11a3.5 3.5 0 0 1-1 7z\"></path><path d=\"m9.5 14 2 2 3.5-3.5\"></path>",
  "link": "<path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7L11.5 6.8\"></path><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5\"></path>",
  "alert": "<path d=\"M12 3 2 20h20L12 3Z\"></path><path d=\"M12 10v4M12 17v.5\"></path>",
  "edit": "<path d=\"M4 20h4L19 9l-4-4L4 16z\"></path>",
  "swap": "<path d=\"M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7\"></path>",
- "chev": "<path d=\"m6 9 6 6 6-6\"></path>",
  "sun": "<circle cx=\"12\" cy=\"12\" r=\"4\"></circle><path d=\"M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5\"></path>",
- "heart": "<path d=\"M12 20s-8-4.7-8-10.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5C20 15.3 12 20 12 20Z\"></path>"
+ "heart": "<path d=\"M12 20s-8-4.7-8-10.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5C20 15.3 12 20 12 20Z\"></path>",
+ "route": "<circle cx=\"6\" cy=\"18\" r=\"2.5\"></circle><circle cx=\"18\" cy=\"6\" r=\"2.5\"></circle><path d=\"M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5\"></path>",
+ "clock": "<circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 7v5l3 2\"></path>",
+ "ticket": "<path d=\"M3 9a3 3 0 0 0 0 6v3h18v-3a3 3 0 0 1 0-6V6H3z\"></path><path d=\"M14 6v12\"></path>",
+ "city": "<path d=\"M3 21h18\"></path><path d=\"M5 21V10l4-2v13\"></path><path d=\"M9 21V4l6 3v14\"></path><path d=\"M15 21V11l4 2v8\"></path>",
+ "quarter": "<path d=\"M3 21h18\"></path><path d=\"M5 21V9l7-5 7 5v12\"></path><path d=\"M9 21v-6h6v6\"></path>",
+ "back": "<path d=\"M15 6l-6 6 6 6\"></path>",
+ "next": "<path d=\"M9 6l6 6-6 6\"></path>",
+ "close": "<path d=\"M6 6l12 12M18 6 6 18\"></path>",
+ "info": "<circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 11v5M12 8h.01\"></path>",
+ "more": "<path d=\"M5 12h.01M12 12h.01M19 12h.01\"></path>",
+ "lock": "<rect x=\"5\" y=\"10\" width=\"14\" height=\"11\" rx=\"3\"></rect><path d=\"M8 10V7a4 4 0 0 1 8 0v3\"></path>",
+ "list": "<path d=\"M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01\"></path>",
+ "minus": "<path d=\"M5 12h14\"></path>",
+ "settings": "<circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4\"></path>"
 } as const;
 export type IconName = keyof typeof ICONS;

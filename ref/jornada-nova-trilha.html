@@ -1,0 +1,348 @@
+<title>Nova trilha roteirizada</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: uma coluna de passos; cada passo = esboço de celular + notas ao lado (empilha no celular). */
+:root{
+  --bg:#f3f4f8; --paper:#ffffff; --ink:#12141c; --muted:#5d6273; --line:#d5d8e3;
+  --acc:#2b3ff0; --acc-soft:#e6e9ff; --sun:#fff0dc; --sun-ink:#8a4b00; --ok:#1d8a55; --ok-soft:#dff3e8; --bad:#c2352b; --bad-soft:#fde5e2;
+  --dark:#0e1016; --dark-ink:#f4f5f9;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1117; --paper:#181b24; --ink:#eceef5; --muted:#9aa0b3; --line:#2c303d;
+  --acc:#7d8bff; --acc-soft:#232a5c; --sun:#3a2a12; --sun-ink:#ffc777; --ok:#5fd39a; --ok-soft:#17352a; --bad:#ff8a80; --bad-soft:#3d1c1a;
+  --dark:#05060a; --dark-ink:#f4f5f9; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1117; --paper:#181b24; --ink:#eceef5; --muted:#9aa0b3; --line:#2c303d;
+  --acc:#7d8bff; --acc-soft:#232a5c; --sun:#3a2a12; --sun-ink:#ffc777; --ok:#5fd39a; --ok-soft:#17352a; --bad:#ff8a80; --bad-soft:#3d1c1a;
+  --dark:#05060a; --dark-ink:#f4f5f9; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--f-body);margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding-block:40px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:clamp(32px,5vw,52px);font-weight:800;letter-spacing:-.02em}
+h2{font-size:clamp(24px,3vw,32px);font-weight:800}
+h3{font-size:20px;font-weight:600}
+p{margin:0;max-width:65ch}
+.eyebrow{font:500 12px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--acc)}
+.muted{color:var(--muted)}
+section{display:flex;flex-direction:column;gap:20px}
+.lead{font-size:18px}
+.tag{display:inline-block;font:500 11px/1 var(--f-mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 6px;border-radius:4px;background:var(--sun);color:var(--sun-ink)}
+
+/* Diagnóstico */
+.diag{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.diag div{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.diag b{font-family:var(--f-display);font-size:18px}
+.diag code{font:500 13px var(--f-mono);background:var(--bad-soft);color:var(--bad);padding:1px 5px;border-radius:4px}
+
+/* Mapa da jornada */
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:600 14px var(--f-body)}
+.flow span{background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.flow span.hot{background:var(--acc);border-color:var(--acc);color:#fff}
+.flow i{font-style:normal;color:var(--muted)}
+
+/* Passos */
+.step{display:grid;grid-template-columns:320px 1fr;gap:36px;align-items:start}
+@media (max-width:760px){.step{grid-template-columns:1fr}}
+.notes{display:flex;flex-direction:column;gap:14px;min-width:0;padding-top:8px}
+.notes ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;max-width:62ch}
+.num{font:500 13px var(--f-mono);color:var(--muted)}
+
+/* Celular esboçado */
+.phone{width:100%;max-width:320px;background:var(--paper);border:2px solid var(--ink);border-radius:30px;padding:18px 14px 20px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.4;box-shadow:6px 6px 0 var(--line)}
+.ph-top{display:flex;justify-content:space-between;align-items:center;font:500 11px var(--f-mono);color:var(--muted)}
+.bar{height:4px;border-radius:2px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+.bub{display:flex;gap:8px;align-items:flex-start}
+.bub .av{width:22px;height:22px;border-radius:6px;background:var(--acc);flex:none}
+.bub p{background:var(--bg);border-radius:4px 12px 12px 12px;padding:8px 10px;font-size:13px}
+.inp{border:1.5px dashed var(--line);border-radius:10px;padding:8px 10px;color:var(--muted)}
+.inp b{color:var(--ink);font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{border:1.5px solid var(--line);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:600}
+.chip.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn{background:var(--acc);color:#fff;border-radius:10px;padding:9px;text-align:center;font-weight:700;font-size:13px}
+.btn.ghost{background:var(--bg);color:var(--ink)}
+.card{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+.card .h{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.card small{color:var(--muted);font-size:11px}
+.img{height:54px;border-radius:8px;background:repeating-linear-gradient(135deg,var(--bg) 0 6px,var(--line) 6px 7px)}
+.tri{display:flex;gap:4px}.tri span{flex:1;text-align:center;font-size:11px;font-weight:700;border-radius:6px;padding:4px 0;background:var(--bg)}
+.tri .must{background:var(--ok);color:#fff}.tri .no{background:var(--bad-soft);color:var(--bad)}
+.lbl{font:500 10px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.route{display:flex;flex-direction:column;gap:0}
+.stop{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center}
+.stop .dot{width:12px;height:12px;border-radius:50%;border:2.5px solid var(--acc);background:var(--paper)}
+.stop .nm{font-weight:700}
+.stop .nt{display:flex;align-items:center;gap:4px;font:500 12px var(--f-mono)}
+.stop .nt em{font-style:normal;width:18px;height:18px;border-radius:5px;background:var(--bg);display:grid;place-items:center}
+.leg{margin-left:5px;border-left:2px dashed var(--line);padding:4px 0 4px 15px;font-size:11px;color:var(--muted)}
+.tog{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:5px 0;font-size:12px}
+.tog .bx{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--line);flex:none}
+.tog .bx.on{background:var(--acc);border-color:var(--acc)}
+.tog .l{display:flex;gap:7px;align-items:center;min-width:0}
+.money{background:var(--dark);color:var(--dark-ink);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.money .big{font:800 24px var(--f-display)}
+.seg{display:flex;height:6px;border-radius:3px;overflow:hidden}
+.money .ln{display:flex;justify-content:space-between;font-size:11px;opacity:.9;font-variant-numeric:tabular-nums}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* Antes e depois / decisões */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:640px){.cmp{grid-template-columns:1fr}}
+.cmp>div{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cmp ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.table-wrap{overflow-x:auto;background:var(--paper);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td code{font:500 12.5px var(--f-mono)}
+ol.q{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:10px;max-width:70ch}
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+  <span class="eyebrow">Proposta de jornada · esboço, antes da Fase 10</span>
+  <h1>A Trilha monta a viagem. A turma ajusta.</h1>
+  <p class="lead muted">Hoje a nova trilha pede destino e datas, cria uma viagem vazia e deixa o resto com você. A proposta troca isso por uma conversa curta que termina com roteiro, passeios e orçamento já sugeridos.</p>
+</header>
+
+<section>
+  <h2>Por que o “Quanto custa essa trilha?” deu R$ 700</h2>
+  <div class="diag">
+    <div><b>0 noites de hospedagem</b><p class="muted">O cálculo conta noites pelas <em>paradas</em> do roteiro. A nova trilha cria a viagem sem nenhuma parada, então dá <code>0 noites</code> e <code>R$ 0</code>, mesmo com 10 dias de viagem.</p></div>
+    <div><b>Só a comida entra</b><p class="muted">A comida é a única linha que usa as datas da viagem: 10 dias × R$ 70 de referência = <code>R$ 700</code>. Por isso o total parece absurdo.</p></div>
+    <div><b>Transporte e passeios vazios</b><p class="muted">Sem trechos e sem atividades, o Orçamento pede que você mesmo preencha o Roteiro. Nenhuma sugestão aparece, nem o voo de ida.</p></div>
+  </div>
+  <p>A causa é uma só: <strong>a viagem nasce sem roteiro</strong>. Consertar a conta sem consertar o onboarding só troca um número errado por outro chute.</p>
+</section>
+
+<section>
+  <h2>A jornada nova</h2>
+  <div class="flow">
+    <span>Pra onde e quando</span><i>→</i><span>Do que a turma gosta</span><i>→</i><span class="hot">O que não pode faltar</span><i>→</i><span class="hot">Roteiro sugerido</span><i>→</i><span>Passeios por cidade</span><i>→</i><span>Quanto custa</span><i>→</i><span>Criar e chamar a turma</span>
+  </div>
+  <p class="muted">Exemplo usado nos esboços: Itália, 15 dias em maio, 2 pessoas, saindo de São Paulo. Os valores são ilustrativos.</p>
+</section>
+
+<!-- Passo 1 -->
+<section class="step">
+  <div class="phone" aria-label="Esboço do passo 1">
+    <div class="ph-top"><span>Nova trilha</span><span>1 de 5</span></div><div class="bar"><i style="width:20%"></i></div>
+    <div class="bub"><span class="av"></span><p>Pra onde vai a próxima trilha?</p></div>
+    <div class="inp"><b>Itália</b></div>
+    <div class="row2"><div class="inp">Ida <b>02/05</b></div><div class="inp">Volta <b>16/05</b></div></div>
+    <div class="row2"><div class="inp">Saindo de <b>São Paulo</b></div><div class="inp">Pessoas <b>2</b></div></div>
+    <div class="chips"><span class="chip">Sem data certa</span><span class="chip">Ainda não sei o destino</span></div>
+    <div class="btn">Continuar</div>
+  </div>
+  <div class="notes">
+    <span class="num">Passo 1</span><h3>Pra onde, quando e quantos</h3>
+    <p>Praticamente o que já existe, numa tela só. Entram dois campos que hoje faltam e que mudam a conta: <strong>quantas pessoas</strong> e <strong>de onde saem</strong> (para incluir o voo).</p>
+    <ul>
+      <li>Destino pode ser país, região ou cidade. “Itália” já basta.</li>
+      <li>“Sem data certa” vira mês + número de dias.</li>
+      <li>“Ainda não sei o destino” segue para o Descobrir, que já existe, e depois volta para o passo 3.</li>
+      <li>Some o resto da identidade visual: nada de cor por destino, dicionário de destinos ou chips de identidade.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Passo 2 -->
+<section class="step">
+  <div class="phone" aria-label="Esboço do passo 2">
+    <div class="ph-top"><span>Nova trilha</span><span>2 de 5</span></div><div class="bar"><i style="width:40%"></i></div>
+    <div class="bub"><span class="av"></span><p>15 dias na Itália. Do que vocês gostam numa viagem?</p></div>
+    <div class="chips"><span class="chip on">Comida</span><span class="chip on">História</span><span class="chip">Praia</span><span class="chip on">Cidades</span><span class="chip">Natureza</span><span class="chip">Vida noturna</span><span class="chip on">Arte</span><span class="chip">Compras</span></div>
+    <span class="lbl">Ritmo</span>
+    <div class="chips"><span class="chip">Calmo · poucas cidades</span><span class="chip on">Equilibrado</span><span class="chip">Ver tudo</span></div>
+    <span class="lbl">Onde dormir</span>
+    <div class="chips"><span class="chip">Hostel</span><span class="chip on">Pousada / Airbnb</span><span class="chip">Hotel</span></div>
+    <div class="inp">Teto por pessoa (opcional) <b>R$ 18 mil</b></div>
+    <div class="btn">Continuar</div>
+  </div>
+  <div class="notes">
+    <span class="num">Passo 2</span><h3>Do que a turma gosta</h3>
+    <p>Três perguntas rápidas que alimentam todo o resto: gostos, ritmo e estilo de hospedagem. Hoje o ritmo e o estilo só aparecem lá no Orçamento, depois que tudo já foi decidido.</p>
+    <ul>
+      <li>As respostas vão para <code>trip_preferences</code>, a mesma tabela do Descobrir. Quem entrar depois pela Turma responde o mesmo passo no próprio celular.</li>
+      <li>O teto é opcional. Com teto, a Trilha avisa quando o roteiro passa dele.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Passo 3 -->
+<section class="step">
+  <div class="phone" aria-label="Esboço do passo 3">
+    <div class="ph-top"><span>Nova trilha</span><span>3 de 5</span></div><div class="bar"><i style="width:60%"></i></div>
+    <div class="bub"><span class="av"></span><p>Separei lugares que combinam com vocês. O que não pode faltar?</p></div>
+    <div class="card"><div class="img"></div><div class="h"><span>Roma</span><small>3 a 4 noites</small></div><small>Coliseu, Vaticano, trattorias do Trastevere</small><div class="tri"><span class="must">Não pode faltar</span><span>Talvez</span><span>Pular</span></div></div>
+    <div class="card"><div class="h"><span>Florença + Toscana</span><small>3 noites</small></div><small>Uffizi, Siena e vinícolas em bate-volta</small><div class="tri"><span class="must">Não pode faltar</span><span>Talvez</span><span>Pular</span></div></div>
+    <div class="card"><div class="h"><span>Costa Amalfitana</span><small>2 a 3 noites</small></div><small>Praia, mas longe da rota do trem</small><div class="tri"><span>Não pode faltar</span><span>Talvez</span><span class="no">Pular</span></div></div>
+    <span class="lbl">Dá pra esticar</span>
+    <div class="card"><div class="h"><span>Nice, França</span><small>1h de Gênova</small></div><small>+1 país sem voo · ≈ R$ 400 de trem</small></div>
+    <div class="inp">Algo que vocês querem fazer? <b>aula de massa, ver a Última Ceia</b></div>
+  </div>
+  <div class="notes">
+    <span class="num">Passo 3 · novo</span><h3>O que não pode faltar</h3>
+    <p>O coração da proposta. A Trilha sugere de 6 a 10 lugares do destino, já filtrados pelos gostos do passo 2, e cada um recebe uma marca: <strong>não pode faltar</strong>, <strong>talvez</strong> ou <strong>pular</strong>.</p>
+    <ul>
+      <li>Cada cartão diz quantas noites o lugar costuma pedir e o porquê em uma linha.</li>
+      <li>“Dá pra esticar” traz cidades em países vizinhos que cabem por trem ou voo curto, com tempo e custo estimados.</li>
+      <li>Campo livre para desejos (“aula de massa”, “ver a Última Ceia”). A IA encaixa no roteiro ou avisa que não coube.</li>
+      <li>Em turma, essa tela vira votação: cada pessoa marca e a Trilha usa a soma.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Passo 4 -->
+<section class="step">
+  <div class="phone" aria-label="Esboço do passo 4">
+    <div class="ph-top"><span>Nova trilha</span><span>4 de 5</span></div><div class="bar"><i style="width:80%"></i></div>
+    <div class="bub"><span class="av"></span><p>Montei 14 noites com os seus indispensáveis. Mexa no que quiser.</p></div>
+    <div class="route">
+      <div class="leg">✈ São Paulo → Roma · ≈ R$ 5.800 <span class="tag">estimativa</span></div>
+      <div class="stop"><span class="dot"></span><span class="nm">Roma</span><span class="nt"><em>−</em>4 n<em>+</em></span></div>
+      <div class="leg">🚆 1h30 · ≈ R$ 180</div>
+      <div class="stop"><span class="dot"></span><span class="nm">Florença</span><span class="nt"><em>−</em>4 n<em>+</em></span></div>
+      <div class="leg">🚆 2h30 · ≈ R$ 160</div>
+      <div class="stop"><span class="dot"></span><span class="nm">Cinque Terre</span><span class="nt"><em>−</em>2 n<em>+</em></span></div>
+      <div class="leg">🚆 3h · ≈ R$ 150</div>
+      <div class="stop"><span class="dot"></span><span class="nm">Milão</span><span class="nt"><em>−</em>1 n<em>+</em></span></div>
+      <div class="leg">🚆 2h30 · ≈ R$ 140</div>
+      <div class="stop"><span class="dot"></span><span class="nm">Veneza</span><span class="nt"><em>−</em>3 n<em>+</em></span></div>
+      <div class="leg">✈ Veneza → São Paulo</div>
+    </div>
+    <div class="chips"><span class="chip">Mais calmo</span><span class="chip">Mais lugares</span><span class="chip">Incluir Nice</span></div>
+    <div class="btn">Gostei, ver passeios</div>
+  </div>
+  <div class="notes">
+    <span class="num">Passo 4 · novo</span><h3>Roteiro sugerido</h3>
+    <p>A Trilha monta a rota: ordem das cidades, noites em cada uma e os trechos entre elas, com meio de transporte, duração e preço estimado. Chegar por uma cidade e voltar por outra já entra na conta.</p>
+    <ul>
+      <li>As noites somam exatamente as noites da viagem. Tirar uma noite de um lugar pede para colocar em outro.</li>
+      <li>Atalhos de ajuste refazem a rota inteira: mais calmo, mais lugares, incluir um vizinho.</li>
+      <li>Arrastar para reordenar. Remover um lugar marcado como “não pode faltar” pede confirmação.</li>
+      <li>Ao aceitar, isso vira <code>stops</code> e <code>transports</code> de verdade. É o que faltava para o Orçamento funcionar.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Passo 5 -->
+<section class="step">
+  <div class="phone" aria-label="Esboço do passo 5">
+    <div class="ph-top"><span>Nova trilha</span><span>5 de 5</span></div><div class="bar"><i style="width:100%"></i></div>
+    <div class="bub"><span class="av"></span><p>Separei passeios por cidade. Desmarque o que não for a cara de vocês.</p></div>
+    <span class="lbl">Roma · 4 noites</span>
+    <div class="tog"><span class="l"><span class="bx on"></span>Coliseu + Fórum, com guia</span><span class="mono">R$ 260</span></div>
+    <div class="tog"><span class="l"><span class="bx on"></span>Museus Vaticanos</span><span class="mono">R$ 190</span></div>
+    <div class="tog"><span class="l"><span class="bx"></span>Tour gastronômico no Trastevere</span><span class="mono">R$ 420</span></div>
+    <span class="lbl">Florença · 4 noites</span>
+    <div class="tog"><span class="l"><span class="bx on"></span>Galeria Uffizi</span><span class="mono">R$ 140</span></div>
+    <div class="tog"><span class="l"><span class="bx on"></span>Aula de massa · seu pedido</span><span class="mono">R$ 380</span></div>
+    <div class="tog"><span class="l"><span class="bx on"></span>Bate-volta em Siena</span><span class="mono">R$ 90</span></div>
+    <small class="muted">+ Cinque Terre, Milão, Veneza</small>
+    <div class="btn">Ver quanto custa</div>
+  </div>
+  <div class="notes">
+    <span class="num">Passo 5</span><h3>Passeios por cidade</h3>
+    <p>Para cada parada, sugestões já ligadas conforme o ritmo escolhido: no equilibrado, cerca de um passeio por dia. Os desejos do passo 3 aparecem marcados como “seu pedido”.</p>
+    <ul>
+      <li>Usa o <code>explore kind:'activities'</code> que já existe, chamado para todas as paradas de uma vez.</li>
+      <li>Cada item entra no Roteiro como sugestão com dia sugerido. Dá para tirar depois sem perder o resto.</li>
+      <li>Preço sempre com o selo ESTIMATIVA enquanto ninguém confirmar.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Passo 6 -->
+<section class="step">
+  <div class="phone" aria-label="Esboço do passo 6">
+    <div class="ph-top"><span>Nova trilha</span><span>pronto</span></div>
+    <div class="bub"><span class="av"></span><p>Essa é a Itália de vocês. Cabe no teto, com folga de R$ 1.900.</p></div>
+    <div class="money">
+      <span style="font-size:11px">Por pessoa</span>
+      <span class="big">≈ R$ 16.100</span>
+      <span class="tag" style="align-self:flex-start">estimativa · entre R$ 14 e 19 mil</span>
+      <div class="seg"><i style="flex:36;background:#7d8bff"></i><i style="flex:5;background:#a6b0ff"></i><i style="flex:27;background:#ff7a59"></i><i style="flex:10;background:#4cc38a"></i><i style="flex:22;background:#e8e8ee"></i></div>
+      <div class="ln"><span>Voo ida e volta</span><span>R$ 5.800</span></div>
+      <div class="ln"><span>Trens · 4 trechos</span><span>R$ 630</span></div>
+      <div class="ln"><span>Hospedagem · 14 noites</span><span>R$ 4.400</span></div>
+      <div class="ln"><span>Passeios · 11</span><span>R$ 1.650</span></div>
+      <div class="ln"><span>Comida · 15 dias × R$ 240</span><span>R$ 3.600</span></div>
+    </div>
+    <div class="btn">Criar trilha</div>
+    <div class="btn ghost">Chamar a turma para votar</div>
+  </div>
+  <div class="notes">
+    <span class="num">Fim do onboarding</span><h3>Quanto custa, já calculado</h3>
+    <p>O orçamento chega pronto e explicado linha a linha: quantas noites, quantos trechos, quantos passeios, quantos dias de comida. Todo número mostra de onde veio.</p>
+    <ul>
+      <li>Mostra uma faixa (mínimo e máximo) além do valor do meio, porque tudo ainda é estimativa.</li>
+      <li>“Criar trilha” grava roteiro, passeios e o <code>budget_plan</code> de uma vez e abre a Início com tudo preenchido.</li>
+      <li>“Chamar a turma” cria o convite e uma votação dos lugares marcados como “talvez”.</li>
+      <li>Pular é sempre possível: “Montar depois” cria a trilha só com destino e datas, como hoje.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>E o “Quanto custa essa trilha?” depois de criada</h2>
+  <div class="cmp">
+    <div>
+      <h3>Hoje</h3>
+      <ul class="muted">
+        <li>Noites contadas só pelas paradas: sem parada, 0 noites.</li>
+        <li>Voo de ida e volta não existe na conta.</li>
+        <li>Passeios dependem do que você cadastrou à mão.</li>
+        <li>Total por pessoa sai muito baixo e parece certo.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Proposta</h3>
+      <ul>
+        <li>Noites sempre pelas datas da viagem. Noites sem parada usam a referência do país, com selo.</li>
+        <li>Linha de voo (origem → destino) estimada pela IA quando não houver trecho.</li>
+        <li>Roteiro vazio não mostra R$ 0: mostra “Monte o roteiro com a Trilha” e abre o passo 3.</li>
+        <li>Quando o roteiro muda, avisa a diferença (“+1 noite em Roma, +R$ 310”).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>O que muda por baixo</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Peça</th><th>Hoje</th><th>Com a proposta</th></tr></thead>
+      <tbody>
+        <tr><td><code>/nova-trilha</code></td><td>Destino, datas, estilo. Cria a viagem vazia.</td><td>Conversa em 5 passos com estado local. Só grava no fim (ou ao pular).</td></tr>
+        <tr><td>IA de lugares</td><td><code>explore kind:'destinations'</code> sugere países.</td><td>Novo <code>kind:'places'</code>: cidades do destino e vizinhos, com noites típicas e motivo.</td></tr>
+        <tr><td>IA de rota</td><td>Não existe.</td><td>Novo <code>kind:'route'</code>: ordem, noites por parada e trechos com meio, duração e preço.</td></tr>
+        <tr><td>Passeios</td><td><code>kind:'activities'</code> por parada, sob demanda.</td><td>Mesma chamada, para todas as paradas no passo 5.</td></tr>
+        <tr><td><code>budgetPlan.ts</code></td><td>Noites pelas paradas, sem voo.</td><td>Noites pela viagem, linha de voo, faixa mín–máx, estado “roteiro vazio”.</td></tr>
+        <tr><td>Identidade visual</td><td>Resta cor por destino e dicionário em <code>lib/identity</code>.</td><td>Sai do onboarding. Fica só a cor padrão da Trilha.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Para decidir antes de implementar</h2>
+  <ol class="q">
+    <li><strong>Turma no onboarding.</strong> Quem cria decide sozinho os indispensáveis, ou a tela do passo 3 já vira votação quando houver convidados?</li>
+    <li><strong>Viagem multi-país.</strong> “Dá pra esticar” sugere vizinhos sempre, ou só quando o ritmo for “ver tudo” ou o pedido mencionar outro país?</li>
+    <li><strong>Voo internacional.</strong> Estimar pela IA basta, ou queremos buscar preço real numa API de passagens depois?</li>
+    <li><strong>Sem IA disponível.</strong> Mostrar uma rota pronta de referência por país (lista curta curada) ou pular direto para o roteiro manual?</li>
+    <li><strong>Escopo.</strong> Isso entra antes da Fase 10 como uma fase própria (“Fase 9.5: onboarding roteirizado”), ou substitui parte dela?</li>
+  </ol>
+</section>
+
+</div>

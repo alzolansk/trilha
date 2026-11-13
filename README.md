@@ -1,8 +1,10 @@
 # Trilha
 
-Countdown de viagens que vira a central da viagem: roteiro, documentos offline, mala, gastos e diário com a turma. Cada trilha tem uma **identidade visual própria** gerada a partir do destino.
+Countdown de viagens que vira a central da viagem: roteiro, documentos offline, mala, gastos e diário com a turma. No redesign (Trilha 2.0) o visual é fixo e cada trilha guarda só uma cor de destaque (`accent`).
 
-> **Referências de produto:** `ref/SPEC.md` (vence conflitos), `ref/trilha-prototipo.html` (visual e comportamento), `ref/Trilha · Design System.pdf` (conferência visual).
+> **Redesign em andamento (Trilha 2.0):** o plano, o status de cada fase e as ressalvas de handoff estão em [`planning.md`](planning.md). Para visual, navegação e telas, ele tem precedência sobre `ref/SPEC.md`.
+
+> **Referências de produto:** `ref/SPEC.md` (dados, segurança, IA e acessibilidade), `ref/trilha-prototipo.html` (visual e comportamento), `ref/Trilha · Design System.pdf` (conferência visual).
 > O antigo `ref/Design.html` **foi substituído** por essas referências e não é mais usado.
 
 ## Stack
@@ -24,13 +26,13 @@ cp .env.example .env.local   # preencha as variáveis (veja abaixo)
 npm run dev                  # http://localhost:3000
 ```
 
-Sem Supabase configurado, a **demonstração** funciona: `http://localhost:3000/identidades` → "Ver demonstração" (4 trilhas fictícias, nada é salvo).
+Sem Supabase configurado, a **demonstração** funciona: `http://localhost:3000/demo/andes` (4 trilhas fictícias, nada é salvo).
 
 Comandos:
 
 ```bash
 npm run typecheck   # TypeScript
-npm test            # Vitest: cálculos, identidades, regras + RLS num Postgres em WASM (PGlite)
+npm test            # Vitest: cálculos, accent/contraste, regras + RLS num Postgres em WASM (PGlite)
 npm run build       # build de produção
 BASE_URL=http://localhost:3000 npm run test:e2e   # Playwright (usa o Chrome instalado)
 ```
@@ -41,7 +43,7 @@ BASE_URL=http://localhost:3000 npm run test:e2e   # Playwright (usa o Chrome ins
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | sim | URL do projeto |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | sim | chave publishable/anon (segurança vem do RLS) |
-| `NEXT_PUBLIC_SITE_URL` | sim | URL pública (links de convite, retorno do login) |
+| `NEXT_PUBLIC_SITE_URL` | sim | URL pública (links de convite). O retorno do login usa a origem atual, então previews do Vercel funcionam se estiverem nas Redirect URLs do Supabase |
 | `NEXT_PUBLIC_AUTH_GOOGLE` / `_APPLE` / `_MAGIC_LINK` | sim | `1` mostra o botão depois que o provedor estiver configurado |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | sim | push (gere com `npx web-push generate-vapid-keys`) |
 | `SUPABASE_SECRET_KEY` | **não** | só a rotina diária de notificações (`/api/cron/daily`) |
@@ -56,8 +58,9 @@ Nunca use o prefixo `NEXT_PUBLIC_` para segredos. A service-role/secret key não
 
 1. Crie um projeto (plano Free) em https://supabase.com.
 2. Aplique as migrations de `supabase/migrations/` **em ordem** (SQL Editor, `supabase db push` ou MCP):
-   `…0001_schema.sql` → `…0002_policies.sql` → `…0003_spec_v3.sql` → `…0004_hardening.sql` → `…0005_e2e_documents.sql` → `…0006_pool.sql` → `…0007_votes.sql`.
-   Elas criam tabelas, RLS em todas as tabelas, RPCs de convite (`create_invite`, `preview_invite`, `accept_invite`), `save_expense`, buckets privados (`documents` 25 MB, `journal`, `covers`) e políticas de Storage; depois restringem permissões (0004), cifram documentos ponta a ponta (0005), criam o caixa da turma (0006) e a votação da turma (0007: termômetro das inspirações, enquetes, `promote_inspiration`, `cast_vote` e `close_poll`; ver `ref/SPEC-votacao.md`).
+   `…0001_schema.sql` → `…0002_policies.sql` → `…0003_spec_v3.sql` → `…0004_hardening.sql` → `…0005_e2e_documents.sql` → `…0006_pool.sql` → `…0007_votes.sql` → `…0008_redesign.sql`.
+   Elas criam tabelas, RLS em todas as tabelas, RPCs de convite (`create_invite`, `preview_invite`, `accept_invite`), `save_expense`, buckets privados (`documents` 25 MB, `journal`, `covers`) e políticas de Storage; depois restringem permissões (0004), cifram documentos ponta a ponta (0005), criam o caixa da turma (0006), a votação da turma (0007: termômetro das inspirações, enquetes, `promote_inspiration`, `cast_vote` e `close_poll`; ver `ref/SPEC-votacao.md`) e os dados do redesign Trilha 2.0 (0008: `trips.accent` e `budget_plan`, custos nos itens do roteiro, vínculo gasto ↔ item no `save_expense`, `budget_categories.kind`, cota no caixa, quem leva o item da mala, tabelas `suggestions` e `trip_preferences`; ver `planning.md` §7).
+   Só os documentos são cifrados ponta a ponta. Caixa, gastos e orçamento ficam protegidos pelo RLS (só quem é da trilha lê), sem criptografia própria.
    **Aplique a migration antes de publicar o código que a usa:** o app lê as tabelas novas ao abrir a viagem (e a Conta lê `notification_prefs.poll_reminders`).
 3. **Authentication → Providers → Email:** para seus amigos entrarem sem SMTP próprio, **desligue "Confirm email"**. O SMTP embutido do Supabase só envia para membros da equipe do projeto e no máximo 2 e-mails/hora; link mágico e "esqueci a senha" só funcionam de verdade com um SMTP próprio (ex.: Brevo gratuito, 300/dia) em *Authentication → SMTP Settings*. Depois ligue `NEXT_PUBLIC_AUTH_MAGIC_LINK=1`.
 4. **Authentication → URL Configuration:**
@@ -79,24 +82,28 @@ Rotas internas (`/t/<id>/roteiro`, `/convite/…`) funcionam com navegação dir
 
 ## IA
 
-- Sem nenhuma chave, tudo funciona: identidades do dicionário + gerador por regras, dicas/alertas/sugestões por regras verificáveis (etiqueta **AUTO**). Nada estático é apresentado como IA.
-- Com chaves, cada tarefa tenta provedores numa ordem (Gemini primeiro para identidade e retrospectiva; Groq para dicas/mala/alertas; Gemma via OpenRouter para classificação). Erro 429/5xx põe o provedor em resfriamento. Saídas validadas com Zod; frases como "baixei/reservei" e fatos sensíveis sem fonte são descartados.
+- Sem nenhuma chave, tudo funciona: destinos do dicionário (cor de destaque por destino), dicas/alertas/sugestões por regras verificáveis (etiqueta **AUTO**). Nada estático é apresentado como IA.
+- Com chaves, cada tarefa tenta provedores numa ordem (Gemini primeiro para descoberta de destino e retrospectiva; Groq para dicas/mala/alertas; Gemma via OpenRouter para classificação). Erro 429/5xx põe o provedor em resfriamento. Saídas validadas com Zod; frases como "baixei/reservei" e fatos sensíveis sem fonte são descartados.
 - O texto dos documentos é extraído no navegador (pdf.js / tesseract.js); só um trecho do texto vai para a IA, nunca o arquivo.
 - Cotas gratuitas mudam com frequência; confira em cada painel. `GEMINI_MODEL` deve ser um ID existente na sua conta (`GET https://generativelanguage.googleapis.com/v1beta/models?key=…`).
 
+## Colunas sem uso
+
+`trips.identity` e `trips.identity_version` (migration `spec_v3`) não são mais escritas: o visual é fixo e só a cor de destaque (`trips.accent`) muda por trilha. Ficam no banco para não quebrar cópias antigas; trilhas novas gravam `identity = null`.
+
 ## Offline e privacidade
 
-- Passagens e identidade ficam com "manter offline" ligado por padrão; a preferência é por pessoa (banco) e o estado "baixado neste aparelho" fica no IndexedDB (`trilha-u-<id>`). O selo OFFLINE só aparece com a cópia salva.
+- Passagens ficam com "manter offline" ligado por padrão; a preferência é por pessoa (banco) e o estado "baixado neste aparelho" fica no IndexedDB (`trilha-u-<id>`). O selo OFFLINE só aparece com a cópia salva.
 - Sair da conta apaga todos os dados locais. Remover alguém da trilha não apaga remotamente cópias já baixadas num aparelho desconectado; elas somem quando ele sincronizar.
 - O navegador pode apagar armazenamento sob pressão de espaço; o app pede armazenamento persistente, mas não há garantia.
 
 ## Estrutura
 
 ```
-src/app/          rotas (t/[tripId]/…, demo/[key]/…, nova-trilha, identidades, convite, entrar, conta, api/…)
+src/app/          rotas (t/[tripId]/…, demo/[key]/…, nova-trilha, descobrir, convite, entrar, conta, api/…)
 src/screens/      telas da trilha (Início, Roteiro, Documentos, Mala, Diário, Turma, EditTrip)
-src/components/   shell (header, tabbar, tema), ui, mapa, formulários, cartão de identidade
-src/lib/          identidade (dicionário, validação, gerador, fendas), tempo, dinheiro, regras, IA
+src/components/   shell (header, tabbar, tema), ui, mapa, formulários
+src/lib/          accent e dicionário de destinos, tempo, dinheiro, regras, IA
 src/data/         tipos, fontes de dados (Supabase e demonstração), offline
 supabase/         migrations
 tests/            unit, db (RLS em PGlite), e2e (Playwright)

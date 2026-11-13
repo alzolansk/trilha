@@ -58,7 +58,7 @@ describe('orçamento do planejamento', () => {
 
   it('links de busca levam cidade, datas e pessoas', () => {
     const [booking, airbnb] = staySearchLinks('Paraty, Brasil', '2026-11-20', '2026-11-23', 2);
-    expect(booking.url).toContain('ss=Paraty%2C%20Brasil');
+    expect(new URL(booking.url).searchParams.get('ss')).toBe('Paraty, Brasil');
     expect(booking.url).toContain('checkin=2026-11-20');
     expect(booking.url).toContain('group_adults=2');
     expect(airbnb.url).toContain('checkout=2026-11-23');

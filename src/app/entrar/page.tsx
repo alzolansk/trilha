@@ -3,11 +3,14 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Icon } from '../../components/ui/primitives';
+import { Logo } from '../../components/ui/Logo';
+import { Busy } from '../../components/ui/Loader';
 import { useAuth } from '../../data/AuthContext';
 import { humanError } from '../../data/source';
-import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK, SITE_URL } from '../../lib/env';
+import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK } from '../../lib/env';
 import { getSupabase } from '../../lib/supabase/client';
 import s from './auth.module.css';
+import { Button, Field } from '../../components/ui';
 
 function safeNext(n: string | null) {
   return n && n.startsWith('/') && !n.startsWith('//') ? n : '/';
@@ -29,7 +32,9 @@ function Entrar() {
     if (ready && user) router.replace(next);
   }, [ready, user, router, next]);
 
-  const origin = () => SITE_URL || window.location.origin;
+  // Retorno do login sempre na origem onde ele começou (produção, preview do Vercel ou localhost):
+  // o verificador PKCE fica num cookie desta origem. NEXT_PUBLIC_SITE_URL vale só para links de convite.
+  const origin = () => window.location.origin;
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const sb = getSupabase();
@@ -74,31 +79,31 @@ function Entrar() {
   return (
     <main id="main" className={s.page}>
       <div className={s.card}>
-        <Link href="/identidades" className={s.logo}><span className="motif" />trilha</Link>
+        <Link href="/demo/andes" className={s.logo} aria-label="Trilha: ver demonstração"><Logo size={34} /></Link>
         <h1 className="disp" style={{ margin: 0, fontSize: 'clamp(40px,6vw,64px)', lineHeight: 0.95 }}>
           {mode === 'signup' ? 'Criar conta' : mode === 'reset' ? 'Nova senha' : 'Entrar'}
         </h1>
         <p style={{ margin: 0, color: 'var(--mute)' }}>Countdown, roteiro, documentos offline e gastos com a turma.</p>
         {!configured ? (
-          <div className="errbox">O Supabase ainda não está configurado neste ambiente (veja o README). Enquanto isso, explore a <Link href="/identidades">demonstração</Link>.</div>
+          <div className="errbox">O Supabase ainda não está configurado neste ambiente (veja o README). Enquanto isso, explore a <Link href="/demo/andes">demonstração</Link>.</div>
         ) : (
           <>
             {AUTH_GOOGLE || AUTH_APPLE ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {AUTH_GOOGLE ? <button className="btn tap" style={{ justifyContent: 'center' }} onClick={() => void oauth('google')}>Continuar com Google</button> : null}
-                {AUTH_APPLE ? <button className="btn tap" style={{ justifyContent: 'center' }} onClick={() => void oauth('apple')}>Continuar com Apple</button> : null}
+                {AUTH_GOOGLE ? <Button variant="secondary" style={{ justifyContent: 'center' }} onClick={() => void oauth('google')}>Continuar com Google</Button> : null}
+                {AUTH_APPLE ? <Button variant="secondary" style={{ justifyContent: 'center' }} onClick={() => void oauth('apple')}>Continuar com Apple</Button> : null}
                 <span className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--mute)' }}>OU COM E-MAIL</span>
               </div>
             ) : null}
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {mode === 'signup' ? <label className="field">Seu nome<input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label> : null}
-              <label className="field">E-mail<input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></label>
+              {mode === 'signup' ? <Field label="Seu nome"><input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} autoComplete="name" /></Field> : null}
+              <Field label="E-mail"><input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></Field>
               {mode === 'login' || mode === 'signup' ? (
-                <label className="field">Senha<input type="password" required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></label>
+                <Field label="Senha"><input type="password" required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></Field>
               ) : null}
               {msg ? <div role={msg.kind === 'err' ? 'alert' : 'status'} className={msg.kind === 'err' ? 'errbox' : 'ai'}>{msg.text}</div> : null}
               <button className="btn btn-ink tap" style={{ justifyContent: 'center' }} disabled={busy}>
-                {busy ? 'Aguarde…' : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : mode === 'magic' ? 'Enviar link de acesso' : 'Enviar link'}
+                {busy ? <Busy>Aguarde</Busy> : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : mode === 'magic' ? 'Enviar link de acesso' : 'Enviar link'}
                 <Icon name="arrow" size={18} />
               </button>
             </form>
@@ -110,7 +115,7 @@ function Entrar() {
             {mode === 'reset' || mode === 'magic' ? <p className="mono" style={{ margin: 0, fontSize: 11, color: 'var(--mute)' }}>E-MAILS DEPENDEM DO SMTP CONFIGURADO NO SUPABASE (VEJA O README).</p> : null}
           </>
         )}
-        <Link href="/identidades" className="mono" style={{ fontSize: 12 }}>VER DEMONSTRAÇÃO SEM CONTA →</Link>
+        <Link href="/demo/andes" style={{ fontSize: 14, fontWeight: 600 }}>Ver demonstração sem conta →</Link>
       </div>
     </main>
   );

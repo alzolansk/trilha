@@ -187,7 +187,7 @@ describe('lembretes de votação (rotina diária)', () => {
   it('prazo nas próximas 24h sem meu voto → falta seu voto', () => {
     const r = pollPushes(trip, [poll('soon', '2026-10-11T06:00:00Z'), poll('late', '2026-10-13T00:00:00Z'), poll('voted', '2026-10-11T00:00:00Z')],
       [{ poll_id: 'voted', user_id: 'leo' }], withOpts, { user_id: 'leo', role: 'viewer' }, NOW);
-    expect(r).toEqual([{ title: 'Peru: falta seu voto', body: 'Pergunta soon', url: '/t/t1/turma#decisoes', tag: 'poll-soon' }]);
+    expect(r).toEqual([{ title: 'Peru: falta seu voto', body: 'Pergunta soon', url: '/t/t1/turma/votos', tag: 'poll-soon' }]);
   });
 
   it('prazo vencido → hora de decidir só para quem criou ou organiza', () => {

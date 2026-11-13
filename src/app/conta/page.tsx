@@ -10,6 +10,7 @@ import { resetLocalState } from '../../data/offlineSync';
 import { formatBytes } from '../../lib/format';
 import { VAPID_PUBLIC_KEY } from '../../lib/env';
 import { getSupabase } from '../../lib/supabase/client';
+import { Button, Field } from '../../components/ui';
 
 interface Prefs {
   push_enabled: boolean;
@@ -126,10 +127,10 @@ export default function Conta() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(360px,100%),1fr))', gap: 22, marginTop: 36 }}>
         <section className="card" style={box}>
           <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Perfil</h2>
-          <label className="field">Nome que a turma vê<input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></label>
-          <button className="btn tap" style={{ alignSelf: 'flex-start' }} disabled={busy || !name.trim()} onClick={saveProfile}>Salvar nome</button>
-          <label className="field">Nova senha<input type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} minLength={8} /></label>
-          <button className="btn tap" style={{ alignSelf: 'flex-start' }} disabled={busy || pass.length < 8} onClick={savePass}>Trocar senha</button>
+          <Field label="Nome que a turma vê"><input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></Field>
+          <Button variant="secondary" style={{ alignSelf: 'flex-start' }} disabled={busy || !name.trim()} onClick={saveProfile}>Salvar nome</Button>
+          <Field label="Nova senha"><input type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} minLength={8} /></Field>
+          <Button variant="secondary" style={{ alignSelf: 'flex-start' }} disabled={busy || pass.length < 8} onClick={savePass}>Trocar senha</Button>
         </section>
         <section className="card" style={box}>
           <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Notificações</h2>
@@ -147,9 +148,9 @@ export default function Conta() {
         <section className="card" style={box}>
           <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Este aparelho</h2>
           <p style={{ margin: 0 }}>{est ? `${formatBytes(est.usage)} usados de ${formatBytes(est.quota)}.` : 'Uso de espaço indisponível neste navegador.'} {est ? (est.persisted ? 'Armazenamento protegido pelo navegador.' : 'O navegador pode apagar as cópias se faltar espaço.') : ''}</p>
-          <button className="btn tap" style={{ alignSelf: 'flex-start' }} onClick={wipe}>Apagar dados deste aparelho</button>
+          <Button variant="secondary" style={{ alignSelf: 'flex-start' }} onClick={wipe}>Apagar dados deste aparelho</Button>
           <label className="check"><input type="checkbox" checked={!!profile?.analytics_opt_in} onChange={(e) => void setAnalytics(e.target.checked)} /><span className="box" aria-hidden="true" /><span>Compartilhar estatísticas de uso (anônimas, sem conteúdo)</span></label>
-          <button className="btn btn-ink tap" style={{ alignSelf: 'flex-start' }} onClick={() => void signOut()}>Sair da conta</button>
+          <Button variant="dark" style={{ alignSelf: 'flex-start' }} onClick={() => void signOut()}>Sair da conta</Button>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>Ao sair, todas as cópias offline deste navegador são apagadas.</p>
         </section>
       </div>

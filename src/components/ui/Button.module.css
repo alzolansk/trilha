@@ -1,0 +1,36 @@
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  border: 0; border-radius: var(--r-btn); font: 700 15px/1 var(--font-body); text-decoration: none; white-space: nowrap;
+  transition: transform 160ms var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: scale(.98); }
+.btn:disabled, .btn[aria-disabled=true] { opacity: .45; cursor: not-allowed; transform: none; }
+.md { min-height: 48px; padding: 0 var(--s5); }
+.sm { min-height: 40px; padding: 0 var(--s4); font-size: 14px; border-radius: 12px; }
+.block { display: flex; width: 100%; }
+.primary { background: var(--brand); color: var(--on-brand); }
+.primary:hover { background: var(--brand-ink); color: var(--on-brand); }
+.secondary { background: var(--field); color: var(--ink); }
+.secondary:hover { background: var(--line); color: var(--ink); }
+.dark { background: var(--ink); color: var(--on-dark); }
+.dark:hover { background: var(--dark-2); color: var(--on-dark); }
+.ghost { background: transparent; color: var(--brand); }
+.ghost:hover { background: var(--brand-soft); color: var(--brand-ink); }
+.dashed { background: var(--suggest-bg); color: var(--brand-ink); outline: 1.5px dashed var(--brand-on-dark); outline-offset: -1.5px; }
+.dashed:hover { background: var(--brand-soft); color: var(--brand-ink); }
+.dashed:focus-visible { outline: 2.5px solid var(--brand); outline-offset: 2px; }
+
+.icon {
+  width: 44px; height: 44px; flex: none; display: inline-grid; place-items: center; border: 0; border-radius: 999px;
+  transition: transform 160ms var(--ease), background var(--dur) var(--ease);
+}
+.icon:active { transform: scale(.94); }
+.icon:disabled { opacity: .45; cursor: not-allowed; }
+.i40 { width: 40px; height: 40px; }
+.i_secondary { background: var(--field); color: var(--ink); }
+.i_secondary:hover { background: var(--line); }
+.i_ghost { background: transparent; color: var(--ink-2); }
+.i_ghost:hover { background: var(--field); }
+.i_dark { background: var(--ink); color: var(--on-dark); }
+.i_light { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-float); }

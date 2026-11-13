@@ -2,18 +2,12 @@
 import { AuthProvider, useAuth } from '../../data/AuthContext';
 import { VaultProvider } from '../../data/VaultContext';
 import { ConfirmProvider, ToastProvider } from '../ui/feedback';
-import { Icon } from '../ui/primitives';
+import { OfflineBanner } from '../ui/OfflineBanner';
 import { ServiceWorker } from './ServiceWorker';
 
-function OfflineBanner() {
+function Offline() {
   const { online } = useAuth();
-  if (online) return null;
-  return (
-    <div className="banner-offline" role="status">
-      <Icon name="cloud" size={18} />
-      Você está offline. Passagens e documentos baixados continuam disponíveis.
-    </div>
-  );
+  return <OfflineBanner online={online} />;
 }
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
@@ -22,7 +16,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       <ToastProvider>
         <ConfirmProvider>
           <VaultProvider>
-            <OfflineBanner />
+            <Offline />
             {children}
             <ServiceWorker />
           </VaultProvider>

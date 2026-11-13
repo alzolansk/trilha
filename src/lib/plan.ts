@@ -67,14 +67,14 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
       const mine = myVotes(b, p.id, me).length > 0;
       const st = pollState(b, p.id, now);
       if (st === 'awaiting_decision' && canDecide(b, p, me)) {
-        out.push({ key: `decide-${p.id}`, title: 'Fechar o destino.', detail: `A votação “${p.question}” terminou. Falta decidir.`, link: '/turma#decisoes', cta: 'Decidir' });
+        out.push({ key: `decide-${p.id}`, title: 'Fechar o destino.', detail: `A votação “${p.question}” terminou. Falta decidir.`, link: '/turma/votos', cta: 'Decidir' });
       } else if (!mine && st === 'open') {
-        out.push({ key: `vote-${p.id}`, title: 'Votar no destino.', detail: `${voted} de ${total} já votaram em “${p.question}”. Falta você.`, link: '/turma#decisoes', cta: 'Votar' });
+        out.push({ key: `vote-${p.id}`, title: 'Votar no destino.', detail: `${voted} de ${total} já votaram em “${p.question}”. Falta você.`, link: '/turma/votos', cta: 'Votar' });
       } else {
         out.push({
           key: `wait-${p.id}`, title: 'Fechar o destino.',
           detail: voted < total ? `${voted} de ${total} votaram. Dá pra esperar a turma ou decidir já.` : 'Todo mundo votou. Hora de fechar.',
-          link: '/turma#decisoes', cta: 'Ver votação',
+          link: '/turma/votos', cta: 'Ver votação',
         });
       }
     }
@@ -84,13 +84,13 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
         detail: b.members.length > 1
           ? 'Veja lugares que cabem no tempo e no bolso de vocês, ponha os melhores na disputa e votem juntos.'
           : 'Veja lugares que cabem no seu tempo e no seu bolso, ponha os melhores na disputa e chame a turma pra votar.',
-        link: '/explorar', cta: 'Ver sugestões',
+        link: '/descobrir', cta: 'Ver sugestões',
       });
     }
   }
 
   if (!hasBudget(b)) {
-    out.push({ key: 'budget', title: 'Combinar o orçamento.', detail: 'Quanto cada pessoa quer gastar. Vira o previsto de transporte, hospedagem, comida e passeios.', link: '/mala', cta: 'Definir orçamento' });
+    out.push({ key: 'budget', title: 'Combinar o orçamento.', detail: 'Quanto cada pessoa quer gastar. Vira o previsto de transporte, hospedagem, comida e passeios.', link: '/dinheiro/orcamento', cta: 'Definir orçamento' });
   }
 
   const locked = !hasDestination(b);
@@ -101,11 +101,11 @@ export function planSteps(b: TripBundle, me: string, now = Date.now()): PlanStep
   } else {
     stops.forEach((s, i) => {
       if (i > 0 && !b.transports.some((t) => t.stop_id === s.id) && !s.arrival_mode) {
-        out.push({ key: `arrival-${s.id}`, title: `Como chegar em ${s.name}.`, detail: 'Defina o transporte do trecho.', link: '/roteiro', cta: 'Definir' });
+        out.push({ key: `arrival-${s.id}`, title: `Como chegar em ${s.name}.`, detail: 'Defina o transporte do trecho.', link: `/roteiro/${s.id}`, cta: 'Definir' });
       }
       const stay = b.stays.find((x) => x.stop_id === s.id);
       if (s.arrival_date < s.departure_date && !stay) {
-        out.push({ key: `stay-${s.id}`, title: `Onde ficar em ${s.name}.`, detail: 'Nenhuma hospedagem escolhida ainda.', link: '/roteiro', cta: 'Escolher' });
+        out.push({ key: `stay-${s.id}`, title: `Onde ficar em ${s.name}.`, detail: 'Nenhuma hospedagem escolhida ainda.', link: `/roteiro/${s.id}`, cta: 'Escolher' });
       }
     });
   }
