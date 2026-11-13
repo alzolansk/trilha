@@ -28,6 +28,7 @@ Este plano implementa esse design **no app Next.js atual**:
    - não dizer que reservou ou verificou nada;
    - dado sensível só com fonte oficial.
    Os valores únicos do canvas (ex.: "R$ 6.470") são **dados de exemplo**. No app real, estimativa aparece como faixa ou como "≈ valor médio" com o selo ESTIMATIVA. Valor confirmado pela turma aparece sem selo.
+   **Exceção no Roteiro (redesign "caderno de viagem", 11/2026):** no Roteiro, onde quase tudo é estimativa, o selo ESTIMATIVA em cada linha virou ruído. Lá a estimativa é marcada pelo **≈ antes do valor** (o leitor de tela ouve "estimativa de"), com a legenda "≈ valor estimado" no fim da lista e a nota "Com ≈, são estimativas até a reserva" no painel "Antes de ir". "Não reservado" e "falta hospedagem" viraram um aro vazio (○) discreto; reservado vira um check azul. As pendências ficam juntas em "Antes de ir" (`bookingTodo` em `lib/route.ts`), e não mais dentro de cada dia. As outras telas continuam com o selo.
 4. **Sem fila de escrita offline.** Fica como hoje: escrever exige internet (`ensureOnline`), e ler funciona com cache.
 5. `ref/SPEC.md` continua valendo para dados, segurança, IA e acessibilidade. **Para visual, navegação e telas, valem este planning e o canvas.** A Fase 0 adiciona essa nota no topo do SPEC.
 

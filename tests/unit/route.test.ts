@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDemoBundle, DEMO_USER } from '@/lib/demo/build';
 import { staySearchLinks } from '@/lib/explore';
-import { dayPending, focusStopId, isBooked, legInto, placeDaySuggestions, sameThing, stopAreas, stopBadge, stopTours, waitingCount } from '@/lib/route';
+import { bookingTodo, dayPending, focusStopId, isBooked, legInto, placeDaySuggestions, returnLeg, sameThing, stayState, stopAreas, stopBadge, stopTours, waitingCount } from '@/lib/route';
 import { bestDayFor } from '@/lib/suggestions';
 import { sortedStops } from '@/lib/derive';
 import { addStayOption, voteSuggestions } from '@/data/suggestionActions';
@@ -52,6 +52,46 @@ describe('route · lista do roteiro', () => {
     expect(toCusco.priceCents).toBe(145_000);
     expect(toCusco.notBooked).toBe(true);
     expect(isBooked(b, { ...toCusco.transport!, booking_ref: 'ABC123' })).toBe(true);
+  });
+
+  it('trecho: reservado ou a reservar, e o dia de saída', () => {
+    const b = andes();
+    const stops = sortedStops(b);
+    const ida = legInto(b, stops, 0)!;
+    expect(ida.booked).toBe(true);
+    expect(ida.notBooked).toBe(false);
+    const toCusco = legInto(b, stops, 1)!;
+    expect(toCusco.booked).toBe(false);
+    expect(toCusco.date).toBe(toCusco.transport!.depart_date);
+  });
+
+  it('onde dormir: reservado, em votação, a definir', () => {
+    const b = andes();
+    const [lima, , mapi] = sortedStops(b);
+    expect(stayState(b, lima)).toBe('booked');
+    expect(stayState(b, mapi)).toBe('voting');
+    b.polls = [];
+    expect(stayState(b, mapi)).toBe('missing');
+  });
+
+  it('"Antes de ir": junta trechos e hospedagens que faltam, com soma por pessoa', () => {
+    const b = andes();
+    const stops = sortedStops(b);
+    const todo = bookingTodo(b, stops);
+    const legs = [...stops.map((_, i) => legInto(b, stops, i)), returnLeg(b, stops)].filter((l) => l?.transport && (l.booked || l.notBooked));
+    expect(todo.pending + todo.done).toBe(legs.length + stops.filter((x) => stayState(b, x) !== 'none').length);
+    const planes = todo.groups.find((g) => g.key === 'plane')!;
+    expect(planes.legs.map((l) => l.title)).toContain('Voo Lima → Cusco');
+    expect(planes.legs.every((l) => l.notBooked)).toBe(true);
+    if (planes.totalCents != null) expect(planes.totalCents).toBe(planes.legs.reduce((a, l) => a + (l.priceCents ?? 0), 0));
+    const stay = todo.groups.find((g) => g.key === 'stay');
+    expect(stay?.stops.map((x) => x.name)).not.toContain('Lima');
+    // reservar tudo zera as pendências
+    for (const t of b.transports) t.booking_ref = 'OK1';
+    for (const st of b.stays) st.status = 'booked';
+    b.polls = [];
+    const done = bookingTodo(b, stops);
+    expect(done.groups.filter((g) => g.key !== 'stay')).toEqual([]);
   });
 
   it('pendência do dia aparece no dia em que o trecho SAI da parada', () => {

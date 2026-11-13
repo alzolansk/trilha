@@ -306,7 +306,7 @@ test.describe('lembretes de votação', () => {
 });
 
 test.describe('Roteiro e Parada (Fase 5)', () => {
-  test('roteiro: faixa de paradas, parada em foco com capa, trecho com preço e selos', async ({ page }) => {
+  test('roteiro: faixa de paradas, parada em foco com capa, trecho com preço e sinais (sem selos)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/demo/andes/roteiro');
     await expect(page.getByRole('heading', { level: 1, name: 'Roteiro' })).toBeVisible();
@@ -317,13 +317,18 @@ test.describe('Roteiro e Parada (Fase 5)', () => {
     const cusco = page.getByRole('article', { name: 'Parada Cusco' });
     await expect(cusco.getByRole('link', { name: 'Ver a cidade: Cusco, fiquem em San Blas' })).toHaveAttribute('href', `/demo/andes/roteiro/${CUSCO}`);
     await expect(page.getByRole('button', { name: /Trecho: Voo Lima → Cusco/ })).toContainText('R$ 1.450 / pessoa');
-    await expect(page.getByRole('button', { name: /Trecho: Voo Lima → Cusco/ })).toContainText('não reservado');
-    await expect(page.getByRole('article', { name: 'Parada Lima' })).toContainText('pronto');
-    await expect(page.getByRole('article', { name: 'Parada Machu Picchu' })).toContainText('em votação');
+    await expect(page.getByRole('button', { name: /Trecho: Voo Lima → Cusco/ })).toContainText('a reservar');
+    await expect(page.getByRole('article', { name: 'Parada Lima' })).toContainText('reservada');
+    await expect(page.getByRole('article', { name: 'Parada Machu Picchu' })).toContainText('hospedagem em votação');
     // dia com folga: sugestão tracejada com +; dia 6 vazio: 3 opções
     await expect(cusco.getByRole('button', { name: 'Adicionar Sacsayhuamán ao dia 4' })).toBeVisible();
     await expect(cusco.getByText('A Trilha separou 3 opções para esse dia:')).toBeVisible();
-    await expect(cusco.getByText('Trem para Machu Picchu ainda não reservado')).toBeVisible();
+    // pendências saem dos dias: aro no próprio trecho e tudo junto em "Antes de ir"
+    await expect(cusco.getByText('Trem para Machu Picchu ainda não reservado')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Trecho: Trem Cusco → Machu Picchu/ })).toContainText('a reservar');
+    const todo = page.getByRole('region', { name: 'Antes de ir' });
+    await expect(todo).toContainText('reservados');
+    await expect(page.getByRole('link', { name: /reservas? antes de ir/ })).toHaveAttribute('href', '#antes-de-ir');
   });
 
   test('"+" no dia com folga põe a sugestão no dia', async ({ page }) => {

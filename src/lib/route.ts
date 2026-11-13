@@ -55,6 +55,10 @@ export interface Leg {
   estimate: boolean;
   /** só para modos reserváveis: falta localizador e não há gasto ligado */
   notBooked: boolean;
+  /** modo reservável com trecho cadastrado e já garantido (localizador ou gasto ligado) */
+  booked: boolean;
+  /** dia de saída (YYYY-MM-DD), quando o trecho tem */
+  date: string | null;
 }
 
 /** Linha de transporte que chega na parada `i` (ida a partir da origem quando i = 0). null = nada a mostrar. */
@@ -74,6 +78,8 @@ export function legInto(b: TripBundle, stops: Stop[], i: number): Leg | null {
     currency: t?.price_currency ?? b.trip.base_currency,
     estimate: !!t?.price_is_estimate,
     notBooked: !!t && BOOKABLE.includes(mode) && !isBooked(b, t),
+    booked: !!t && BOOKABLE.includes(mode) && isBooked(b, t),
+    date: t?.depart_date ?? null,
   };
 }
 
@@ -93,7 +99,72 @@ export function returnLeg(b: TripBundle, stops: Stop[]): Leg | null {
     currency: t.price_currency ?? b.trip.base_currency,
     estimate: !!t.price_is_estimate,
     notBooked: BOOKABLE.includes(t.mode) && !isBooked(b, t),
+    booked: BOOKABLE.includes(t.mode) && isBooked(b, t),
+    date: t.depart_date ?? null,
   };
+}
+
+export type StayState = 'booked' | 'voting' | 'missing' | 'none';
+
+/** Onde a turma dorme na parada: reservado, em votação, a definir, ou nada a reservar (bate e volta). */
+export function stayState(b: TripBundle, stop: Stop): StayState {
+  const nights = Math.max(0, Math.round((Date.parse(stop.departure_date) - Date.parse(stop.arrival_date)) / 86_400_000));
+  if (nights === 0) return 'none';
+  if (stayOf(b, stop.id)?.status === 'booked') return 'booked';
+  if ((b.polls ?? []).some((p) => p.stop_id === stop.id && p.status === 'open' && p.target === 'stay')) return 'voting';
+  return 'missing';
+}
+
+export type TodoKey = 'plane' | 'train' | 'bus' | 'boat' | 'stay';
+export interface TodoGroup {
+  key: TodoKey;
+  /** trechos ainda não reservados deste modo (vazio para hospedagem) */
+  legs: Leg[];
+  /** paradas sem hospedagem reservada (só para `stay`) */
+  stops: Stop[];
+  count: number;
+  /** soma por pessoa dos trechos com preço; null quando falta preço em algum ou as moedas diferem */
+  totalCents: number | null;
+  currency: string | null;
+  /** algum valor da soma é estimativa */
+  estimate: boolean;
+}
+export interface BookingTodo {
+  groups: TodoGroup[];
+  /** quantas reservas faltam */
+  pending: number;
+  /** quantas já estão feitas */
+  done: number;
+}
+
+/**
+ * "Antes de ir" (Roteiro): tudo o que falta reservar, num lugar só. Conta trechos reserváveis
+ * (voo, trem, ônibus, barco) cadastrados, incluindo a volta, e as paradas com pernoite.
+ */
+export function bookingTodo(b: TripBundle, stops: Stop[]): BookingTodo {
+  const legs = stops.map((_, i) => legInto(b, stops, i)).filter((l): l is Leg => !!l?.transport);
+  const ret = returnLeg(b, stops);
+  if (ret) legs.push(ret);
+  let done = legs.filter((l) => l.booked).length;
+  const groups: TodoGroup[] = [];
+  for (const key of ['plane', 'train', 'bus', 'boat'] as const) {
+    const open = legs.filter((l) => l.mode === key && l.notBooked);
+    if (!open.length) continue;
+    const priced = open.filter((l) => l.priceCents != null);
+    const currencies = new Set(priced.map((l) => l.currency));
+    const sum = priced.length === open.length && currencies.size === 1;
+    groups.push({
+      key, legs: open, stops: [], count: open.length,
+      totalCents: sum ? priced.reduce((a, l) => a + (l.priceCents ?? 0), 0) : null,
+      currency: sum ? [...currencies][0] : null,
+      estimate: open.some((l) => l.estimate),
+    });
+  }
+  const lodging = stops.map((st) => ({ st, state: stayState(b, st) })).filter((x) => x.state !== 'none');
+  done += lodging.filter((x) => x.state === 'booked').length;
+  const noStay = lodging.filter((x) => x.state !== 'booked').map((x) => x.st);
+  if (noStay.length) groups.push({ key: 'stay', legs: [], stops: noStay, count: noStay.length, totalCents: null, currency: null, estimate: false });
+  return { groups, pending: groups.reduce((a, g) => a + g.count, 0), done };
 }
 
 /** Pendências do dia (ex.: "Trem para Aguas Calientes ainda não reservado"): trechos que SAEM nesse dia desta parada. */

@@ -10,6 +10,7 @@
   --mute: #5B6270;
   --line: #E3E6EB;
   --line-2: #ECEEF1;
+  --rail: #C3C8D1;
   --field: #F0F1F4;
   --brand: #2B3FF5;
   --brand-ink: #1A2BC4;
@@ -21,6 +22,7 @@
   --sun-ink: #8A2E0E;
   --sun-on-dark: #FFB79E;
   --warn: #B23A12;
+  --todo: #B45309;
   --ok: #0F7A4A;
   --ok-soft: #E2F4EA;
   --ok-ink: #0B5A37;
@@ -40,6 +42,7 @@
   /* tipografia */
   --font-body: var(--nf-inter), 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-title: var(--nf-bricolage), 'Bricolage Grotesque', var(--font-body);
+  --font-story: var(--nf-serif), 'Instrument Serif', Georgia, serif;
   --t-hero: 800 112px/0.9 var(--font-title);
   --t-display: 800 36px/1.02 var(--font-title);
   --t-title: 800 26px/1.1 var(--font-title);
