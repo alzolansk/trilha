@@ -2,7 +2,6 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { Icon } from '../../components/ui/primitives';
 import { Logo } from '../../components/ui/Logo';
 import { Busy } from '../../components/ui/Loader';
 import { useAuth } from '../../data/AuthContext';
@@ -10,7 +9,7 @@ import { humanError } from '../../data/source';
 import { AUTH_APPLE, AUTH_GOOGLE, AUTH_MAGIC_LINK } from '../../lib/env';
 import { getSupabase } from '../../lib/supabase/client';
 import s from './auth.module.css';
-import { Button, Field } from '../../components/ui';
+import { Button, Card, Field } from '../../components/ui';
 
 function safeNext(n: string | null) {
   return n && n.startsWith('/') && !n.startsWith('//') ? n : '/';
@@ -80,7 +79,7 @@ function Entrar() {
     <main id="main" className={s.page}>
       <div className={s.card}>
         <Link href="/demo/andes" className={s.logo} aria-label="Trilha: ver demonstração"><Logo size={34} /></Link>
-        <h1 className="disp" style={{ margin: 0, fontSize: 'clamp(40px,6vw,64px)', lineHeight: 0.95 }}>
+        <h1 className="title" style={{ margin: 0, fontSize: 'clamp(40px,6vw,64px)', lineHeight: 0.95 }}>
           {mode === 'signup' ? 'Criar conta' : mode === 'reset' ? 'Nova senha' : 'Entrar'}
         </h1>
         <p style={{ margin: 0, color: 'var(--mute)' }}>Countdown, roteiro, documentos offline e gastos com a turma.</p>
@@ -92,7 +91,7 @@ function Entrar() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {AUTH_GOOGLE ? <Button variant="secondary" style={{ justifyContent: 'center' }} onClick={() => void oauth('google')}>Continuar com Google</Button> : null}
                 {AUTH_APPLE ? <Button variant="secondary" style={{ justifyContent: 'center' }} onClick={() => void oauth('apple')}>Continuar com Apple</Button> : null}
-                <span className="mono" style={{ textAlign: 'center', fontSize: 11, color: 'var(--mute)' }}>OU COM E-MAIL</span>
+                <span className="num" style={{ textAlign: 'center', fontSize: 11, color: 'var(--mute)' }}>OU COM E-MAIL</span>
               </div>
             ) : null}
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -101,18 +100,17 @@ function Entrar() {
               {mode === 'login' || mode === 'signup' ? (
                 <Field label="Senha"><input type="password" required minLength={mode === 'signup' ? 8 : undefined} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} /></Field>
               ) : null}
-              {msg ? <div role={msg.kind === 'err' ? 'alert' : 'status'} className={msg.kind === 'err' ? 'errbox' : 'ai'}>{msg.text}</div> : null}
-              <button className="btn btn-ink tap" style={{ justifyContent: 'center' }} disabled={busy}>
+              {msg ? msg.kind === 'err' ? <div role="alert" className="errbox">{msg.text}</div> : <Card variant="suggest" pad="sm" role="status">{msg.text}</Card> : null}
+              <Button type="submit" variant="dark" block iconEnd={busy ? undefined : 'arrow'} disabled={busy}>
                 {busy ? <Busy>Aguarde</Busy> : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Criar conta' : mode === 'magic' ? 'Enviar link de acesso' : 'Enviar link'}
-                <Icon name="arrow" size={18} />
-              </button>
+              </Button>
             </form>
             <div className={s.links}>
               {mode !== 'login' ? <button onClick={() => setMode('login')}>Já tenho conta</button> : <button onClick={() => setMode('signup')}>Criar conta</button>}
               {AUTH_MAGIC_LINK && mode !== 'magic' ? <button onClick={() => setMode('magic')}>Entrar com link por e-mail</button> : null}
               {mode === 'login' ? <button onClick={() => setMode('reset')}>Esqueci a senha</button> : null}
             </div>
-            {mode === 'reset' || mode === 'magic' ? <p className="mono" style={{ margin: 0, fontSize: 11, color: 'var(--mute)' }}>E-MAILS DEPENDEM DO SMTP CONFIGURADO NO SUPABASE (VEJA O README).</p> : null}
+            {mode === 'reset' || mode === 'magic' ? <p className="num" style={{ margin: 0, fontSize: 11, color: 'var(--mute)' }}>E-MAILS DEPENDEM DO SMTP CONFIGURADO NO SUPABASE (VEJA O README).</p> : null}
           </>
         )}
         <Link href="/demo/andes" style={{ fontSize: 14, fontWeight: 600 }}>Ver demonstração sem conta →</Link>

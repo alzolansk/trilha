@@ -75,6 +75,15 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
       CHILD_TABLES.forEach(({ key }, i) => ((bundle as unknown as Record<string, unknown>)[key] = results[i]));
       const docIds = bundle.documents.map((d) => d.id);
       const memberIds = bundle.members.map((m) => m.user_id);
+      // Opcional (migration 00013): sem a função, a matriz da Turma conta só o que a RLS mostra.
+      const presence = (async () => {
+        try {
+          const r = await sb.rpc('trip_document_presence', { p_trip: tripId });
+          return r.error ? undefined : (r.data as TripBundle['documentPresence']);
+        } catch {
+          return undefined;
+        }
+      })();
       const [shares, prefs, retro, profiles, docKeys, pubKeys] = await Promise.all([
         docIds.length ? sb.from('document_shares').select('*').in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
         docIds.length ? sb.from('document_offline_prefs').select('*').eq('user_id', userId).in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
@@ -90,6 +99,7 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
       bundle.offlinePrefs = prefs.data ?? [];
       bundle.retro = retro.data ?? null;
       bundle.profiles = profiles.data ?? [];
+      bundle.documentPresence = await presence;
       bundle.fetchedAt = new Date().toISOString();
       return bundle;
     },

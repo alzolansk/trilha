@@ -1,4 +1,5 @@
 import { Icon } from './primitives';
+import { Button } from './Button';
 
 /** Erro com mensagem humana (`humanError`) e "Tentar de novo". */
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
@@ -7,9 +8,9 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
       <Icon name="alert" />
       <span style={{ flex: 1, minWidth: 0 }}>{message}</span>
       {onRetry ? (
-        <button type="button" className="btn btn-sm tap" style={{ background: 'var(--surface)' }} onClick={onRetry}>
+        <Button size="sm" variant="secondary" style={{ background: 'var(--surface)' }} onClick={onRetry}>
           Tentar de novo
-        </button>
+        </Button>
       ) : null}
     </div>
   );

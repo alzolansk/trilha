@@ -1,7 +1,7 @@
 // Orçamento em conversa (planning §5.5 e §7): calcula o previsto por pessoa a partir do roteiro
 // e das respostas da turma (estilo, ritmo, passeios escolhidos, diária de comida).
 // Puro e testável. Valores de itens sem preço confirmado continuam ESTIMATIVA na UI.
-import type { BudgetFood, BudgetKind, BudgetPace, BudgetPlan, BudgetSnapshot, BudgetStyle, RoomShare, Transport, TripBundle } from '../data/types';
+import type { BudgetFood, BudgetKind, BudgetPace, BudgetPlan, BudgetSnapshot, BudgetSnapshotItem, BudgetStyle, RoomShare, Transport, TripBundle } from '../data/types';
 import { categoryKind, itemCost, toBaseCents, type Rates } from './money';
 import { estimateCents } from './suggestions';
 import { headcount } from './people';
@@ -243,13 +243,29 @@ export function plannedUpdates(b: Pick<TripBundle, 'budgetCategories'>, r: PlanR
   return out;
 }
 
+type SnapshotSource = Pick<TripBundle, 'stops' | 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size' | 'origin'> } & Partial<Pick<TripBundle, 'transports' | 'stays' | 'activities'>>;
+
+/** Preço de cada item do roteiro que entra no Orçamento (trechos, hospedagens e passeios com custo). */
+export function snapshotItems(b: SnapshotSource): Record<string, BudgetSnapshotItem> {
+  const out: Record<string, BudgetSnapshotItem> = {};
+  const trip = { origin: b.trip?.origin ?? null } as TripBundle['trip'];
+  for (const t of b.transports ?? []) out[t.id] = { kind: 'transport', title: legTitle({ stops: b.stops, trip }, t), cents: t.price_cents ?? null, currency: t.price_currency ?? null };
+  for (const st of b.stays ?? []) {
+    const stop = b.stops.find((x) => x.id === st.stop_id);
+    out[st.id] = { kind: 'stay', title: `Hospedagem em ${stop?.name ?? 'parada'}`, cents: st.price_cents ?? null, currency: st.price_currency ?? null };
+  }
+  for (const a of b.activities ?? []) if (a.cost_cents != null) out[a.id] = { kind: 'activity', title: a.title, cents: a.cost_cents, currency: a.cost_currency ?? null };
+  return out;
+}
+
 /** Foto do roteiro usado no cálculo (com o valor por pessoa de cada categoria, quando há resultado). */
-export function snapshotOf(b: Pick<TripBundle, 'stops' | 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }, now = new Date().toISOString(), result?: PlanResult): BudgetSnapshot {
+export function snapshotOf(b: SnapshotSource, now = new Date().toISOString(), result?: PlanResult): BudgetSnapshot {
   return {
     stops: [...b.stops].sort((x, y) => x.position - y.position).map((s) => ({ id: s.id, nights: Math.max(0, daysBetween(s.arrival_date, s.departure_date)) })),
     people: ppl(b),
     at: now,
     ...(result ? { lines: Object.fromEntries(result.lines.map((l) => [l.kind, l.perPersonCents])) } : {}),
+    ...(b.transports || b.stays || b.activities ? { items: snapshotItems(b) } : {}),
   };
 }
 
@@ -258,10 +274,13 @@ export type PlanChange =
   | { kind: 'stop_removed'; stopId: string }
   | { kind: 'nights'; stopId: string; name: string; from: number; to: number }
   | { kind: 'people'; from: number; to: number }
-  | { kind: 'money'; line: PlanLine['kind']; delta: number };
+  | { kind: 'money'; line: PlanLine['kind']; delta: number }
+  | { kind: 'price'; id: string; title: string; from: number | null; to: number | null; currency: string | null }
+  | { kind: 'tour_added'; id: string; title: string; cents: number | null; currency: string | null }
+  | { kind: 'tour_removed'; id: string; title: string };
 
 /** O que mudou no roteiro desde o último Orçamento ("o roteiro mudou, quer recalcular?"). */
-export function diffSince(snap: BudgetSnapshot | null | undefined, b: Pick<TripBundle, 'stops' | 'members'> & { trip?: Pick<TripBundle['trip'], 'party_size'> }, current?: PlanResult): PlanChange[] {
+export function diffSince(snap: BudgetSnapshot | null | undefined, b: SnapshotSource, current?: PlanResult): PlanChange[] {
   if (!snap) return [];
   const now = snapshotOf(b, snap.at);
   const out: PlanChange[] = [];
@@ -273,6 +292,18 @@ export function diffSince(snap: BudgetSnapshot | null | undefined, b: Pick<TripB
   }
   for (const s of snap.stops) if (!now.stops.some((x) => x.id === s.id)) out.push({ kind: 'stop_removed', stopId: s.id });
   if (snap.people !== now.people) out.push({ kind: 'people', from: snap.people, to: now.people });
+  // Item a item (orçamentos fechados com a foto dos preços): preço mudou, passeio entrou ou saiu.
+  if (snap.items && now.items) {
+    for (const [id, it] of Object.entries(now.items)) {
+      const was = snap.items[id];
+      if (!was) {
+        if (it.kind === 'activity') out.push({ kind: 'tour_added', id, title: it.title, cents: it.cents, currency: it.currency });
+        continue;
+      }
+      if (was.cents !== it.cents || (was.currency ?? null) !== (it.currency ?? null)) out.push({ kind: 'price', id, title: it.title, from: was.cents, to: it.cents, currency: it.currency ?? was.currency });
+    }
+    for (const [id, was] of Object.entries(snap.items)) if (was.kind === 'activity' && !now.items[id]) out.push({ kind: 'tour_removed', id, title: was.title });
+  }
   // Diferença de valor por pessoa em cada categoria (ignora menos de 1 unidade da moeda).
   if (snap.lines && current) {
     for (const l of current.lines) {
@@ -422,8 +453,12 @@ export function capPerPerson(b: Pick<TripBundle, 'trip' | 'members'>): number | 
 const LINE_NAME: Record<PlanLine['kind'], string> = { transporte: 'transporte', hospedagem: 'hospedagem', passeios: 'passeios', comida: 'comida' };
 
 /** Frase do aviso "Mudou desde a última vez". `money` formata centavos (ex.: "R$ 310"). */
-export function describeChanges(changes: PlanChange[], money: (cents: number) => string = (c) => (c / 100).toFixed(0)): string[] {
+export function describeChanges(changes: PlanChange[], money: (cents: number) => string = (c) => (c / 100).toFixed(0), moneyIn: (cents: number, currency: string | null) => string = (c, cur) => `${cur ?? ''} ${(c / 100).toFixed(0)}`.trim()): string[] {
+  const price = (v: number | null, cur: string | null) => (v == null ? 'sem preço' : moneyIn(v, cur));
   return changes.map((c) => {
+    if (c.kind === 'price') return `${c.title}: ${price(c.from, c.currency)} → ${price(c.to, c.currency)}`;
+    if (c.kind === 'tour_added') return `+ passeio ${c.title}${c.cents != null ? ` (${moneyIn(c.cents, c.currency)})` : ''}`;
+    if (c.kind === 'tour_removed') return `- passeio ${c.title}`;
     if (c.kind === 'money') return `${c.delta > 0 ? '+' : '-'}${money(Math.abs(c.delta))} em ${LINE_NAME[c.line]} por pessoa`;
     if (c.kind === 'stop_added') return `+1 parada (${c.name})`;
     if (c.kind === 'stop_removed') return '-1 parada';

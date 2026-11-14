@@ -231,3 +231,4 @@ section.fixedSummary { position: static; }
 /* Passo 6: tipo de hospedagem e como a turma divide o quarto (ajuste de 09/11/2026). */
 .stayBox { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--r-card); background: var(--surface); }
 .stayBox .label { margin: 0; }
+.priceLegs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); margin-top: var(--s5); font-size: 14px; color: var(--ink-2); }

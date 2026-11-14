@@ -33,8 +33,34 @@ function stampSuggestion(row: Record<string, unknown>, prev?: Record<string, unk
   }
 }
 
+// Rascunho do onboarding da demo (trips.onboarding) guardado na aba, como a conta real guarda no banco:
+// recarregar no meio dos passos continua de onde parou e não pede a rota à IA de novo.
+const draftKey = (key: DemoKey) => `trilha.demo.onboarding.${key}`;
+function readDraft(key: DemoKey): unknown {
+  try {
+    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(draftKey(key)) : null;
+    return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function writeDraft(key: DemoKey, value: unknown) {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (value == null) sessionStorage.removeItem(draftKey(key));
+    else sessionStorage.setItem(draftKey(key), JSON.stringify(value));
+  } catch {
+    /* sem armazenamento: a demo segue só em memória */
+  }
+}
+
 export function createDemoSource(key: DemoKey): TripSource {
-  if (!stores.has(key)) stores.set(key, buildDemoBundle(key));
+  if (!stores.has(key)) {
+    const fresh = buildDemoBundle(key);
+    const draft = readDraft(key);
+    if (draft !== undefined) fresh.trip.onboarding = draft as typeof fresh.trip.onboarding;
+    stores.set(key, fresh);
+  }
   const b = () => stores.get(key)!;
   const listeners = new Set<(t: string) => void>();
   const emit = (t: string) => setTimeout(() => listeners.forEach((l) => l(t)), 0);
@@ -64,6 +90,7 @@ export function createDemoSource(key: DemoKey): TripSource {
       if (table === 'trips') {
         if (version != null && b().trip.version !== version) throw new ConflictError();
         Object.assign(b().trip, patch, { version: b().trip.version + 1, updated_at: stamp() });
+        if ('onboarding' in patch) writeDraft(key, b().trip.onboarding);
         emit(table);
         return structuredClone(b().trip) as never;
       }
@@ -172,6 +199,8 @@ export function createDemoSource(key: DemoKey): TripSource {
         }
         if (r.budget_plan) bb.trip.budget_plan = r.budget_plan as never;
         if (r.onboarding) bb.trip.onboarding = r.onboarding as never;
+        // A rota virou paradas só na memória: recarregar volta à demo original, sem rascunho pela metade.
+        writeDraft(key, null);
         bb.trip.version++;
         stores.set(key, bb); emit('stops'); return undefined as never;
       }

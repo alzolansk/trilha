@@ -5,6 +5,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, useConfirm, useToast } from '../components/ui/feedback';
 import { Busy } from '../components/ui/Loader';
+import { Button } from '../components/ui/Button';
+import { Field } from '../components/ui/Field';
 import { changePassphrase, createVault, unlockVault, unwrapDocumentKey, WrongPassphraseError, type VaultRecord } from '../lib/crypto/e2e';
 import { getSupabase } from '../lib/supabase/client';
 import { useAuth } from './AuthContext';
@@ -254,22 +256,19 @@ function VaultDialog({ mode, record, onClose, onSetup, onUnlock, onChange, onRes
         ) : mode === 'unlock' ? (
           <p style={{ margin: 0 }}>Digite sua frase de segurança para abrir os documentos cifrados neste aparelho. {!record ? 'Na primeira vez em cada aparelho, é preciso estar com internet.' : ''}</p>
         ) : null}
-        <label className="field">
-          {mode === 'change' ? 'Frase atual' : 'Frase de segurança'}
+        <Field label={mode === 'change' ? 'Frase atual' : 'Frase de segurança'}>
           <input type="password" autoComplete={mode === 'setup' ? 'new-password' : 'current-password'} value={a} onChange={(e) => setA(e.target.value)} autoFocus />
-        </label>
+        </Field>
         {needsNew ? (
           <>
             {mode === 'change' ? (
-              <label className="field">
-                Nova frase
+              <Field label="Nova frase">
                 <input type="password" autoComplete="new-password" value={b} onChange={(e) => setB(e.target.value)} />
-              </label>
+              </Field>
             ) : null}
-            <label className="field">
-              Repita a {mode === 'change' ? 'nova ' : ''}frase
+            <Field label={`Repita a ${mode === 'change' ? 'nova ' : ''}frase`}>
               <input type="password" autoComplete="new-password" value={mode === 'setup' ? b : c} onChange={(e) => (mode === 'setup' ? setB : setC)(e.target.value)} />
-            </label>
+            </Field>
             <small style={{ color: 'var(--mute)' }}>
               Mínimo de {MIN_PASSPHRASE} caracteres. Uma frase com 4 ou 5 palavras soltas é mais forte e mais fácil de lembrar.
               {newPass && newPass.length < MIN_PASSPHRASE ? ' Ainda curta.' : confirmPass && newPass !== confirmPass ? ' As frases não batem.' : ''}
@@ -278,10 +277,10 @@ function VaultDialog({ mode, record, onClose, onSetup, onUnlock, onChange, onRes
         ) : null}
         {err ? <div className="errbox">{err}</div> : null}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-          {mode === 'unlock' && record ? <button type="button" className="btn btn-sm tap" onClick={forgot} disabled={busy}>Esqueci a frase</button> : <span />}
-          <button type="submit" className="btn btn-primary tap" disabled={invalid || busy}>
+          {mode === 'unlock' && record ? <Button variant="secondary" size="sm" onClick={forgot} disabled={busy}>Esqueci a frase</Button> : <span />}
+          <Button type="submit" disabled={invalid || busy}>
             {busy ? <Busy>Calculando chave</Busy> : mode === 'setup' ? 'Criar cofre' : mode === 'unlock' ? 'Desbloquear' : 'Trocar frase'}
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>

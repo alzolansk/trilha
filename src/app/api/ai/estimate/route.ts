@@ -11,6 +11,14 @@ const input = z.discriminatedUnion('kind', [
     kind: z.literal('transport'), tripId: z.string().uuid(),
     // Voo que ainda não está no roteiro (planning §10.10.3): "ida" e "volta".
     virtual: z.array(z.object({ key: z.enum(['ida', 'volta']), title: z.string().max(120) })).max(2).optional(),
+    // Trechos do rascunho do onboarding (passo 4) que perderam o preço ao reordenar: ainda não estão no roteiro.
+    // Com `legs`, só eles são estimados. "ida"/"volta" seguem a regra da metade do bilhete de ida e volta.
+    legs: z.array(z.object({
+      key: z.string().min(1).max(20),
+      from: z.string().min(1).max(80),
+      to: z.string().min(1).max(80),
+      mode: z.enum(['plane', 'bus', 'train', 'car', 'walk', 'boat', 'other']),
+    })).max(12).optional(),
   }),
   z.object({ kind: z.literal('daily'), tripId: z.string().uuid(), country: z.string().min(2).max(60), pace: z.enum(['leve', 'moderado', 'intenso']) }),
 ]);
@@ -46,7 +54,9 @@ JSON: {"cost_low":0,"cost_high":0}`,
     }
 
     const stops = [...(bundle.stops ?? [])].sort((a, b) => a.position - b.position);
-    const legs = (bundle.transports ?? [])
+    const legs: { id: string; from: string; to: string; mode: string; date: string | null }[] = q.legs?.length
+      ? q.legs.map((l) => ({ id: l.key, from: l.from, to: l.to, mode: l.mode, date: null }))
+      : (bundle.transports ?? [])
       .filter((t) => t.price_cents == null)
       .map((t) => {
         const i = stops.findIndex((s) => s.id === t.stop_id);
@@ -54,7 +64,7 @@ JSON: {"cost_low":0,"cost_high":0}`,
         return { id: t.id, from, to: t.dest_name ?? stops[i]?.name ?? 'destino', mode: t.mode, date: t.depart_date };
       });
     const origin = bundle.trip.origin?.trim();
-    if (origin && stops.length) {
+    if (origin && stops.length && !q.legs?.length) {
       for (const v of q.virtual ?? []) {
         legs.push(v.key === 'ida'
           ? { id: 'ida', from: origin, to: stops[0].name, mode: 'plane', date: bundle.trip.start_date }

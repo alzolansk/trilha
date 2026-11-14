@@ -8,7 +8,7 @@ import { humanError } from '../../../data/source';
 import { ROLE_LABEL } from '../../../lib/format';
 import { getSupabase } from '../../../lib/supabase/client';
 import s from '../../entrar/auth.module.css';
-import { Button } from '../../../components/ui';
+import { Button, Logo } from '../../../components/ui';
 
 /**
  * Aceitar convite. O link gerado pelo app é /convite/aceitar#<token> (token no fragmento,
@@ -71,8 +71,8 @@ export default function Convite() {
   return (
     <main id="main" className={s.page}>
       <div className={s.card}>
-        <Link href="/" className={s.logo}><span className="motif" />trilha</Link>
-        <h1 className="disp" style={{ margin: 0, fontSize: 48, lineHeight: 0.95 }}>Convite</h1>
+        <Link href="/" className={s.logo} aria-label="Trilha: minhas trilhas"><Logo size={34} /></Link>
+        <h1 className="title" style={{ margin: 0, fontSize: 48, lineHeight: 0.95 }}>Convite</h1>
         {!token ? (
           <div className="errbox">Link de convite incompleto. Peça um novo para quem organiza a trilha.</div>
         ) : !ready ? (
@@ -80,7 +80,7 @@ export default function Convite() {
         ) : !user ? (
           <>
             <p style={{ margin: 0 }}>Entre ou crie sua conta para ver e aceitar o convite.</p>
-            <Link className="btn btn-ink tap" style={{ justifyContent: 'center' }} href={`/entrar?next=${encodeURIComponent('/convite/aceitar')}`}>Entrar para aceitar</Link>
+            <Button variant="dark" block href={`/entrar?next=${encodeURIComponent('/convite/aceitar')}`}>Entrar para aceitar</Button>
           </>
         ) : err ? (
           <div className="errbox" role="alert">{err}</div>
@@ -93,7 +93,7 @@ export default function Convite() {
         ) : (
           <>
             <p style={{ margin: 0, fontSize: 18 }}>Você foi convidado para <b>{info.trip_title}</b> como <b>{ROLE_LABEL[info.role]?.toLowerCase()}</b>.</p>
-            <p className="mono" style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>VÁLIDO ATÉ {new Date(info.expires_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
+            <p className="num" style={{ margin: 0, fontSize: 12, color: 'var(--mute)' }}>VÁLIDO ATÉ {new Date(info.expires_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
             <Button style={{ justifyContent: 'center' }} onClick={accept} disabled={busy}>{busy ? <Busy>Entrando</Busy> : 'Aceitar e abrir a trilha'}</Button>
           </>
         )}

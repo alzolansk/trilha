@@ -17,7 +17,8 @@ import { formatMoney, toCents } from '../lib/money';
 import { canDecide, myVotes, optionsOf, pollState, pollWinners, tallyPoll, votersCount } from '../lib/polls';
 import { dateRange, instantToWall, wallToInstant } from '../lib/time';
 import t from './turma.module.css';
-import { Badge, Button, Field, FieldGrid } from '../components/ui';
+import { Badge, Button, Chip, Field, FieldGrid } from '../components/ui';
+import fs from '../components/ui/Field.module.css';
 
 export default function Votos() {
   const { base } = useBundle();
@@ -68,7 +69,7 @@ export function Decisions() {
   return (
     <section id="decisoes" className={t.decisions} aria-labelledby="decisoes-titulo">
       <div className={t.head}>
-        <h2 id="decisoes-titulo" className="disp" style={{ margin: 0, fontSize: 30 }}>Decisões</h2>
+        <h2 id="decisoes-titulo" className="title" style={{ margin: 0, fontSize: 30 }}>Decisões</h2>
         {canEdit ? <Button onClick={() => setCreating(true)}><Icon name="plus" size={18} />Nova votação</Button> : null}
       </div>
       {!open.length && !awaiting.length ? (
@@ -127,14 +128,14 @@ export function PollCard({ poll }: { poll: Poll }) {
   };
 
   return (
-    <article className={`card ${t.poll}`} aria-labelledby={`q-${poll.id}`}>
-      <div className={`${t.meta} mono`}>
-        <span className="pill" data-tone={poll.target === 'free' ? undefined : 'acc2'}>{TARGET_LABEL[poll.target]}{stop ? ` · ${stop.name.toUpperCase()}` : ''}</span>
+    <article className={`${t.pollCard} ${t.poll}`} aria-labelledby={`q-${poll.id}`}>
+      <div className={`${t.meta} num`}>
+        <Badge tone={poll.target === 'free' ? 'neutral' : 'sun'}>{TARGET_LABEL[poll.target]}{stop ? ` · ${stop.name.toUpperCase()}` : ''}</Badge>
         {poll.status === 'open' && poll.closes_at ? <span>{deadlineLabel(poll.closes_at, b.trip.departure_tz)}</span> : null}
         {poll.multi ? <span>VÁRIAS OPÇÕES</span> : null}
         <span>{voted} de {total} votaram</span>
       </div>
-      <h3 id={`q-${poll.id}`} className={`disp ${t.question}`}>{poll.question}</h3>
+      <h3 id={`q-${poll.id}`} className={`title ${t.question}`}>{poll.question}</h3>
       {poll.detail ? <p style={{ margin: 0, overflowWrap: 'anywhere' }}>{poll.detail}</p> : null}
       {state === 'awaiting_decision' ? <p className={t.warn}>Prazo encerrado. {decider} decide.</p> : null}
 
@@ -147,19 +148,19 @@ export function PollCard({ poll }: { poll: Poll }) {
             <li key={o.id} className={t.option} data-win={winner === o.id}>
               {poll.status === 'open' ? (
                 <Checkbox className={t.pick} type={poll.multi ? 'checkbox' : 'radio'} name={groupName} label={o.label} checked={sel.includes(o.id)} disabled={!canVote || busy} onChange={(on) => toggle(o.id, on)}>
-                  <span className="mono" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
+                  <span className="num" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
                 </Checkbox>
               ) : (
                 <div className={t.optRow} style={{ minHeight: 32 }}>
                   <b style={{ flex: 1, overflowWrap: 'anywhere' }}>{winner === o.id ? '✓ ' : ''}{o.label}</b>
                   {winner === o.id ? <Badge tone="brand" upper>ESCOLHIDA</Badge> : null}
-                  <span className="mono" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
+                  <span className="num" style={{ fontSize: 12 }}>{plural(votes, 'voto', 'votos')}</span>
                 </div>
               )}
               {o.detail ? <p className={t.optText}>{o.detail}</p> : null}
               {price || o.link_url || o.address ? (
                 <div className={t.optRow}>
-                  {price ? <span className="mono">{price}</span> : null}
+                  {price ? <span className="num">{price}</span> : null}
                   {o.address ? <span className={t.optText}>{o.address}</span> : null}
                   {o.link_url ? <a href={o.link_url} target="_blank" rel="noopener noreferrer nofollow">Ver link<span className="sr-only"> de {o.label} (abre em nova aba)</span></a> : null}
                 </div>
@@ -184,7 +185,7 @@ export function PollCard({ poll }: { poll: Poll }) {
             {mine.length ? <Button variant="secondary" disabled={busy} onClick={() => void vote([], 'Voto retirado.')}>Retirar voto</Button> : null}
           </>
         ) : null}
-        {poll.status === 'open' && mayDecide ? <button className={`btn tap ${state === 'awaiting_decision' ? 'btn-primary' : ''}`} onClick={() => setDeciding(true)}>Decidir</button> : null}
+        {poll.status === 'open' && mayDecide ? <Button variant={state === 'awaiting_decision' ? 'primary' : 'secondary'} onClick={() => setDeciding(true)}>Decidir</Button> : null}
         {mayManage ? (
           <>
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}><Icon name="edit" size={16} />Editar</Button>
@@ -194,7 +195,7 @@ export function PollCard({ poll }: { poll: Poll }) {
       </div>
 
       {poll.status === 'closed' ? (
-        <p className="mono" style={{ margin: 0, fontSize: 12 }}>
+        <p className="num" style={{ margin: 0, fontSize: 12 }}>
           Decidido por {name(poll.decided_by)} em {poll.decided_at ? dayMonth(poll.decided_at.slice(0, 10)) : ''}
           {created && stop ? <> · <Link href={`${base}/roteiro/${stop.id}`}>{poll.target === 'stay' ? 'Ver hospedagem no roteiro' : 'Ver no roteiro'}</Link></> : null}
         </p>
@@ -247,7 +248,7 @@ function DecideDialog({ poll, onClose }: { poll: Poll; onClose: () => void }) {
         <legend className="sr-only">Opção escolhida</legend>
         {options.map((o) => (
           <Checkbox key={o.id} className={t.pick} type="radio" name={`decide-${poll.id}`} label={o.label} checked={choice === o.id} onChange={(on) => on && setChoice(o.id)}>
-            <span className="mono" style={{ fontSize: 12 }}>{plural(tally.get(o.id) ?? 0, 'voto', 'votos')}</span>
+            <span className="num" style={{ fontSize: 12 }}>{plural(tally.get(o.id) ?? 0, 'voto', 'votos')}</span>
           </Checkbox>
         ))}
       </fieldset>
@@ -256,9 +257,9 @@ function DecideDialog({ poll, onClose }: { poll: Poll; onClose: () => void }) {
         <Checkbox className={t.pick} label={poll.target === 'stay' ? `Aplicar no roteiro (vira a hospedagem pendente de ${stop!.name})` : `Aplicar no roteiro (vira atividade em ${stop!.name})`} checked={apply} onChange={setApply} />
       ) : null}
       {appliable && apply && poll.target === 'activity' ? (
-        <label className="field">Dia
+        <Field label="Dia">
           <select value={day} onChange={(e) => setDay(e.target.value)}>{days.map((d) => <option key={d} value={d}>{dayMonth(d)}</option>)}</select>
-        </label>
+        </Field>
       ) : null}
       {appliable && !apply ? <p className="muted" style={{ margin: 0, fontSize: 13 }}>Só registra a decisão; o roteiro fica como está.</p> : null}
     </Dialog>
@@ -307,7 +308,7 @@ function DeadlineFields({ date, time, onChange }: { date: string; time: string; 
   return (
     <FieldGrid>
       <Field label="Prazo para votar (opcional)"><input type="date" value={date} onChange={(e) => onChange({ date: e.target.value, time })} /></Field>
-      <Field label="Hora"><input type="time" value={time} disabled={!date} onChange={(e) => onChange({ date, time: e.target.value })} /><span className="hint">Sem hora: 23:59.</span></Field>
+      <Field label="Hora" hint="Sem hora: 23:59."><input type="time" value={time} disabled={!date} onChange={(e) => onChange({ date, time: e.target.value })} /></Field>
     </FieldGrid>
   );
 }
@@ -382,35 +383,34 @@ function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset
       <Button variant="secondary" onClick={onClose}>Cancelar</Button>
       <Button disabled={busy} onClick={() => void save()}>{busy ? <Busy>Abrindo</Busy> : 'Abrir votação'}</Button>
     </>}>
-      <Field label="Pergunta"><input value={v.question} maxLength={140} onChange={(e) => setV({ ...v, question: e.target.value })} placeholder="Onde a gente dorme em Cusco?" />{tried && qProblem ? <span className="err">{qProblem}</span> : null}</Field>
+      <Field label="Pergunta" error={tried && qProblem ? qProblem : undefined}><input value={v.question} maxLength={140} onChange={(e) => setV({ ...v, question: e.target.value })} placeholder="Onde a gente dorme em Cusco?" /></Field>
       <Field label="Detalhe (opcional)"><textarea rows={2} value={v.detail} maxLength={300} onChange={(e) => setV({ ...v, detail: e.target.value })} /></Field>
-      <div className="field">
-        <span id="nv-tipo">Tipo</span>
+      <div className={fs.field}>
+        <span id="nv-tipo" className={fs.label}>Tipo</span>
         <div role="group" aria-labelledby="nv-tipo" className={t.types}>
           {(['stay', 'activity', 'free'] as PollTarget[]).map((k) => (
-            <button key={k} type="button" className="chip tap" aria-pressed={v.target === k} onClick={() => setV({ ...v, target: k })}>{{ stay: 'Hospedagem', activity: 'Passeio', free: 'Livre' }[k]}</button>
+            <Chip key={k} selected={v.target === k} onClick={() => setV({ ...v, target: k })}>{{ stay: 'Hospedagem', activity: 'Passeio', free: 'Livre' }[k]}</Chip>
           ))}
         </div>
-        <span className="hint">{v.target === 'stay' ? 'A escolhida vira a hospedagem pendente da parada (se ainda não houver reserva).' : v.target === 'activity' ? 'A escolhida vira atividade no roteiro da parada.' : 'Só registra a decisão (ex.: qual cidade, qual data).'}</span>
+        <span className={fs.hint}>{v.target === 'stay' ? 'A escolhida vira a hospedagem pendente da parada (se ainda não houver reserva).' : v.target === 'activity' ? 'A escolhida vira atividade no roteiro da parada.' : 'Só registra a decisão (ex.: qual cidade, qual data).'}</span>
       </div>
       {needsStop ? (
-        <label className="field">Parada
+        <Field label="Parada" error={tried && stopProblem ? stopProblem : undefined}>
           <select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}>
             <option value="">Escolha</option>
             {stops.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          {tried && stopProblem ? <span className="err">{stopProblem}</span> : null}
-        </label>
+        </Field>
       ) : null}
       <Checkbox className={t.pick} label="Cada pessoa pode marcar mais de uma" checked={v.multi} onChange={(multi) => setV({ ...v, multi })} />
       <DeadlineFields date={v.date} time={v.time} onChange={(d) => setV({ ...v, ...d })} />
 
-      <h3 className="h3" style={{ margin: '8px 0 0' }}>Opções ({opts.length} de 6)</h3>
+      <h3 className={t.label} style={{ margin: '8px 0 0' }}>Opções ({opts.length} de 6)</h3>
       {opts.map((o, i) => (
         <fieldset key={o.key} className={t.optEdit}>
           <legend className="sr-only">Opção {i + 1}</legend>
           <FieldGrid>
-            <label className="field">Opção {i + 1}<input value={o.label} maxLength={80} onChange={(e) => setOpt(i, { label: e.target.value })} /></label>
+            <Field label={<>Opção {i + 1}</>}><input value={o.label} maxLength={80} onChange={(e) => setOpt(i, { label: e.target.value })} /></Field>
             <Field label="Detalhe"><input value={o.detail} maxLength={300} onChange={(e) => setOpt(i, { detail: e.target.value })} placeholder="R$ 240 / noite, café incluso" /></Field>
           </FieldGrid>
           <FieldGrid>
@@ -421,11 +421,11 @@ function NewPollDialog({ onClose, preset = null }: { onClose: () => void; preset
             </FieldGrid>
           </FieldGrid>
           {v.target === 'stay' ? <Field label="Endereço"><input value={o.address} maxLength={200} onChange={(e) => setOpt(i, { address: e.target.value })} /></Field> : null}
-          {tried && problems[i] ? <span className="err" role="alert" style={{ fontSize: 13 }}>{problems[i]}</span> : null}
-          {opts.length > 2 ? <button type="button" className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={() => setOpts(opts.filter((_, j) => j !== i))}>Remover opção {i + 1}</button> : null}
+          {tried && problems[i] ? <span className={t.optErr} role="alert">{problems[i]}</span> : null}
+          {opts.length > 2 ? <Button variant="secondary" size="sm" style={{ alignSelf: 'flex-start' }} onClick={() => setOpts(opts.filter((_, j) => j !== i))}>Remover opção {i + 1}</Button> : null}
         </fieldset>
       ))}
-      {opts.length < 6 ? <button type="button" className="btn btn-sm tap" style={{ alignSelf: 'flex-start' }} onClick={() => setOpts([...opts, emptyOpt(cur)])}><Icon name="plus" size={16} />Adicionar opção</button> : null}
+      {opts.length < 6 ? <Button variant="secondary" size="sm" icon="plus" style={{ alignSelf: 'flex-start' }} onClick={() => setOpts([...opts, emptyOpt(cur)])}>Adicionar opção</Button> : null}
     </Dialog>
   );
 }

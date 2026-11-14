@@ -421,6 +421,18 @@ export interface BudgetSnapshot {
   at: string;
   /** total por pessoa de cada categoria no fechamento (centavos), para o aviso com valores */
   lines?: Partial<Record<'transporte' | 'hospedagem' | 'passeios' | 'comida', number>>;
+  /**
+   * Preço de cada item do roteiro no fechamento (trechos, hospedagens e passeios com custo), na moeda
+   * do item. Alimenta o aviso com o que mudou item a item. Ausente em orçamentos fechados antes.
+   */
+  items?: Record<string, BudgetSnapshotItem>;
+}
+
+export interface BudgetSnapshotItem {
+  kind: 'transport' | 'stay' | 'activity';
+  title: string;
+  cents: number | null;
+  currency: string | null;
 }
 
 export interface Member {
@@ -838,6 +850,11 @@ export interface TripBundle {
   activities: Activity[];
   documents: DocumentRow[];
   documentShares: DocumentShare[];
+  /**
+   * Quem tem documento pronto de cada categoria, incluindo os privados de outras pessoas
+   * (RPC `trip_document_presence`, migration 00013). Só dono e categoria. Ausente sem a migration.
+   */
+  documentPresence?: { owner_id: string; category: DocCategory }[];
   /** chaves embrulhadas visíveis para mim (as minhas e quem mais já tem, nos documentos que leio) */
   documentKeys: DocumentKey[];
   /** chaves públicas da turma (só de quem já criou o cofre) */

@@ -262,7 +262,7 @@ export default function Documentos() {
           <h2 className={s.h2}>Fotos e prints</h2>
           <div className={s.shots}>
             {shots.map((d, i) => (
-              <Shot key={d.id} d={d} i={i} color={cols[i % 4]} onOpen={() => setOpenId(d.id)} />
+              <Shot key={d.id} d={d} color={cols[i % 4]} onOpen={() => setOpenId(d.id)} />
             ))}
           </div>
         </section>
@@ -397,19 +397,36 @@ function useDocUrl(d: DocumentRow | undefined, preferPreview = true) {
   return { url, err };
 }
 
-function Shot({ d, i, color, onOpen }: { d: DocumentRow; i: number; color: string; onOpen: () => void }) {
+function Shot({ d, color, onOpen }: { d: DocumentRow; color: string; onOpen: () => void }) {
   const { url } = useDocUrl(d);
-  const shape = i % 2 ? 'inset(0 round 28px)' : 'circle(50%)';
+  const showImg = (url && d.mime !== 'application/pdf' && !/hei[cf]/.test(d.mime)) || (url && d.preview_path);
   return (
-    <figure style={{ transform: `rotate(${[-3, 2, -1.5, 3, -2][i % 5]}deg)` }}>
+    <figure>
       <button onClick={onOpen} className={s.shotBtn} aria-label={`Abrir ${d.title}`}>
-        <div className={s.ph} style={{ clipPath: shape, background: url ? undefined : `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 22%, var(--field)) 0 14px, var(--surface) 14px 28px)` }}>
+        <div className={s.ph} style={{ background: url ? undefined : `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 22%, var(--field)) 0 14px, var(--surface) 14px 28px)` }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {url && d.mime !== 'application/pdf' && !/hei[cf]/.test(d.mime) || (url && d.preview_path) ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="camera" size={30} />}
+          {showImg ? <img src={url!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="camera" size={30} />}
         </div>
       </button>
-      <figcaption style={{ fontSize: 14, fontWeight: 500, textAlign: 'center' }}>{d.title}</figcaption>
+      <figcaption className={s.shotCap}>{d.title}</figcaption>
     </figure>
+  );
+}
+
+/** Miniatura do arquivo escolhido (só imagens; o resto mostra o ícone). */
+function FileThumb({ file, mime }: { file: File; mime: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!mime.startsWith('image/') || /hei[cf]/.test(mime)) return;
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file, mime]);
+  return (
+    <span className={s.thumb} aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? <img src={url} alt="" /> : <Icon name="doc" size={22} />}
+    </span>
   );
 }
 
@@ -419,12 +436,13 @@ function UploadReview({ queue, stops, patch, save, remove }: { queue: Pending[];
   return (
     <Dialog open onClose={() => queue.filter((x) => x.status !== 'saving').forEach((x) => remove(x.key))} title={`Confirmar ${queue.length === 1 ? 'arquivo' : `${queue.length} arquivos`}`}
       footer={<Button disabled={!readyAll} onClick={async () => { for (const it of queue.filter((x) => x.status === 'ready')) await save(it); }}>Salvar {queue.length > 1 ? 'todos' : ''}</Button>}>
-      <p style={{ margin: 0, color: 'var(--mute)', fontSize: 14 }}>Confira as sugestões antes de salvar. Nada é inventado: se a leitura falhou, os campos ficam em branco para você preencher.</p>
+      <p className={s.lead}>Confira as sugestões antes de salvar. Nada é inventado: se a leitura falhou, os campos ficam em branco para você preencher.</p>
       {queue.map((it) => (
-        <div key={it.key} className={s.review}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-            <b style={{ wordBreak: 'break-all' }}>{it.file.name}</b>
-            <span className={s.mono}>{formatBytes(it.file.size)}</span>
+        <Card key={it.key} pad="md" className={s.review}>
+          <div className={s.fileHead}>
+            <FileThumb file={it.file} mime={it.mime} />
+            <span className={s.fileName}><b>{it.file.name}</b><small>{formatBytes(it.file.size)}</small></span>
+            {it.status === 'saving' ? <Badge tone="brand">Enviando…</Badge> : it.status === 'error' ? <Badge tone="warn">Falhou</Badge> : null}
           </div>
           {it.status === 'reading' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}><AiThinking steps={AI_STEPS.classify} title={it.progress ? `Lendo · ${Math.round(it.progress * 100)}%` : 'Lendo o arquivo'} lines={0} compact /><Progress value={Math.max(0.08, it.progress)} height={8} label="Lendo o arquivo" /></div>
@@ -441,14 +459,13 @@ function UploadReview({ queue, stops, patch, save, remove }: { queue: Pending[];
                 <Field label="Válido até (se houver)"><input type="date" value={it.validUntil} onChange={(e) => patch(it.key, { validUntil: e.target.value })} /></Field>
               </FieldGrid>
               {it.mime.startsWith('image/') ? <Checkbox checked={it.isShot} onChange={(v) => patch(it.key, { isShot: v })} label="Mostrar em “Fotos e prints”" /> : null}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <Button variant="secondary" size="sm" onClick={() => remove(it.key)} disabled={it.status === 'saving'}>Descartar</Button>
+              <div className={s.rowEnd}>
+                <Button variant="ghost" size="sm" onClick={() => remove(it.key)} disabled={it.status === 'saving'}>Descartar</Button>
                 {it.status === 'error' ? <Button size="sm" onClick={() => void save(it)}>Tentar de novo</Button> : null}
-                {it.status === 'saving' ? <Badge upper>ENVIANDO…</Badge> : null}
               </div>
             </>
           )}
-        </div>
+        </Card>
       ))}
     </Dialog>
   );
@@ -510,40 +527,52 @@ function DocViewer({ id, onClose }: { id: string; onClose: () => void }) {
   };
 
   const isImg = d.mime.startsWith('image/') && (!/hei[cf]/.test(d.mime) || !!d.preview_path);
+  const [catBg, catFg] = DOC_CAT_VAR[d.category];
+  const stopName = d.stop_id ? b.stops.find((x) => x.id === d.stop_id)?.name : undefined;
+  const facts: [string, string][] = [
+    ['Arquivo', d.original_name],
+    ['Tamanho', formatBytes(d.size_bytes)],
+    ['Quem vê', d.visibility === 'private' ? 'Só você' : d.visibility === 'shared' ? `Pessoas escolhidas (${shares.length})` : 'Toda a turma'],
+    ...(stopName ? [['Parada', stopName] as [string, string]] : []),
+    ...(d.valid_until ? [['Válido até', dayMonth(d.valid_until)] as [string, string]] : []),
+    ...(!owner ? [['Enviado por', profileOf(d.owner_id)?.display_name ?? '—'] as [string, string]] : []),
+  ];
   return (
     <Dialog open onClose={onClose} title={d.title}>
-      <div className={s.viewer}>
-        {err ? <div className={s.errbox}><span style={{ flex: 1 }}>{err}</span>{d.encrypted && vault.status !== 'unlocked' ? <Button variant="secondary" size="sm" onClick={vault.ask}>{vault.status === 'none' ? 'Criar cofre' : 'Desbloquear'}</Button> : null}</div> : !url ? <div className="skel" style={{ height: 300 }} /> : d.mime === 'application/pdf' ? (
-          <iframe ref={iframeRef} src={url} title={d.title} style={{ width: '100%', height: '60vh', border: 0, borderRadius: 14, background: '#fff' }} />
+      <div className={s.viewerHead}>
+        <span className={s.catPill} style={{ background: catBg, color: catFg }}>{CATEGORY_LABEL[d.category]}</span>
+        {d.subtitle ? <span className={s.viewerSub}>{d.subtitle}</span> : null}
+        {d.classified_by === 'ai' ? <Badge tone="brand">Classificado pela IA</Badge> : null}
+      </div>
+      <div className={s.stage}>
+        {err ? <div className={s.errbox}><span style={{ flex: 1 }}>{err}</span>{d.encrypted && vault.status !== 'unlocked' ? <Button variant="secondary" size="sm" onClick={vault.ask}>{vault.status === 'none' ? 'Criar cofre' : 'Desbloquear'}</Button> : null}</div> : !url ? <div className="skel" style={{ height: 300, width: '100%' }} /> : d.mime === 'application/pdf' ? (
+          <iframe ref={iframeRef} src={url} title={d.title} className={s.pdf} />
         ) : isImg ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={d.title} style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 14, display: 'block', margin: '0 auto' }} />
+          <img src={url} alt={d.title} className={s.stageImg} />
         ) : (
           <div className={s.errbox}>Pré-visualização de HEIC indisponível neste navegador. Baixe o arquivo original para abrir.</div>
         )}
       </div>
-      <div className={`${s.mono} ${s.meta}`}>
-        <span>{CATEGORY_LABEL[d.category].toUpperCase()}</span>
-        <span>{d.original_name}</span>
-        <span>{formatBytes(d.size_bytes)}</span>
-        <span>{d.visibility === 'private' ? 'SÓ VOCÊ' : d.visibility === 'shared' ? 'COMPARTILHADO' : 'TODA A TURMA'}</span>
-        {!owner ? <span>ENVIADO POR {profileOf(d.owner_id)?.display_name?.toUpperCase() ?? '—'}</span> : null}
+      <dl className={s.facts}>
+        {facts.map(([k, val]) => <div key={k}><dt>{k}</dt><dd>{val}</dd></div>)}
+      </dl>
+      {d.notes && !edit ? <p className={s.notes}>{d.notes}</p> : null}
+      <div className={s.actions}>
+        {url ? <a className={buttonClass({ variant: 'primary', size: 'sm' })} href={url} download={d.original_name}><Icon name="upload" size={16} />Baixar</a> : null}
+        {canMeta ? <Button variant="secondary" size="sm" icon="edit" aria-expanded={edit} onClick={() => setEdit((e) => !e)}>{edit ? 'Fechar edição' : 'Editar dados'}</Button> : null}
+        {owner || (isOrganizer && d.visibility === 'trip') ? <Button variant="ghost" size="sm" className={s.danger} onClick={del} disabled={busy}>Excluir</Button> : null}
       </div>
       {source.kind === 'supabase' ? (
-        <div className={s.offRow}>
+        <Card variant="soft" pad="sm" className={s.offRow}>
           <Checkbox checked={keep} disabled={busy} onChange={(v) => void setKeep(v)} label="Manter offline neste aparelho" />
-          <span>{stateBadge(state) ?? <Badge upper>SÓ ONLINE</Badge>}</span>
+          <span>{stateBadge(state) ?? <Badge>Só online</Badge>}</span>
           {state === 'failed' ? <><span style={{ fontSize: 13 }}>{local[d.id]?.error}</span><Button variant="secondary" size="sm" onClick={() => void downloadOne(source, d)}>Tentar de novo</Button></> : null}
           {state === 'saved' && !keep ? <Button variant="secondary" size="sm" onClick={() => void removeLocal(source, d.id)}>Remover cópia</Button> : null}
-        </div>
+        </Card>
       ) : null}
-      <div className={s.actions}>
-        {url ? <a className={buttonClass({ variant: 'secondary', size: 'sm' })} href={url} download={d.original_name}><Icon name="upload" size={16} />Baixar</a> : null}
-        {canMeta ? <Button variant="secondary" size="sm" onClick={() => setEdit((e) => !e)}><Icon name="edit" size={16} />Editar dados</Button> : null}
-        {owner || (isOrganizer && d.visibility === 'trip') ? <Button variant="secondary" size="sm" className={s.danger} onClick={del} disabled={busy}>Excluir</Button> : null}
-      </div>
       {edit ? (
-        <div className={s.review}>
+        <Card pad="md" className={s.review}>
           <FieldGrid>
             <Field label="Título"><input value={v.title} maxLength={120} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
             <Field label="Categoria"><select value={v.category} onChange={(e) => setV({ ...v, category: e.target.value as DocCategory })}>{CATS.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}</select></Field>
@@ -553,8 +582,8 @@ function DocViewer({ id, onClose }: { id: string; onClose: () => void }) {
             {owner ? <Field label="Quem vê"><select value={v.visibility} onChange={(e) => setV({ ...v, visibility: e.target.value as DocVisibility })}><option value="private">Só eu</option><option value="shared">Pessoas escolhidas</option><option value="trip">Toda a turma</option></select></Field> : null}
           </FieldGrid>
           <Field label="Notas"><textarea rows={2} maxLength={2000} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Button onClick={saveMeta} disabled={busy}>Salvar</Button></div>
-        </div>
+          <div className={s.rowEnd}><Button variant="ghost" size="sm" onClick={() => setEdit(false)}>Cancelar</Button><Button size="sm" onClick={saveMeta} disabled={busy}>Salvar</Button></div>
+        </Card>
       ) : null}
       {owner && d.visibility === 'shared' ? (
         <fieldset className={s.review} style={{ margin: 0 }}>

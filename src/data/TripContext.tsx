@@ -16,6 +16,8 @@ interface TripState {
   /** cor de destaque da trilha (planning §1) */
   accent: string;
   loading: boolean;
+  /** já houve uma carga da fonte (servidor ou demo em memória), além do pacote inicial/cópia local */
+  synced: boolean;
   error: string | null;
   /** dados vindos da cópia local (sem conexão ou servidor indisponível) */
   stale: boolean;
@@ -35,6 +37,7 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
   // initialBundle: só na demonstração (dados estáticos), permite renderizar no servidor.
   const [bundle, setBundle] = useState<TripBundle | null>(initialBundle);
   const [loading, setLoading] = useState(!initialBundle);
+  const [synced, setSynced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [staleSince, setStaleSince] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
         setError(code === 'NOT_FOUND' ? 'Essa trilha não existe ou você não tem acesso a ela.' : humanError(e));
       } finally {
         setLoading(false);
+        setSynced(true);
         inflight.current = null;
       }
     })();
@@ -119,6 +123,7 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
       identity,
       accent: tripAccent(bundle?.trip),
       loading,
+      synced,
       error,
       stale,
       staleSince,
@@ -129,7 +134,7 @@ export function TripProvider({ source, base, children, initialBundle = null }: {
       reload,
       profileOf: (id) => bundle?.profiles.find((p) => p.id === id) ?? null,
     };
-  }, [source, base, bundle, loading, error, stale, staleSince, reload]);
+  }, [source, base, bundle, loading, synced, error, stale, staleSince, reload]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

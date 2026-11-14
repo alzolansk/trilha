@@ -8,6 +8,7 @@ import { Checkbox } from '../../../components/ui/Checkbox';
 import { Chip, ChipGroup } from '../../../components/ui/Chip';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorBox } from '../../../components/ui/ErrorBox';
+import { Field } from '../../../components/ui/Field';
 import { ListRow } from '../../../components/ui/ListRow';
 import { Logo } from '../../../components/ui/Logo';
 import { AI_STEPS, AiBusy, AiThinking, Busy, LoadingDots, PageLoader, TrailBar, TrailMark } from '../../../components/ui/Loader';
@@ -220,7 +221,7 @@ export function UiGallery() {
               </StepChat>
             </Card>
             <Card className="stack">
-              <label className="field">Descrição<input placeholder="Ingresso Machu Picchu" /></label>
+              <Field label="Descrição"><input placeholder="Ingresso Machu Picchu" /></Field>
               <Button onClick={() => setSheet(true)}>Abrir Sheet</Button>
             </Card>
           </div>
@@ -258,7 +259,7 @@ export function UiGallery() {
 
       <Sheet open={sheet} onClose={() => setSheet(false)} title="Lançar gasto" description="Bottom sheet no celular, modal no desktop." footer={<><Button variant="secondary" onClick={() => setSheet(false)}>Cancelar</Button><Button onClick={() => setSheet(false)}>Salvar gasto</Button></>}>
         <MoneyInput label="Valor" value={money} onChange={setMoney} autoFocus />
-        <label className="field">Descrição<input placeholder="Ingresso Machu Picchu" /></label>
+        <Field label="Descrição"><input placeholder="Ingresso Machu Picchu" /></Field>
         <ChipGroup label="Categoria" value={style} onChange={setStyle} options={[{ value: 'transporte', label: 'Transporte' }, { value: 'hospedagem', label: 'Hospedagem' }, { value: 'passeios', label: 'Passeios' }, { value: 'comida', label: 'Comida' }]} />
         <p className="muted" style={{ margin: 0 }}>Conteúdo longo rola por dentro; o rodapé fica preso.</p>
         {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} h={48} />)}

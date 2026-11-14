@@ -7,6 +7,7 @@ import { currencyForCountry } from '../../lib/currency';
 import { todayIn } from '../../lib/time';
 import { categoryKind, centsToDecimal, convertCents, customSplit, expenseImpact, formatMoney, itemLabel, paymentPreset, poolSummary, POOL, splitEqual, toCents, unpaidItems, type ItemType } from '../../lib/money';
 import { Button } from '../ui/Button';
+import { Field } from '../ui/Field';
 import { Busy } from '../ui/Loader';
 import { Chip } from '../ui/Chip';
 import { Checkbox } from '../ui/Checkbox';
@@ -74,18 +75,18 @@ export function ExpenseSheet({ expense: e, preset, onClose }: { expense?: Expens
     {v.currency !== base ? <div className={s.note}>
       {rate > 0 ? <p>≈ {formatMoney(cents, base)} · cotação de {rateDate}, fonte {rateSource}</p> : <p>Cotação indisponível. Informe uma taxa manual.</p>}
       <Checkbox label="Usar taxa manual" checked={v.manual} onChange={(manual) => setV({ ...v, manual })} />
-      {v.manual ? <label className="field">1 {v.currency} vale quantos {base}?<input inputMode="decimal" value={v.rate} onChange={(ev) => setV({ ...v, rate: ev.target.value })} /></label> : null}
+      {v.manual ? <Field label={<>1 {v.currency} vale quantos {base}?</>}><input inputMode="decimal" value={v.rate} onChange={(ev) => setV({ ...v, rate: ev.target.value })} /></Field> : null}
     </div> : null}
-    <label className="field">Descrição<input value={v.description} maxLength={120} onChange={(ev) => { const description = ev.target.value; const kind = categoryKind({ name: description }); setV({ ...v, description, category: v.category || (kind !== 'outro' ? b.budgetCategories.find((c) => categoryKind(c) === kind)?.id ?? '' : '') }); }} placeholder="Ex.: ingresso Vale Sagrado" /></label>
+    <Field label="Descrição"><input value={v.description} maxLength={120} onChange={(ev) => { const description = ev.target.value; const kind = categoryKind({ name: description }); setV({ ...v, description, category: v.category || (kind !== 'outro' ? b.budgetCategories.find((c) => categoryKind(c) === kind)?.id ?? '' : '') }); }} placeholder="Ex.: ingresso Vale Sagrado" /></Field>
     {suggestions.length ? <div className={s.stack} aria-label="Itens ainda não pagos">{suggestions.map((i) => <Button key={i.id} variant="secondary" onClick={() => choose(i)}>{i.title} · ligar ao roteiro</Button>)}</div> : null}
     {link ? <div className={s.note}>Ligado ao roteiro: {itemLabel(b, link.type, link.id)} <Button variant="ghost" size="sm" onClick={() => setLink(undefined)}>Desligar</Button></div> : null}
     <fieldset><legend>Categoria</legend><div className={s.chips}><Chip selected={!v.category} onClick={() => setV({ ...v, category: '' })}>Sem categoria</Chip>{b.budgetCategories.map((c) => <Chip key={c.id} selected={v.category === c.id} onClick={() => setV({ ...v, category: c.id })}>{c.name}</Chip>)}</div></fieldset>
     <fieldset><legend>Quem pagou</legend><div className={s.chips}>{[POOL, ...ids].map((id) => <Chip key={id} selected={v.payer === id} onClick={() => setV({ ...v, payer: id })}>{id === POOL ? 'Caixa da turma' : profileOf(id)?.display_name ?? 'Pessoa'}</Chip>)}</div></fieldset>
     {v.payer !== POOL ? <fieldset><legend>Dividir entre</legend><div className={s.chips}>{(['all', 'choose', 'custom'] as const).map((m, i) => <Chip key={m} selected={mode === m} onClick={() => setMode(m)}>{['Todos igual', 'Escolher pessoas', 'Valores diferentes'][i]}</Chip>)}</div>
       {mode === 'choose' ? ids.map((id) => <Checkbox key={id} label={profileOf(id)?.display_name ?? 'Pessoa'} checked={selected.includes(id)} onChange={(on) => setSelected(on ? [...selected, id] : selected.filter((x) => x !== id))} />) : null}
-      {mode === 'custom' ? <div className={s.stack}>{ids.map((id) => <label className="field" key={id}>{profileOf(id)?.display_name} ({base})<input inputMode="decimal" value={values[id]} onChange={(ev) => setValues({ ...values, [id]: ev.target.value })} /></label>)}{different.diff !== 0 ? <p role="alert">A divisão precisa fechar o total. Diferença: {formatMoney(different.diff, base)}.</p> : null}</div> : null}
+      {mode === 'custom' ? <div className={s.stack}>{ids.map((id) => <Field key={id} label={<>{profileOf(id)?.display_name} ({base})</>}><input inputMode="decimal" value={values[id]} onChange={(ev) => setValues({ ...values, [id]: ev.target.value })} /></Field>)}{different.diff !== 0 ? <p role="alert">A divisão precisa fechar o total. Diferença: {formatMoney(different.diff, base)}.</p> : null}</div> : null}
     </fieldset> : <p className={s.muted}>Pago pelo caixa e dividido igualmente entre toda a turma.</p>}
-    <details><summary>Data e parada</summary><div className={s.stack}><label className="field">Data<input type="date" value={v.date} onChange={(ev) => setV({ ...v, date: ev.target.value })} /></label><label className="field">Parada<select value={v.stop} onChange={(ev) => setV({ ...v, stop: ev.target.value })}><option value="">Nenhuma</option>{b.stops.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}</select></label></div></details>
+    <details><summary>Data e parada</summary><div className={s.stack}><Field label="Data"><input type="date" value={v.date} onChange={(ev) => setV({ ...v, date: ev.target.value })} /></Field><Field label="Parada"><select value={v.stop} onChange={(ev) => setV({ ...v, stop: ev.target.value })}><option value="">Nenhuma</option>{b.stops.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}</select></Field></div></details>
     {cents > 0 ? <div className={`${s.note} ${impact.category?.over || impact.pool?.negative ? s.warning : ''}`} aria-live="polite">
       {impact.category ? <div>Baixa {formatMoney(cents, base)} de {impact.category.name} · {impact.category.over ? 'passou' : 'sobram'} {formatMoney(Math.abs(impact.category.plannedCents - impact.category.afterCents), base)}.</div> : null}
       {impact.pool ? <div>Caixa fica com {formatMoney(impact.pool.afterCents, base)}.</div> : null}

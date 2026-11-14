@@ -12,7 +12,7 @@ export function Converter() {
   const [currency, setCurrency] = useState('USD');
   const rate = fx?.rates[currency];
   return <details className={s.panel}><summary>Conversor de moedas</summary><div className={s.form}>
-    <label className="field">Valor ({b.trip.base_currency})<input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+    <Field label={<>Valor ({b.trip.base_currency})</>}><input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
     <Field label="Converter para"><select value={currency} onChange={(e) => setCurrency(e.target.value)}>{[...new Set([currency, ...Object.keys(fx?.rates ?? {})])].map((c) => <option key={c}>{c}</option>)}</select></Field>
     <p>{rate && Number.isFinite(toCents(amount)) ? `≈ ${formatMoney(Math.round(toCents(amount) * rate), currency)} · ${fx?.date}, fonte ${fx?.source}` : err ? 'Cotação indisponível agora. Tente novamente mais tarde.' : 'Carregando cotação…'}</p>
   </div></details>;

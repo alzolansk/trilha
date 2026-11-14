@@ -188,9 +188,9 @@ export default function Descobrir() {
           <ChatOptions>
             {step === 0 ? (
               <>
-                <label className="field">Teto por pessoa ({cur})
+                <Field label={`Teto por pessoa (${cur})`}>
                   <input inputMode="numeric" value={budgetText} placeholder="1500" onChange={(e) => { const t = e.target.value.replace(/[^\d]/g, ''); setBudgetText(t); set({ budget: t ? Number(t) : null }); }} />
-                </label>
+                </Field>
                 <Button onClick={() => setStep(1)}>Continuar</Button>
               </>
             ) : step === 1 ? (
@@ -229,7 +229,7 @@ export default function Descobrir() {
           <div className={s.answers} role="group" aria-label="Suas respostas">
             {answerText.map((t, i) => <button key={QUESTIONS[i]} type="button" className={s.answerChip} onClick={() => setStep(i)} aria-label={`Editar: ${t}`}>{t}</button>)}
           </div>
-          <h2 id="d-res" className="disp">Três lugares que cabem na turma</h2>
+          <h2 id="d-res" className="title">Três lugares que cabem na turma</h2>
           {demo ? <p className="muted" style={{ margin: 0 }}>Na demonstração as sugestões ficam desligadas: elas usam a IA da sua conta.</p> : null}
           {loading ? <AiThinking steps={AI_STEPS.explore} title="A IA está procurando destinos" lines={4} /> : null}
           {error ? (

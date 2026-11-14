@@ -3,14 +3,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAction, useConfirm, useToast } from '../../components/ui/feedback';
-import { PageTitle } from '../../components/ui/primitives';
 import { useAuth } from '../../data/AuthContext';
 import { storageEstimate, wipeAllLocalData } from '../../data/offline';
 import { resetLocalState } from '../../data/offlineSync';
 import { formatBytes } from '../../lib/format';
 import { VAPID_PUBLIC_KEY } from '../../lib/env';
 import { getSupabase } from '../../lib/supabase/client';
-import { Button, Field } from '../../components/ui';
+import { Button, Card, Checkbox, Field, ScreenHeader } from '../../components/ui';
 
 interface Prefs {
   push_enabled: boolean;
@@ -119,40 +118,39 @@ export default function Conta() {
     toast('Dados locais apagados.');
   };
 
-  const box = { padding: 26, display: 'flex', flexDirection: 'column' as const, gap: 14 };
+  const box = { display: 'flex', flexDirection: 'column' as const, gap: 14 };
   return (
     <main id="main" className="wrap">
       <header style={{ paddingTop: 20 }}><Link href="/">← Minhas trilhas</Link></header>
-      <PageTitle title="Conta" sub={user.email ?? ''} />
+      <ScreenHeader title="Conta" subtitle={user.email ?? ''} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(360px,100%),1fr))', gap: 22, marginTop: 36 }}>
-        <section className="card" style={box}>
-          <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Perfil</h2>
+        <Card as="section" pad="lg" style={box}>
+          <h2 className="title" style={{ margin: 0, fontSize: 24 }}>Perfil</h2>
           <Field label="Nome que a turma vê"><input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} /></Field>
           <Button variant="secondary" style={{ alignSelf: 'flex-start' }} disabled={busy || !name.trim()} onClick={saveProfile}>Salvar nome</Button>
           <Field label="Nova senha"><input type="password" autoComplete="new-password" value={pass} onChange={(e) => setPass(e.target.value)} minLength={8} /></Field>
           <Button variant="secondary" style={{ alignSelf: 'flex-start' }} disabled={busy || pass.length < 8} onClick={savePass}>Trocar senha</Button>
-        </section>
-        <section className="card" style={box}>
-          <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Notificações</h2>
+        </Card>
+        <Card as="section" pad="lg" style={box}>
+          <h2 className="title" style={{ margin: 0, fontSize: 24 }}>Notificações</h2>
           {pushSupported ? (
-            <label className="check"><input type="checkbox" checked={prefs.push_enabled} disabled={busy} onChange={(e) => void togglePush(e.target.checked)} /><span className="box" aria-hidden="true" /><span>Receber notificações neste aparelho</span></label>
+            <Checkbox label="Receber notificações neste aparelho" checked={prefs.push_enabled} disabled={busy} onChange={(v) => void togglePush(v)} />
           ) : (
             <p className="muted" style={{ margin: 0 }}>{VAPID_PUBLIC_KEY ? 'Este navegador não suporta notificações push (no iPhone, instale o app na tela inicial primeiro).' : 'Notificações ainda não configuradas no servidor (chaves VAPID, veja o README).'}</p>
           )}
           {(['task_reminders', 'departure_reminders', 'weather', 'poll_reminders'] as const).map((k) => (
-            <label key={k} className="check"><input type="checkbox" checked={prefs[k]} disabled={busy} onChange={(e) => void savePrefs({ ...prefs, [k]: e.target.checked })} /><span className="box" aria-hidden="true" />
-              <span>{PREF_LABEL[k]}</span></label>
+            <Checkbox key={k} label={PREF_LABEL[k]} checked={prefs[k]} disabled={busy} onChange={(v) => void savePrefs({ ...prefs, [k]: v })} />
           ))}
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>Enviadas uma vez por dia (limite do plano gratuito de hospedagem).</p>
-        </section>
-        <section className="card" style={box}>
-          <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Este aparelho</h2>
+        </Card>
+        <Card as="section" pad="lg" style={box}>
+          <h2 className="title" style={{ margin: 0, fontSize: 24 }}>Este aparelho</h2>
           <p style={{ margin: 0 }}>{est ? `${formatBytes(est.usage)} usados de ${formatBytes(est.quota)}.` : 'Uso de espaço indisponível neste navegador.'} {est ? (est.persisted ? 'Armazenamento protegido pelo navegador.' : 'O navegador pode apagar as cópias se faltar espaço.') : ''}</p>
           <Button variant="secondary" style={{ alignSelf: 'flex-start' }} onClick={wipe}>Apagar dados deste aparelho</Button>
-          <label className="check"><input type="checkbox" checked={!!profile?.analytics_opt_in} onChange={(e) => void setAnalytics(e.target.checked)} /><span className="box" aria-hidden="true" /><span>Compartilhar estatísticas de uso (anônimas, sem conteúdo)</span></label>
+          <Checkbox label="Compartilhar estatísticas de uso (anônimas, sem conteúdo)" checked={!!profile?.analytics_opt_in} onChange={(v) => void setAnalytics(v)} />
           <Button variant="dark" style={{ alignSelf: 'flex-start' }} onClick={() => void signOut()}>Sair da conta</Button>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>Ao sair, todas as cópias offline deste navegador são apagadas.</p>
-        </section>
+        </Card>
       </div>
     </main>
   );

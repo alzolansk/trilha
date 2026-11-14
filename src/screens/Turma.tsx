@@ -14,7 +14,7 @@ import { Progress } from '../components/ui/Progress';
 import { ScreenHeader } from '../components/ui/ScreenHeader';
 import { useAuth } from '../data/AuthContext';
 import { useBundle } from '../data/TripContext';
-import type { DocCategory, Invite, Poll, Role, TripBundle } from '../data/types';
+import type { Invite, Poll, Role, TripBundle } from '../data/types';
 import { packingProgress } from '../lib/derive';
 import { SITE_URL } from '../lib/env';
 import { dayMonth, plural, ROLE_LABEL } from '../lib/format';
@@ -22,23 +22,9 @@ import { memberPoolStatus } from '../lib/money';
 import { myVotes, optionsOf, pollState, tallyPoll, votersCount, pollWinners } from '../lib/polls';
 import { getSupabase } from '../lib/supabase/client';
 import t from './turma.module.css';
+import { docMatrix } from '../lib/docMatrix';
 import { Field, FieldGrid } from '../components/ui';
-
-/** Documentos esperados por viagem (planning §5.7). Vacina só entraria com regra de fonte oficial (SPEC §9.1): fica de fora. */
-export const DOC_COLUMNS: { cat: DocCategory; label: string }[] = [
-  { cat: 'identidade', label: 'Passaporte / RG' },
-  { cat: 'passagem', label: 'Passagens' },
-  { cat: 'seguro', label: 'Seguro' },
-];
-
-/** Quem tem cada documento. Documento privado só aparece para quem pode vê-lo (RLS): para os outros conta como "—". */
-export function docMatrix(b: Pick<TripBundle, 'documents' | 'members'>): { cat: DocCategory; label: string; has: Map<string, boolean>; missing: number }[] {
-  return DOC_COLUMNS.map((c) => {
-    const has = new Map<string, boolean>();
-    for (const m of b.members) has.set(m.user_id, b.documents.some((d) => d.owner_id === m.user_id && d.category === c.cat && d.status === 'ready'));
-    return { ...c, has, missing: b.members.filter((m) => !has.get(m.user_id)).length };
-  });
-}
+import fs from '../components/ui/Field.module.css';
 
 /** Pendência principal da pessoa: voto, documento ou aporte (ordem do planning). `null` = em dia. */
 export function memberPending(b: TripBundle, uid: string, now = Date.now()): string | null {
@@ -88,7 +74,7 @@ export default function Turma() {
 
       <section aria-labelledby="t-decidir" className={t.block}>
         <div className={t.blockHead}>
-          <h2 id="t-decidir" className="disp">Decidir juntos</h2>
+          <h2 id="t-decidir" className="title">Decidir juntos</h2>
           <Link href={`${base}/turma/votos`} className={t.seeAll}>Ver todas ({open.length + awaiting.length})</Link>
         </div>
         {pending.length ? (
@@ -104,7 +90,7 @@ export default function Turma() {
 
       <section aria-labelledby="t-docs" className={t.block}>
         <div className={t.blockHead}>
-          <h2 id="t-docs" className="disp">Documentos</h2>
+          <h2 id="t-docs" className="title">Documentos</h2>
           <Badge tone={missingDocs ? 'warn' : 'ok'}>{missingDocs ? `faltam ${missingDocs}` : 'completo'}</Badge>
         </div>
         <Link href={`${base}/turma/documentos`} className={t.matrixLink} aria-label="Abrir documentos da turma">
@@ -129,7 +115,7 @@ export default function Turma() {
 
       <section aria-labelledby="t-mala" className={t.block}>
         <div className={t.blockHead}>
-          <h2 id="t-mala" className="disp">Mala da turma</h2>
+          <h2 id="t-mala" className="title">Mala da turma</h2>
           <Link href={`${base}/turma/mala`} className={t.seeAll} aria-label="Abrir a mala">Abrir</Link>
         </div>
         <Progress value={packed.total ? packed.done / packed.total : 0} label={`${packed.done} de ${packed.total} itens na mochila`} />
@@ -139,7 +125,7 @@ export default function Turma() {
 
       <section aria-labelledby="t-diario" className={t.block}>
         <div className={t.blockHead}>
-          <h2 id="t-diario" className="disp">Diário</h2>
+          <h2 id="t-diario" className="title">Diário</h2>
           <Link href={`${base}/turma/diario`} className={t.seeAll} aria-label="Abrir o diário">Abrir</Link>
         </div>
         {entries.length ? (
@@ -178,7 +164,7 @@ function TopPoll({ poll }: { poll: Poll }) {
   return (
     <article className={t.top} aria-labelledby={`top-${poll.id}`}>
       <span className={t.eyebrow}>{voted} de {total} votaram</span>
-      <h3 id={`top-${poll.id}`} className="disp">{poll.question}</h3>
+      <h3 id={`top-${poll.id}`} className="title">{poll.question}</h3>
       <ul className={t.topOpts}>
         {options.map((o) => {
           const r = tally.get(o.id);
@@ -186,7 +172,7 @@ function TopPoll({ poll }: { poll: Poll }) {
           return (
             <li key={o.id}>
               <Link href={`${base}/turma/votos`} className={t.topOpt} data-mine={mine.includes(o.id)}>
-                <span className={t.optHead}><b>{o.label}</b>{o.price != null && o.currency ? <span className="mono">{o.price} {o.currency}</span> : null}</span>
+                <span className={t.optHead}><b>{o.label}</b>{o.price != null && o.currency ? <span className="num">{o.price} {o.currency}</span> : null}</span>
                 <span className={t.optBar}><i style={{ width: `${(votes / max) * 100}%` }} /></span>
                 <span className={t.optMeta}>
                   {plural(votes, 'voto', 'votos')}
@@ -257,15 +243,15 @@ function MemberSheet({ uid, onClose }: { uid: string; onClose: () => void }) {
       <div className={t.sheetBody}>
         <p style={{ margin: 0 }}><b>Pendências:</b> {pend ?? 'em dia'}</p>
         {isOrganizer && !self ? (
-          <label className="field">Papel
+          <Field label="Papel">
             <select aria-label={`Papel de ${name}`} value={m.role} disabled={busy} onChange={(e) => void changeRole(e.target.value as Role)}>
               <option value="organizer">Organiza</option>
               <option value="editor">Pode editar</option>
               <option value="viewer">Só consulta</option>
             </select>
-          </label>
+          </Field>
         ) : null}
-        <button type="button" className="btn btn-danger tap" onClick={() => void remove()} disabled={busy}>{self ? 'Sair da trilha' : `Remover ${name}`}</button>
+        <Button variant="secondary" style={{ color: 'var(--warn)' }} onClick={() => void remove()} disabled={busy}>{self ? 'Sair da trilha' : `Remover ${name}`}</Button>
       </div>
     </Sheet>
   );
@@ -330,19 +316,19 @@ export function InviteSheet({ onClose }: { onClose: () => void }) {
             </FieldGrid>
             <Button onClick={create} disabled={busy}><Icon name="plus" size={18} />Gerar link de convite</Button>
             {link ? (
-              <div className="field">
-                <label htmlFor="convite-link">Link (aparece só agora)</label>
+              <div className={fs.field}>
+                <label htmlFor="convite-link" className={fs.label}>Link (aparece só agora)</label>
                 <input id="convite-link" readOnly value={link} onFocus={(e) => e.target.select()} />
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   <Button variant="secondary" size="sm" onClick={() => void copy()}><Icon name="link" size={16} />Copiar</Button>
                   {typeof navigator !== 'undefined' && 'share' in navigator ? <Button variant="secondary" size="sm" onClick={() => void share()}>Compartilhar</Button> : null}
                 </div>
-                <span className="hint">Quem abrir precisa entrar na conta. Saber o endereço da trilha não dá acesso: só o convite válido.</span>
+                <span className={fs.hint}>Quem abrir precisa entrar na conta. Saber o endereço da trilha não dá acesso: só o convite válido.</span>
               </div>
             ) : null}
             {invites.length ? (
               <div>
-                <h3 className="h3">Convites</h3>
+                <h3 className={t.label}>Convites</h3>
                 <ul className={t.invites}>
                   {invites.map((i) => {
                     const expired = Date.parse(i.expires_at) <= now;

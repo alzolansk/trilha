@@ -125,7 +125,8 @@ test.describe('Onboarding roteirizado', () => {
     await expect(sheet).toContainText('Hallgrímskirkja');
     await expect(sheet).toContainText('Sugestão ampla');
     await expect(sheet.getByRole('button', { name: /Custos estimados/ })).toBeVisible();
-    expect(calls.filter((k) => k === 'place_detail')).toHaveLength(1);
+    // O passo 3 pré-carrega o detalhe de cada lugar; abrir a janela não pede o mesmo lugar de novo.
+    expect(calls.bodies.filter((x) => x.kind === 'place_detail' && x.name === 'Reykjavík')).toHaveLength(1);
     await sheet.getByRole('button', { name: /Fechar/ }).first().click();
     await page.getByRole('button', { name: 'Montar o roteiro' }).click();
 
@@ -266,6 +267,17 @@ test.describe('Onboarding roteirizado', () => {
     await page.getByRole('button', { name: 'Passo 4: Roteiro' }).click();
     await expect(page.getByTestId('route-timeline')).toBeVisible();
     expect(calls.filter((c) => c === 'route')).toHaveLength(2);
+  });
+
+  test('recarregar no passo 4 não pede a rota à IA de novo', async ({ page }) => {
+    const calls = await mockAi(page);
+    await page.goto('/demo/islandia/montar?passo=4');
+    await expect(page.locator('[data-stop="Höfn"]')).toBeVisible();
+    expect(calls.filter((k) => k === 'route')).toHaveLength(1);
+    await page.reload();
+    await expect(page.locator('[data-stop="Höfn"]')).toBeVisible();
+    await expect(page.locator('[data-stop="Reykjavík"]')).toBeVisible();
+    expect(calls.filter((k) => k === 'route')).toHaveLength(1);
   });
 
   test('dormir numa cidade vizinha mais barata é opcional e vai para a parada', async ({ page }) => {

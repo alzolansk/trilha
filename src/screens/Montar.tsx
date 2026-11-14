@@ -25,15 +25,15 @@ import { MODE_LABEL } from '../lib/format';
 import { formatMoney } from '../lib/money';
 import {
   adjustNights, applyPlaceInfo, assignTourDays, infoOf, keepStayChoices, markOf, stayAltSaving, needsInfo, routeCost, stopCost, type StopCost, cutSuggestions, datesFor, dayTripTours, defaultMarks, foodByCountry,
-  MAX_ROUTE_CALLS, minNightsOfMust, moveStop, namesBy, nightsOf, parseOnboarding, placeKey, preselectTours, removeStop, routeToRows, stayEstimatesOf, TRIP_STYLE_OF, wishesAt,
+  MAX_ROUTE_CALLS, minNightsOfMust, moveStop, namesBy, nightsOf, parseOnboarding, placeKey, preselectTours, removeStop, routeToRows, staleLegs, stayEstimatesOf, TRIP_STYLE_OF, wishesAt,
 } from '../lib/onboarding';
 import { headcount } from '../lib/people';
-import { dayMonth } from '../lib/format';
+import { dayMonth, plural } from '../lib/format';
 import { daysBetween } from '../lib/time';
-import { Badge, Button, Checkbox, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, type PhotoData } from '../components/ui';
+import { Badge, Button, Card, Checkbox, Chip, EmptyState, EstimateBadge, Field, Icon, IconButton, MoneyInput, Photo, ScreenHeader, Segmented, type PhotoData } from '../components/ui';
 import type { IconName } from '../components/ui/icons.data';
 import { ChatOptions, StepChat, TrilhaBubble } from '../components/ui/StepChat';
-import { AI_STEPS, AiThinking, Busy } from '../components/ui/Loader';
+import { AI_STEPS, AiBusy, AiThinking, Busy, PageLoader } from '../components/ui/Loader';
 import { useAction, useConfirm } from '../components/ui/feedback';
 import { InviteSheet } from './Turma';
 import { DeckSummary, TourDeck, type Decision, type DeckGroup } from './TourDeck';
@@ -63,7 +63,18 @@ const DEFAULT_PREFS: OnboardingPrefs = { vibes: ['cidade', 'comida', 'cultura'],
 
 type AiFail = { unavailable: boolean; error: string } | null;
 
+/**
+ * O rascunho (trips.onboarding) só vale depois da primeira carga da fonte: na demo, o pacote inicial é o
+ * estático (sem o rascunho guardado na aba); em conta real, a cópia local pode estar atrás do banco.
+ * Esperar evita pedir de novo à IA o que já está no rascunho.
+ */
 export default function Montar() {
+  const { synced } = useBundle();
+  if (!synced) return <PageLoader />;
+  return <MontarSteps />;
+}
+
+function MontarSteps() {
   const { bundle: b, base, source, reload, canEdit, me } = useBundle();
   const { online } = useAuth();
   const router = useRouter();
@@ -767,6 +778,7 @@ function StepRoute({ b, ob, persist, saveDetail, go, busy, run, money, online, m
   const [replace, setReplace] = useState(false);
   const [err, setErr] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [pricing, setPricing] = useState(false);
   const [sheet, setSheet] = useState<RouteSheetState>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -884,6 +896,27 @@ function StepRoute({ b, ob, persist, saveDetail, go, busy, run, money, online, m
     edit(removeStop(route, i, nights));
   };
   const canAsk = calls < MAX_ROUTE_CALLS && online;
+  // Trechos que perderam o preço ao reordenar ou trocar cidades: dá para estimar aqui mesmo, sem esperar o Orçamento.
+  const unpriced = route ? staleLegs(route) : [];
+  const priceLegs = async () => {
+    if (!route) return;
+    const keyed: [string, RouteLeg | null][] = [['ida', route.outbound], ...route.legs.map((l, j) => [`t${j}`, l] as [string, RouteLeg]), ['volta', route.return]];
+    const ask = keyed.filter(([, l]) => l && l.cost_low == null).map(([key, l]) => ({ key, from: l!.from.slice(0, 80), to: l!.to.slice(0, 80), mode: l!.mode }));
+    if (!ask.length) return;
+    setPricing(true);
+    setErr('');
+    const r = await callAi<{ items: { transport_id: string; low: number; high: number }[] }>('estimate', { kind: 'transport', tripId: b.trip.id, legs: ask });
+    setPricing(false);
+    if (!r?.data.items.length) { setErr('A Trilha não conseguiu estimar os trechos agora. O Orçamento calcula depois.'); return; }
+    const by = new Map(r.data.items.map((i) => [i.transport_id, i]));
+    const fix = (key: string, l: RouteLeg | null): RouteLeg | null => {
+      const x = by.get(key);
+      return l && x ? { ...l, cost_low: x.low, cost_high: x.high } : l;
+    };
+    const next: RouteProposal = { ...route, outbound: fix('ida', route.outbound), legs: route.legs.map((l, j) => fix(`t${j}`, l)!), return: fix('volta', route.return) };
+    setRoute(next);
+    await persist({ ...ob, route: next }).catch(() => undefined);
+  };
   const sendFeedback = () => { const f = feedback.trim(); if (f && canAsk) void fetchRoute({ feedback: f }); };
   const missingWishes = route.wishes.filter((w) => !w.stop);
   const missingMust = route.left_out.filter((l) => mustNames.has(placeKey(l.name)) || markOf(l.name, places, marks).added);
@@ -1100,6 +1133,13 @@ function StepRoute({ b, ob, persist, saveDetail, go, busy, run, money, online, m
               </div>
             ))}
           </section>
+        ) : null}
+
+        {unpriced.length && source.kind === 'supabase' ? (
+          <Card variant="suggest" pad="md" className={s.priceLegs} role="group" aria-label="Trechos sem preço">
+            <span>{plural(unpriced.length, 'trecho ficou', 'trechos ficaram')} sem preço depois da mudança. A Trilha pode estimar agora ou o Orçamento calcula depois.</span>
+            <Button size="sm" variant="secondary" disabled={pricing || !online} onClick={() => void priceLegs()}>{pricing ? <AiBusy steps={['Estimando', 'Olhando passagens']} /> : 'Atualizar preços dos trechos'}</Button>
+          </Card>
         ) : null}
 
         <section className={s.feedback} aria-labelledby="ajuste">

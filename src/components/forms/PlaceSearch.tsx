@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
+import fs from '../ui/Field.module.css';
 import styles from '../../screens/roteiro.module.css';
 
 export interface Place {
@@ -59,8 +60,8 @@ export function PlaceSearch({ label, value, onText, onPick, placeholder, require
   }, [value, enabled]);
 
   return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
+    <div className={fs.field}>
+      <label htmlFor={id} className={fs.label}>{label}</label>
       <input
         id={id}
         value={value}
@@ -75,7 +76,7 @@ export function PlaceSearch({ label, value, onText, onPick, placeholder, require
         onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
       />
       {enabled ? (
-        <span className="hint" aria-live="polite">
+        <span className={fs.hint} aria-live="polite">
           {status === 'loading' ? 'Buscando lugares…' : status === 'error' ? 'Busca de lugares indisponível: o texto digitado será usado.' : status === 'empty' ? 'Nenhum lugar encontrado. Pode salvar só com o nome.' : results.length ? 'Escolha uma sugestão para salvar país e coordenadas.' : ''}
         </span>
       ) : null}
@@ -98,7 +99,7 @@ export function PlaceSearch({ label, value, onText, onPick, placeholder, require
               </button>
             </li>
           ))}
-          <li className="mono" style={{ fontSize: 10, padding: '6px 12px', color: 'var(--mute)' }}>© OpenStreetMap contributors</li>
+          <li className="num" style={{ fontSize: 10, padding: '6px 12px', color: 'var(--mute)' }}>© OpenStreetMap contributors</li>
         </ul>
       ) : null}
     </div>

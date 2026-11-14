@@ -2,7 +2,6 @@
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useAction, useConfirm } from '../components/ui/feedback';
-import { PageTitle } from '../components/ui/primitives';
 import { Placeholder } from '../components/ui/Photo';
 import { useAuth } from '../data/AuthContext';
 import { useBundle } from '../data/TripContext';
@@ -11,7 +10,8 @@ import type { TripStyle } from '../data/types';
 import { ACCENT_CHOICES } from '../lib/identity/accent';
 import { centsToDecimal, toCents } from '../lib/money';
 import { instantToWall, isValidTimeZone, listTimeZones, wallToInstant } from '../lib/time';
-import { Button, Field, FieldGrid } from '../components/ui';
+import { Button, Card, Field, FieldGrid, ScreenHeader } from '../components/ui';
+import s from './editTrip.module.css';
 
 const STYLES: TripStyle[] = ['Mochilão', 'Conforto', 'Aventura', 'Cultural'];
 
@@ -37,7 +37,7 @@ export default function EditTrip() {
   const tzs = useMemo(() => listTimeZones(), []);
   const ok = v.title.trim() && v.end >= v.start && isValidTimeZone(v.tz) && isValidTimeZone(v.home) && /^[A-Z]{3}$/.test(v.currency);
 
-  if (!canEdit) return <div className="wrap"><PageTitle title="Dados da trilha" sub="Só organizador e editores alteram os dados da trilha." /></div>;
+  if (!canEdit) return <div className="wrap"><ScreenHeader title="Dados da trilha" subtitle="Só organizador e editores alteram os dados da trilha." /></div>;
 
   const pickAccent = (hex: string | null) =>
     run(async () => {
@@ -82,44 +82,44 @@ export default function EditTrip() {
 
   return (
     <div className="wrap">
-      <PageTitle eyebrow={t.title} title="Dados da trilha" sub="Datas, horário e fuso do embarque alimentam o countdown." />
-      <section className="split">
-        <div className="col-main card" style={{ padding: 26, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <ScreenHeader eyebrow={t.title} title="Dados da trilha" subtitle="Datas, horário e fuso do embarque alimentam o countdown." />
+      <section className={s.split}>
+        <Card pad="lg" className={s.main}>
           <Field label="Nome da trilha"><input value={v.title} maxLength={80} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
-          <Field label="Destinos (separados por vírgula)"><input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" />{!t.destinations.length ? <span className="hint">Fechou o destino? Escreva aqui e salve.</span> : null}</Field>
+          <Field label="Destinos (separados por vírgula)" hint={!t.destinations.length ? 'Fechou o destino? Escreva aqui e salve.' : undefined}><input value={v.destinations} onChange={(e) => setV({ ...v, destinations: e.target.value })} placeholder="Paraty" /></Field>
           <FieldGrid>
             <Field label="Ida"><input type="date" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></Field>
             <Field label="Volta"><input type="date" value={v.end} min={v.start} onChange={(e) => setV({ ...v, end: e.target.value })} /></Field>
-            <Field label="Horário do embarque"><input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /><span className="hint">Sem horário, o countdown conta até 00:00 do dia da ida.</span></Field>
-            <Field label="Fuso do embarque"><input list="tzs" value={v.tz} onChange={(e) => setV({ ...v, tz: e.target.value })} />{!isValidTimeZone(v.tz) ? <span className="err">Fuso desconhecido.</span> : null}</Field>
+            <Field label="Horário do embarque" hint="Sem horário, o countdown conta até 00:00 do dia da ida."><input type="time" value={v.time} onChange={(e) => setV({ ...v, time: e.target.value })} /></Field>
+            <Field label="Fuso do embarque" error={!isValidTimeZone(v.tz) ? 'Fuso desconhecido.' : undefined}><input list="tzs" value={v.tz} onChange={(e) => setV({ ...v, tz: e.target.value })} /></Field>
             <Field label="Origem (IATA ou cidade)"><input value={v.origin} maxLength={60} onChange={(e) => setV({ ...v, origin: e.target.value })} placeholder="GRU" /></Field>
             <Field label="Seu fuso de casa"><input list="tzs" value={v.home} onChange={(e) => setV({ ...v, home: e.target.value })} /></Field>
             <Field label="Estilo"><select value={v.style} onChange={(e) => setV({ ...v, style: e.target.value as TripStyle })}>{STYLES.map((x) => <option key={x}>{x}</option>)}</select></Field>
-            <Field label="Moeda base"><input value={v.currency} maxLength={3} onChange={(e) => setV({ ...v, currency: e.target.value.toUpperCase() })} /><span className="hint">Gastos já registrados mantêm a taxa gravada.</span></Field>
+            <Field label="Moeda base" hint="Gastos já registrados mantêm a taxa gravada."><input value={v.currency} maxLength={3} onChange={(e) => setV({ ...v, currency: e.target.value.toUpperCase() })} /></Field>
             <Field label="Pessoas na viagem" hint={`Contando quem ainda não está no app. ${b.members.length} no app agora.`}><input type="number" inputMode="numeric" min={1} max={50} value={v.party} onChange={(e) => setV({ ...v, party: Number(e.target.value) })} /></Field>
             <Field label="Orçamento total"><input inputMode="decimal" value={v.budget} onChange={(e) => setV({ ...v, budget: e.target.value })} /></Field>
             <Field label="Etiqueta (opcional)"><input value={v.tagline} maxLength={40} onChange={(e) => setV({ ...v, tagline: e.target.value })} placeholder="Mochilão de verão" /></Field>
           </FieldGrid>
           <datalist id="tzs">{tzs.map((z) => <option key={z} value={z} />)}</datalist>
           <Button style={{ alignSelf: 'flex-start' }} disabled={!ok || busy} onClick={save}>Salvar</Button>
-        </div>
-        <div className="col-side" style={{ gap: 16 }}>
-          <h2 className="disp" style={{ margin: 0, fontSize: 24 }}>Aparência</h2>
+        </Card>
+        <div className={s.side}>
+          <h2 className="title" style={{ margin: 0, fontSize: 24 }}>Aparência</h2>
           {/* Trilha 2.0: a identidade por destino virou uma cor só (trips.accent, planning §6.7 / §7). */}
-          <div className="card" style={{ overflow: 'hidden' }}>
+          <Card pad="none" style={{ overflow: 'hidden' }}>
             <div style={{ position: 'relative', height: 120 }}><Placeholder label="Capa sem foto na cor da trilha" /></div>
             <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <span style={{ fontSize: 14, color: 'var(--ink-2)' }}>Cor da trilha. Aparece na capa sem foto, no mapa e em pequenos detalhes.</span>
               <div role="radiogroup" aria-label="Cor da trilha" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 <button
-                  type="button" role="radio" aria-checked={!t.accent} className="tap" onClick={() => pickAccent(null)} disabled={busy}
+                  type="button" role="radio" aria-checked={!t.accent} className="press" onClick={() => pickAccent(null)} disabled={busy}
                   style={{ height: 36, padding: '0 12px', borderRadius: 999, border: !t.accent ? '2px solid var(--ink)' : '1px solid var(--line)', background: 'var(--surface)', fontSize: 13, fontWeight: 600 }}
                 >Automática</button>
                 {ACCENT_CHOICES.map((c) => {
                   const on = t.accent?.toUpperCase() === c.hex;
                   return (
                     <button
-                      key={c.hex} type="button" role="radio" aria-checked={on} aria-label={c.name} title={c.name} className="tap" disabled={busy}
+                      key={c.hex} type="button" role="radio" aria-checked={on} aria-label={c.name} title={c.name} className="press" disabled={busy}
                       onClick={() => pickAccent(c.hex)}
                       style={{ width: 36, height: 36, borderRadius: 999, background: c.hex, border: on ? '3px solid var(--surface)' : 0, boxShadow: on ? '0 0 0 2px var(--ink)' : 'none' }}
                     />
@@ -131,7 +131,7 @@ export default function EditTrip() {
                 {' '}<span aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 999, background: accent, verticalAlign: 'middle' }} />
               </span>
             </div>
-          </div>
+          </Card>
           {isOrganizer ? <Button variant="secondary" style={{ color: "var(--warn)", marginTop: 32 }} onClick={del}>Excluir trilha</Button> : null}
         </div>
       </section>

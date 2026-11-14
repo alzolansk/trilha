@@ -194,6 +194,24 @@ function Photo({ p, onDelete }: { p: JournalPhoto; onDelete?: () => void }) {
   );
 }
 
+/** Foto escolhida, ainda não enviada: miniatura local com "Tirar". */
+function PendingPhoto({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) return;
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return (
+    <figure className={`${s.photo} ${s.pending}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? <img src={url} alt="" /> : <span className={s.heic}>HEIC</span>}
+      <IconButton icon="close" label={`Tirar ${file.name}`} variant="light" size={40} className={s.rm} onClick={onRemove} />
+    </figure>
+  );
+}
+
 function EntryList({ entries, onEdit }: { entries: JournalEntry[]; onEdit: (e: JournalEntry) => void }) {
   const { bundle: b, me, profileOf, canEdit } = useBundle();
   if (!entries.length) return <p className={s.none}>Nada por aqui ainda.</p>;
@@ -392,18 +410,29 @@ function EntryDialog({ entry, stopId, kind, phase, onClose, me }: { entry: Journ
         <Field label="Parada"><select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}><option value="">Sem parada</option>{stops.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
         <Field label="Dia"><input type="date" value={v.entry_date} onChange={(e) => setV({ ...v, entry_date: e.target.value })} /></Field>
       </FieldGrid>
-      <Field label={kind === 'inspiracao' ? 'Lugar ou ideia' : 'Título (opcional)'}><input value={v.title} maxLength={120} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
-      <Field label={kind === 'inspiracao' ? 'Por que quer ver' : 'Como foi'}><textarea rows={4} maxLength={10000} value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} /></Field>
+      <Field label={kind === 'inspiracao' ? 'Lugar ou ideia' : 'Título (opcional)'}><input className={s.titleInput} value={v.title} maxLength={120} onChange={(e) => setV({ ...v, title: e.target.value })} placeholder={kind === 'inspiracao' ? 'Mirante de Sacsayhuamán' : 'O dia do trem'} /></Field>
+      <Field label={kind === 'inspiracao' ? 'Por que quer ver' : 'Como foi'}><textarea rows={5} maxLength={10000} value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} placeholder={kind === 'inspiracao' ? 'Vi num vídeo, dizem que o pôr do sol é lindo…' : 'O que aconteceu, o que comeram, quem riu de quê…'} /></Field>
       {kind === 'inspiracao' ? (
         <FieldGrid>
           <Field label="Link" error={!linkOk ? 'Use um link http(s).' : undefined}><input type="url" value={v.link_url} maxLength={500} onChange={(e) => setV({ ...v, link_url: e.target.value })} placeholder="https://" /></Field>
           <Field label="Nome do lugar"><input value={v.place_name} maxLength={120} onChange={(e) => setV({ ...v, place_name: e.target.value })} /></Field>
         </FieldGrid>
       ) : null}
-      {photos.length ? <div className={s.photos}>{photos.map((p) => <Photo key={p.id} p={p} onDelete={() => void delPhoto(p)} />)}</div> : null}
-      <Field label="Fotos (comprimidas para economizar espaço)" hint={files.length ? `${files.length} foto(s) serão enviadas ao salvar.` : undefined}>
-        <input type="file" accept="image/*,.heic,.heif" multiple onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 12))} />
-      </Field>
+      <div className={s.photoField}>
+        <span className={s.photoLabel}>Fotos</span>
+        {photos.length || files.length ? (
+          <div className={s.photos}>
+            {photos.map((p) => <Photo key={p.id} p={p} onDelete={() => void delPhoto(p)} />)}
+            {files.map((f, i) => <PendingPhoto key={`${f.name}-${i}`} file={f} onRemove={() => setFiles(files.filter((_, j) => j !== i))} />)}
+          </div>
+        ) : null}
+        <label className={s.pick}>
+          <Icon name="camera" size={20} />
+          <span>{files.length || photos.length ? 'Adicionar mais fotos' : 'Adicionar fotos'}</span>
+          <input type="file" className="sr" accept="image/*,.heic,.heif" multiple onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])].slice(0, 12)); e.target.value = ''; }} />
+        </label>
+        <span className={s.photoHint}>{files.length ? `${files.length} foto(s) serão enviadas ao salvar. ` : ''}As fotos são comprimidas para economizar espaço (até 12 por vez).</span>
+      </div>
     </Dialog>
   );
 }

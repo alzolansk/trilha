@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { Sheet } from './Sheet';
+import { Button } from './Button';
 import { ConflictError, humanError } from '../../data/source';
 
 // ───── Toast (SPEC §7) ─────
@@ -19,7 +20,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={show}>
       {children}
-      <div className={`toast${on ? ' on' : ''}`} role="status" aria-live="polite">
+      <div className={`toast${on ? 'on' : ''}`} role="status" aria-live="polite">
         {msg}
       </div>
     </ToastCtx.Provider>
@@ -62,12 +63,12 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         closeOnBack={false}
         footer={
           <>
-            <button className="btn tap" onClick={() => done(false)}>
+            <Button variant="secondary" onClick={() => done(false)}>
               Cancelar
-            </button>
-            <button className="btn btn-primary tap" onClick={() => done(true)} autoFocus>
+            </Button>
+            <Button onClick={() => done(true)} autoFocus>
               {opts?.confirmLabel ?? 'Excluir'}
-            </button>
+            </Button>
           </>
         }
       >

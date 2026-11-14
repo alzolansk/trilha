@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBundle } from '../data/TripContext';
 import { useAuth } from '../data/AuthContext';
-import Link from 'next/link';
 import { budgetFromPlan, budgetRange, capPerPerson, describeChanges, diffSince, foodLevels, FOODS, initialPlan, ROOMS, stayOptions, tourOptions, transportLegs, virtualLegs } from '../lib/budgetPlan';
 import { foodByCountry } from '../lib/onboarding';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -11,6 +10,7 @@ import { categoryKind, formatMoney, toCents } from '../lib/money';
 import { closeBudget } from '../data/budgetActions';
 import { callAi } from '../lib/ai/client';
 import { Button } from '../components/ui/Button';
+import fs from '../components/ui/Field.module.css';
 import { Checkbox } from '../components/ui/Checkbox';
 import { EstimateBadge } from '../components/ui/Badge';
 import { Progress } from '../components/ui/Progress';
@@ -47,7 +47,7 @@ export default function Orcamento() {
   const perPerson = Math.round((result.totalCents + extras) / result.people);
   const cap = capPerPerson(b);
   const money = (v: number) => formatMoney(v, b.trip.base_currency, { compact: true });
-  const changes = describeChanges(diffSince(plan.snapshot, b, result), money);
+  const changes = describeChanges(diffSince(plan.snapshot, b, result), money, (v, cur) => formatMoney(v, cur ?? b.trip.base_currency, { compact: true }));
   const virtualIds = new Set<string>(virtualLegs(b).map((v) => v.key));
   const invalid = Object.values(typed).some((v) => v.trim() && (!Number.isFinite(toCents(v)) || toCents(v) < 0 || toCents(v) > 100000000000));
   const missing = result.lines.filter((l) => l.kind !== 'hospedagem').reduce((n, l) => n + l.missing, 0);
@@ -103,7 +103,7 @@ export default function Orcamento() {
   // Roteiro vazio: sem total (um número só com a comida engana). Planning §10.10.2.
   if (result.empty) return <div className="wrap"><div className={s.budget}><ScreenHeader back={`${base}/dinheiro`} title="Quanto custa essa trilha?" subtitle="Dinheiro · montar orçamento" />
     <EmptyState icon="route" title="A Trilha ainda não sabe por onde vocês vão." text={`Sem cidades no roteiro, não dá pra calcular hospedagem, trechos e passeios dos ${result.days} dias. Monte o roteiro e o orçamento sai pronto.`}
-      action={canEdit ? <div className={s.stack}>{source.kind === 'supabase' ? <Link className="btn" href={`${base}/montar?passo=3`}>Montar o roteiro com a Trilha</Link> : null}<Link className="btn btn-ghost" href={`${base}/roteiro`}>Adicionar paradas eu mesmo</Link></div> : null} />
+      action={canEdit ? <div className={s.stack}>{source.kind === 'supabase' ? <Button variant="secondary" href={`${base}/montar?passo=3`}>Montar o roteiro com a Trilha</Button> : null}<Button variant="ghost" href={`${base}/roteiro`}>Adicionar paradas eu mesmo</Button></div> : null} />
   </div></div>;
   return <div className="wrap"><div className={s.budget}><ScreenHeader back={`${base}/dinheiro`} title="Quanto custa essa trilha?" subtitle="Dinheiro · montar orçamento" /><div className={s.stack}>
     <section className={s.summary} aria-label="Total do orçamento" aria-live="polite"><div className={s.row}><div><small>Por pessoa</small><br /><strong data-testid="budget-total">≈ {money(perPerson)}</strong></div><div><small>Turma ({result.people})</small><br /><b>≈ {money(result.totalCents + extras)}</b></div></div><EstimateBadge />
@@ -116,7 +116,7 @@ export default function Orcamento() {
     {changes.length ? <p className={s.note}>Mudou desde a última vez: {changes.join(' · ')}. O total acima já considera o roteiro atual.</p> : null}
     {asking ? <AiThinking steps={AI_STEPS.estimate} title={asking === 'transport' ? 'A IA está estimando o transporte' : asking === 'stays' ? 'A IA está estimando a hospedagem' : 'A IA está estimando a comida'} lines={0} compact /> : notice ? <p role="status" className={s.note}>{notice}</p> : null}
     <StepChat label="Montar orçamento">
-      <TrilhaBubble step="1 · Transporte">Calculei o <b>transporte</b> pelo roteiro. Confere?</TrilhaBubble><ChatOptions><div className={s.panel}>{legs.map((l) => <div className={s.item} key={l.id}><span>{l.title}<small>{l.isEstimate ? <><EstimateBadge /> {ranges[l.id] ? `${money(ranges[l.id].low)}–${money(ranges[l.id].high)}` : 'valor médio de planejamento'}</> : l.from === 'roteiro' ? 'informado pela turma' : 'sem preço'}</small></span><label className="field" style={{ width: 125, flexShrink: 0 }}><span className="sr">Preço {l.title}</span><input inputMode="decimal" disabled={!canEdit || busy} placeholder="Preço" value={typed[l.id] ?? (l.perPersonCents == null ? '' : (l.perPersonCents / 100).toFixed(2).replace('.', ','))} onChange={(e) => {
+      <TrilhaBubble step="1 · Transporte">Calculei o <b>transporte</b> pelo roteiro. Confere?</TrilhaBubble><ChatOptions><div className={s.panel}>{legs.map((l) => <div className={s.item} key={l.id}><span>{l.title}<small>{l.isEstimate ? <><EstimateBadge /> {ranges[l.id] ? `${money(ranges[l.id].low)}–${money(ranges[l.id].high)}` : 'valor médio de planejamento'}</> : l.from === 'roteiro' ? 'informado pela turma' : 'sem preço'}</small></span><label className={fs.field} style={{ width: 125, flexShrink: 0 }}><span className="sr">Preço {l.title}</span><input inputMode="decimal" disabled={!canEdit || busy} placeholder="Preço" value={typed[l.id] ?? (l.perPersonCents == null ? '' : (l.perPersonCents / 100).toFixed(2).replace('.', ','))} onChange={(e) => {
         const v = e.target.value; setTyped({ ...typed, [l.id]: v }); setConfirmed(false);
         // Voo virtual (ida/volta) não tem trecho: o valor digitado vai direto para o plano.
         if (l.virtual) setPlan((p) => ({ ...p, transport_cents: { ...p.transport_cents, [l.id]: v.trim() && Number.isFinite(toCents(v)) ? toCents(v) : undefined } as Record<string, number> }));

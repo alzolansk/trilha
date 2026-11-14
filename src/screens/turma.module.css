@@ -23,7 +23,6 @@
 .optEdit { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); }
 .types { display: flex; flex-wrap: wrap; gap: 6px; }
 .warn { margin: 0; font-size: 14px; border-left: 3px solid var(--brand); padding-left: 10px; }
-.optEdit > :global(.err) { font-weight: 500; color: var(--ink); border-left: 3px solid var(--brand); padding-left: 8px; }
 /* Fase 2: atalhos para as subtelas da Turma */
 .hub { display: flex; flex-direction: column; padding: 4px 16px; border-radius: var(--r-card); background: var(--surface); }
 
@@ -66,3 +65,9 @@ button.member { cursor: pointer; }
 .invites { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .invites li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 @media (min-width: 821px) { .members { grid-auto-columns: calc((100% - 24px) / 4); } }
+
+/* ex-classes globais (.h3, .err, .hint) */
+.label { margin: 0 0 12px; display: flex; align-items: center; gap: 8px; font: 700 13px/1.3 var(--font-body); letter-spacing: 0; color: var(--mute); }
+.optErr { font-weight: 500; font-size: 13px; color: var(--ink); border-left: 3px solid var(--brand); padding-left: 8px; }
+.fieldErr { font: 600 13px/1.4 var(--font-body); color: var(--warn); }
+.pollCard { background: var(--surface); border-radius: var(--r-card); }

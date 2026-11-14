@@ -271,3 +271,33 @@ describe('passagem de ida e volta (splitFlights)', () => {
       .toEqual({ out: { cost_low: 500000, cost_high: 600000 }, back: { cost_low: 30000, cost_high: 40000 } });
   });
 });
+
+describe('Orçamento · aviso item a item', () => {
+  const andes = () => structuredClone(buildDemoBundle('andes')) as TripBundle;
+
+  it('aponta trecho que mudou de preço e passeio que entrou ou saiu', () => {
+    const b = andes();
+    const snap = snapshotOf(b, '2026-11-14');
+    const t = b.transports.find((x) => x.price_cents != null)!;
+    const gone = b.activities.find((x) => x.cost_cents != null)!;
+    const after = {
+      ...b,
+      transports: b.transports.map((x) => (x.id === t.id ? { ...x, price_cents: (x.price_cents ?? 0) + 5000 } : x)),
+      activities: [...b.activities.filter((x) => x.id !== gone.id), { ...gone, id: 'novo', title: 'Rafting no Urubamba', cost_cents: 12000 }],
+    } as TripBundle;
+    const changes = diffSince(snap, after);
+    expect(changes.map((c) => c.kind).sort()).toEqual(['price', 'tour_added', 'tour_removed']);
+    const text = describeChanges(changes, undefined, (c, cur) => `${cur} ${c / 100}`);
+    expect(text.some((l) => l.includes('→') && l.includes(`${t.price_currency} ${(t.price_cents ?? 0) / 100}`))).toBe(true);
+    expect(text).toContain(`+ passeio Rafting no Urubamba (${gone.cost_currency} 120)`);
+    expect(text).toContain(`- passeio ${gone.title}`);
+  });
+
+  it('orçamento antigo, sem a foto dos itens, não inventa mudanças', () => {
+    const b = andes();
+    const { items: _items, ...old } = snapshotOf(b, '2026-11-14');
+    void _items;
+    const after = { ...b, transports: b.transports.map((x) => ({ ...x, price_cents: 1 })) } as TripBundle;
+    expect(diffSince(old, after)).toEqual([]);
+  });
+});

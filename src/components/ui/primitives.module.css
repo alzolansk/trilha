@@ -1,0 +1,6 @@
+.ai { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px; background: var(--suggest-bg); border: 1.5px dashed var(--brand-on-dark); line-height: 1.5; font-size: 14px; color: var(--ink-2); }
+.ai small { display: block; margin-top: 4px; font-size: 12px; color: var(--mute); }
+.aiTag { flex: none; display: inline-flex; align-items: center; gap: 4px; font: var(--t-micro); letter-spacing: .06em; padding: 4px 7px; border-radius: 6px; background: var(--brand); color: var(--on-brand); }
+.aiTag[data-src=rules] { background: var(--surface); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.tag { display: inline-flex; align-items: center; font: var(--t-micro); letter-spacing: .06em; padding: 3px 7px; border-radius: 6px; background: var(--brand-soft); color: var(--brand-ink); white-space: nowrap; }
+.tag[data-src=rules] { background: var(--field); color: var(--ink-2); }

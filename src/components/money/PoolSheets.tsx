@@ -6,6 +6,7 @@ import type { PoolContribution } from '../../data/types';
 import { memberPoolStatus, poolQuickAmounts, poolSummary, formatMoney, toCents, centsToDecimal } from '../../lib/money';
 import { todayIn } from '../../lib/time';
 import { Button } from '../ui/Button';
+import { Field } from '../ui/Field';
 import { Chip } from '../ui/Chip';
 import { MoneyInput } from '../ui/MoneyInput';
 import { Sheet } from '../ui/Sheet';
@@ -37,8 +38,8 @@ export function ContributionSheet({ entry, userId, onClose }: { entry?: PoolCont
     <fieldset><legend>Quem</legend><div className={s.chips}>{b.members.filter((m) => isOrganizer || m.user_id === who).map((m) => <Chip key={m.user_id} disabled={!!entry} selected={who === m.user_id} onClick={() => setWho(m.user_id)}>{profileOf(m.user_id)?.display_name ?? 'Pessoa'}</Chip>)}</div></fieldset>
     {entry ? <strong>{money(entry.amount_cents)}</strong> : <><MoneyInput label="Valor do aporte" currency={b.trip.base_currency} value={value} onChange={setValue} autoFocus />{quick && kind === 'deposit' ? <div className={s.chips}><Chip onClick={() => setValue(quick.missing)}>O que falta ({money(quick.missing)})</Chip><Chip onClick={() => setValue(quick.half)}>Metade ({money(quick.half)})</Chip><Chip onClick={() => setValue(null)}>Outro</Chip></div> : null}</>}
     <div className={s.chips}><Chip selected={kind === 'deposit'} disabled={!!entry} onClick={() => setKind('deposit')}>Aporte</Chip>{isOrganizer || kind === 'refund' ? <Chip selected={kind === 'refund'} disabled={!!entry} onClick={() => setKind('refund')}>Devolução</Chip> : null}</div>
-    <label className="field">Data<input type="date" disabled={!!entry} value={date} onChange={(e) => setDate(e.target.value)} /></label>
-    <label className="field">Nota (opcional)<input maxLength={300} disabled={!!entry} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Pix 12/11" /></label>
+    <Field label="Data"><input type="date" disabled={!!entry} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+    <Field label="Nota (opcional)"><input maxLength={300} disabled={!!entry} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Pix 12/11" /></Field>
     {!entry && after && value ? <div className={s.note} aria-live="polite">{profileOf(who)?.display_name} fica com {money(after.depositedCents)} de {money(after.targetCents)} · {after.status === 'completo' || after.status === 'em_dia' ? 'em dia ✓' : `faltam ${money(Math.max(0, after.targetCents - after.depositedCents))}`}<br />Caixa vai a {money(poolSummary(preview.expenses, preview.poolContributions).balance)}.</div> : null}
   </div></Sheet>;
 }
@@ -51,5 +52,5 @@ export function QuotasSheet({ onClose }: { onClose: () => void }) {
   return <Sheet open title="Definir cotas" onClose={onClose} footer={<Button disabled={!isOrganizer || !online || busy || !valid} onClick={() => void run(async () => {
     for (const m of b.members) await source.updateWhere('trip_members', { trip_id: b.trip.id, user_id: m.user_id }, { pool_target_cents: values[m.user_id] ? toCents(values[m.user_id]) : null });
     await reload(); onClose();
-  }, { success: 'Cotas atualizadas.' })}>Salvar cotas</Button>}><div className={s.form}><p>Deixe vazio para dividir o planejado igualmente. Zero significa que a pessoa não tem cota.</p>{b.members.map((m) => <label className="field" key={m.user_id}>{profileOf(m.user_id)?.display_name} ({b.trip.base_currency})<input inputMode="decimal" value={values[m.user_id]} placeholder="Igual para todos" onChange={(e) => setValues({ ...values, [m.user_id]: e.target.value })} /></label>)}<Button variant="secondary" onClick={() => setValues(Object.fromEntries(b.members.map((m) => [m.user_id, ''])))}>Todos iguais</Button></div></Sheet>;
+  }, { success: 'Cotas atualizadas.' })}>Salvar cotas</Button>}><div className={s.form}><p>Deixe vazio para dividir o planejado igualmente. Zero significa que a pessoa não tem cota.</p>{b.members.map((m) => <Field key={m.user_id} label={<>{profileOf(m.user_id)?.display_name} ({b.trip.base_currency})</>}><input inputMode="decimal" value={values[m.user_id]} placeholder="Igual para todos" onChange={(e) => setValues({ ...values, [m.user_id]: e.target.value })} /></Field>)}<Button variant="secondary" onClick={() => setValues(Object.fromEntries(b.members.map((m) => [m.user_id, ''])))}>Todos iguais</Button></div></Sheet>;
 }
