@@ -5,6 +5,9 @@ import { claimsAction, EXPLORE_RULES, suggestActivitySchema } from '@/lib/ai/pro
 import { consumeQuota, handle, HttpError, loadTripForUser, readJson, requireUser } from '@/lib/ai/server';
 import { activityCapForStop, nightlyCap } from '@/lib/explore';
 import { daysBetween } from '@/lib/time';
+import { parseOnboarding } from '@/lib/onboarding';
+import { parseProfile } from '@/lib/placeDetail';
+import { parseTourExtras } from '@/lib/tourInfo';
 import type { TripBundle } from '@/data/types';
 
 // Gera e GRAVA sugestões de passeio e de bairro para uma parada (planning §8.2).
@@ -39,6 +42,9 @@ export async function POST(req: Request) {
     const night = Math.round(nightlyCap(full) / 100);
     const planned = (bundle.activities ?? []).filter((a) => a.stop_id === stop.id).map((a) => `${a.day}: ${a.title}`);
     const known = new Set([...(bundle.activities ?? []).map((a) => a.title.toLowerCase())]);
+    // Perfil da turma (Montar a viagem): base para "combina com vocês". Sem perfil, esse selo não existe.
+    const profile = parseProfile(parseOnboarding(bundle.trip.onboarding)?.profile);
+    const tastes = profile ? [profile.summary, ...profile.traits.map((t) => t.label), ...profile.vibes].filter(Boolean).join('; ') : '';
     await consumeQuota(sb);
 
     const res = await runWithFallback(
@@ -48,12 +54,16 @@ export async function POST(req: Request) {
 Parada: ${stop.name}${stop.country ? `, ${stop.country}` : ''}, ${nights + 1} dia(s) (${stop.arrival_date} a ${stop.departure_date})${stop.altitude_m ? `, altitude ${stop.altitude_m} m` : ''}.
 Já no plano (dia: atividade): ${JSON.stringify(planned)}.
 ${cap ? `Teto de passeios por pessoa nesta parada: ${cap} ${cur}. Inclua grátis, opções que cabem e no máximo 1 que passa do teto.` : 'Sem teto definido: misture grátis, baratos e alguns mais caros.'}
-Sugira até 6 passeios ou atrações públicas (sem repetir o plano) e até 2 bairros para ficar${stop.area ? ` (a turma já escolheu ${stop.area}: não sugira bairros)` : ''}.
+${tastes ? `O que a turma contou de si: ${tastes}.
+` : ''}Sugira até 6 passeios ou atrações públicas (sem repetir o plano) e até 2 bairros para ficar${stop.area ? ` (a turma já escolheu ${stop.area}: não sugira bairros)` : ''}.
 "day_fit" = manha | tarde | noite | dia_todo. "effort" = leve | moderado | puxado. "cost_low"/"cost_high" = custo aproximado por pessoa (0 e 0 se grátis).
 ${night ? `Para bairros, "price_low"/"price_high" = faixa da diária para o grupo todo (teto ${night} ${cur}).` : 'Para bairros, "price_low"/"price_high" = faixa da diária para o grupo todo.'}
 Para bairros, "good" = o que é bom (até 6 palavras) e "watch" = o que pede atenção (até 6 palavras), ambos do ponto de vista de quem vai ficar ali.
+"what" = o que é o lugar ou passeio, numa frase neutra e concreta (ex.: "Cemitério subterrâneo dos primeiros cristãos, visitado com guia"), sem adjetivos de propaganda.
+"tag" = classico (o que quase todo visitante faz), achadinho (pouca gente vai, fora do roteiro comum)${tastes ? ' ou combina (liga direto a algo que a turma contou acima)' : ''}; "tag_reason" = o motivo em até 12 palavras. Na dúvida, deixe tag e tag_reason nulos.
+"why_go" = até 2 motivos curtos para ir; "caveats" = até 2 avisos práticos (fecha em tal dia, fila, claustrofobia, roupa); "booking_hint" = se precisa reservar antes. Nada de horário ou preço exato que você não saiba.
 "photo_query" = nome do lugar como aparece no título da Wikipedia (ex.: "Vinicunca", "Barranco (Lima)"); nunca um termo genérico.
-JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","effort":"leve","cost_low":0,"cost_high":0,"photo_query":"..."}],"areas":[{"name":"...","why":"...","price_low":0,"price_high":0,"photo_query":"...","good":"...","watch":"..."}]}`,
+JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","effort":"leve","cost_low":0,"cost_high":0,"photo_query":"...","what":"...","tag":"achadinho","tag_reason":"...","why_go":["..."],"caveats":["..."],"booking_hint":null}],"areas":[{"name":"...","why":"...","price_low":0,"price_high":0,"photo_query":"...","good":"...","watch":"..."}]}`,
       (raw) => {
         const v = suggestActivitySchema.safeParse(raw);
         if (!v.success) return null;
@@ -61,7 +71,7 @@ JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","e
         const areas = stop.area ? [] : (v.data.areas ?? []).filter((a) => fair(a.why));
         return items.length || areas.length ? { items, areas } : null;
       },
-      { maxTokens: 1500, temperature: 0.7 },
+      { maxTokens: 2600, temperature: 0.7 },
     );
     if (!res) throw new HttpError(502, 'A IA não respondeu agora. Tenta de novo daqui a pouco.');
 
@@ -70,7 +80,10 @@ JSON: {"items":[{"title":"...","why":"...","duration":"...","day_fit":"tarde","e
     const rows = [
       ...res.data.items.map((i) => ({
         trip_id: tripId, stop_id: stopId, kind: 'activity', source: 'ai',
-        payload: { title: i.title, why: i.why, duration: i.duration, day_fit: i.day_fit, effort: i.effort, cost_low: lo(i.cost_low, i.cost_high), cost_high: hi(i.cost_low, i.cost_high), currency: cur, photo_query: i.photo_query, model: `${res.provider}:${res.model}` },
+        payload: {
+          title: i.title, why: i.why, duration: i.duration, day_fit: i.day_fit, effort: i.effort, cost_low: lo(i.cost_low, i.cost_high), cost_high: hi(i.cost_low, i.cost_high), currency: cur, photo_query: i.photo_query,
+          ...parseTourExtras(i, { hasPreferences: !!tastes }), model: `${res.provider}:${res.model}`,
+        },
       })),
       ...res.data.areas.map((a) => ({
         trip_id: tripId, stop_id: stopId, kind: 'area', source: 'ai',

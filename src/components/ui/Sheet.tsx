@@ -16,6 +16,14 @@ export interface SheetProps {
   /** botão Voltar do Android/navegador fecha o sheet (padrão: sim) */
   closeOnBack?: boolean;
   size?: 'md' | 'lg';
+  /**
+   * `form` (padrão): modal central no desktop, para preencher.
+   * `panel`: painel de leitura que entra pela direita no desktop (bottom sheet alto no celular),
+   * para abrir algo e LER sobre ele (passeio, bilhete, bairro). Editar ali é tocar no próprio dado.
+   */
+  variant?: 'form' | 'panel';
+  /** topo sem margem (foto) antes do título, só no `panel` */
+  hero?: React.ReactNode;
 }
 
 let seq = 0;
@@ -28,7 +36,7 @@ let closing: { key: string; timer: ReturnType<typeof setTimeout> } | null = null
  * Foco preso pelo próprio `showModal`, Esc fecha, toque fora fecha e Voltar fecha (entrada no histórico).
  * Mesma API do antigo `Dialog`.
  */
-export function Sheet({ open, onClose, title, children, footer, labelledBy, description, closeOnBack = true, size = 'md' }: SheetProps) {
+export function Sheet({ open, onClose, title, children, footer, labelledBy, description, closeOnBack = true, size = 'md', variant = 'form', hero }: SheetProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const autoId = useId();
   const id = labelledBy ?? `sheet-${autoId.replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -84,7 +92,7 @@ export function Sheet({ open, onClose, title, children, footer, labelledBy, desc
   return (
     <dialog
       ref={ref}
-      className={`${s.sheet} ${size === 'lg' ? s.lg : ''}`}
+      className={`${s.sheet} ${size === 'lg' ? s.lg : ''} ${variant === 'panel' ? s.panel : ''}`}
       aria-labelledby={id}
       onClose={() => {
         if (open) onCloseRef.current();
@@ -104,12 +112,13 @@ export function Sheet({ open, onClose, title, children, footer, labelledBy, desc
       {open ? (
         <div className={s.in}>
           <span className={s.handle} aria-hidden="true" />
-          <header className={s.head}>
+          {hero ? <div className={s.hero}>{hero}<span className={s.heroClose}><IconButton icon="close" label="Fechar" variant="light" size={40} onClick={() => onCloseRef.current()} /></span></div> : null}
+          <header className={`${s.head} ${hero ? s.headHero : ''}`}>
             <div className={s.titles}>
               <h2 id={id} className={s.title}>{title}</h2>
               {description ? <p className={s.desc}>{description}</p> : null}
             </div>
-            <IconButton icon="close" label="Fechar" variant="secondary" size={40} onClick={() => onCloseRef.current()} />
+            {hero ? null : <IconButton icon="close" label="Fechar" variant="secondary" size={40} onClick={() => onCloseRef.current()} />}
           </header>
           <div className={s.body}>{children}</div>
           {footer ? <footer className={s.foot}>{footer}</footer> : null}

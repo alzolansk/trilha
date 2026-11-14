@@ -13,6 +13,7 @@ import { useAction, useConfirm } from '../ui/feedback';
 import { Field, FieldGrid } from '../ui/Field';
 import { formatMoneyTyping, parseMoneyInput } from '../ui/MoneyInput';
 import { Photo, type PhotoData } from '../ui/Photo';
+import { MoreDetails } from '../ui/MoreDetails';
 import { Sheet } from '../ui/Sheet';
 import { useAuth } from '../../data/AuthContext';
 import { saveActivityPlace } from '../../data/activityPlaces';
@@ -247,31 +248,39 @@ export function TransportSheet({ stop, t, onClose }: { stop: Stop; t: Transport 
   return (
     <Sheet open onClose={onClose} title={`Como chego em ${stop.name}`} size="lg" footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !okTz} onDelete={t ? () => void del() : undefined} />}>
       <div className={s.form}>
-        {t ? <PayItem type="transport" id={t.id} /> : null}
         <Field label="Meio de transporte"><select value={v.mode} onChange={(e) => setV({ ...v, mode: e.target.value as TransportMode })}>{MODES.map((m) => <option key={m} value={m}>{MODE_LABEL[m]}</option>)}</select></Field>
         <PriceField
           label="Valor por pessoa" text={v.price} currency={v.currency} currencies={tripCurrencies(b)} onText={(x) => setV({ ...v, price: x })} onCurrency={(c) => setV({ ...v, currency: c })}
           hint={t?.price_is_estimate && !priceChanged ? <span className={s.inline}><EstimateBadge /> preenchido pela Trilha. Confirme quando comprar.</span> : 'Entra no Orçamento como valor confirmado.'}
         />
         <FieldGrid>
-          {f('origin_name', 'Origem', { maxLength: 80 })}
-          {f('origin_code', 'Origem (código)', { maxLength: 8, placeholder: 'GRU' })}
-          {f('dest_name', 'Destino', { maxLength: 80 })}
-          {f('dest_code', 'Destino (código)', { maxLength: 8 })}
+          {f('origin_name', 'De onde', { maxLength: 80 })}
+          {f('dest_name', 'Para onde', { maxLength: 80 })}
           {f('depart_date', 'Data de saída', { type: 'date' })}
           {f('depart_time', 'Horário de saída (local)', { type: 'time' })}
           {f('arrive_date', 'Data de chegada', { type: 'date' })}
           {f('arrive_time', 'Horário de chegada (local)', { type: 'time' })}
-          {f('depart_tz', 'Fuso da saída', { list: 'tzlist2', placeholder: 'America/Sao_Paulo' })}
-          {f('arrive_tz', 'Fuso da chegada', { list: 'tzlist2', placeholder: 'America/Lima' })}
-          {f('booking_ref', 'Localizador', { maxLength: 40 })}
-          {f('seat', 'Assento / poltrona', { maxLength: 40 })}
-          {f('duration', 'Duração em minutos (se souber)', { type: 'number', min: 1, max: 10080 })}
-          <Field label="Passagem anexada"><select value={v.document_id} onChange={(e) => setV({ ...v, document_id: e.target.value })}><option value="">Nenhuma</option>{passDocs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></Field>
         </FieldGrid>
+        <MoreDetails label="Bilhete" hint={[v.booking_ref, v.seat].filter(Boolean).join(' · ') || 'localizador, poltrona, passagem'}>
+          <FieldGrid>
+            {f('booking_ref', 'Localizador', { maxLength: 40 })}
+            {f('seat', 'Assento / poltrona', { maxLength: 40 })}
+            <Field label="Passagem anexada"><select value={v.document_id} onChange={(e) => setV({ ...v, document_id: e.target.value })}><option value="">Nenhuma</option>{passDocs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></Field>
+          </FieldGrid>
+        </MoreDetails>
+        <MoreDetails label="Códigos, fusos e duração" hint="a Trilha deduz pelo aeroporto">
+          <FieldGrid>
+            {f('origin_code', 'Código de saída', { maxLength: 8, placeholder: 'GRU' })}
+            {f('dest_code', 'Código de chegada', { maxLength: 8 })}
+            {f('depart_tz', 'Fuso da saída', { list: 'tzlist2', placeholder: 'America/Sao_Paulo' })}
+            {f('arrive_tz', 'Fuso da chegada', { list: 'tzlist2', placeholder: 'America/Lima' })}
+            {f('duration', 'Duração em minutos (se souber)', { type: 'number', min: 1, max: 10080 })}
+          </FieldGrid>
+          <span className={s.note}>A duração é calculada sozinha quando datas, horários e fusos das duas pontas estão preenchidos.</span>
+        </MoreDetails>
         <datalist id="tzlist2">{listTimeZones().map((z) => <option key={z} value={z} />)}</datalist>
         {!okTz ? <span className={s.err}>Fuso desconhecido.</span> : null}
-        <span className={s.note}>A duração só é calculada quando datas, horários e fusos das duas pontas estão preenchidos. Com localizador, o trecho deixa de aparecer como “não reservado”.</span>
+        {t ? <PayItem type="transport" id={t.id} /> : null}
       </div>
     </Sheet>
   );
@@ -312,23 +321,28 @@ export function StaySheet({ stop, stay, onClose }: { stop: Stop; stay: Stay | nu
   return (
     <Sheet open onClose={onClose} title={`Onde dormir em ${stop.name}`} size="lg" footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !v.name.trim() || !linkOk} onDelete={stay ? () => void del() : undefined} />}>
       <div className={s.form}>
-        {stay ? <PayItem type="stay" id={stay.id} /> : null}
         <Field label="Nome"><input value={v.name} maxLength={120} required onChange={(e) => setV({ ...v, name: e.target.value })} /></Field>
         <PriceField
           label="Valor por noite (quarto ou casa)" text={v.price} currency={v.currency} currencies={tripCurrencies(b)} onText={(x) => setV({ ...v, price: x })} onCurrency={(c) => setV({ ...v, currency: c })}
           hint={stay?.price_is_estimate && !priceChanged ? <span className={s.inline}><EstimateBadge /> valor de referência. Confirme ao reservar.</span> : undefined}
         />
-        <FieldGrid>
-          <Field label="Check-in"><input type="date" value={v.checkin_date} onChange={(e) => setV({ ...v, checkin_date: e.target.value })} /></Field>
-          <Field label="Horário do check-in"><input type="time" value={v.checkin_time} onChange={(e) => setV({ ...v, checkin_time: e.target.value })} /></Field>
-          <Field label="Check-out"><input type="date" value={v.checkout_date} onChange={(e) => setV({ ...v, checkout_date: e.target.value })} /></Field>
-          <Field label="Horário do check-out"><input type="time" value={v.checkout_time} onChange={(e) => setV({ ...v, checkout_time: e.target.value })} /></Field>
-          <Field label="Estado"><select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value as Stay['status'] })}><option value="pending">Sem reserva</option><option value="booked">Reservado</option></select></Field>
-          <Field label="Comprovante"><select value={v.document_id} onChange={(e) => setV({ ...v, document_id: e.target.value })}><option value="">Nenhum</option>{resDocs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></Field>
-        </FieldGrid>
-        <Field label="Endereço"><input value={v.address} maxLength={200} onChange={(e) => setV({ ...v, address: e.target.value })} /></Field>
-        <Field label="Link da reserva ou do anúncio" error={!linkOk ? 'Use um link que comece com http:// ou https://.' : undefined}><input type="url" inputMode="url" value={v.link_url} maxLength={500} onChange={(e) => setV({ ...v, link_url: e.target.value })} placeholder="https://" /></Field>
-        <Field label="Observações"><textarea rows={2} value={v.notes} maxLength={2000} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
+        <div className={s.days} role="radiogroup" aria-label="Já reservaram?">
+          <button type="button" role="radio" aria-checked={v.status === 'booked'} className={s.dayOpt} onClick={() => setV({ ...v, status: 'booked' })}><span className={s.dayText}><b>Já reservamos</b><span>entra como garantido</span></span></button>
+          <button type="button" role="radio" aria-checked={v.status !== 'booked'} className={s.dayOpt} onClick={() => setV({ ...v, status: 'pending' })}><span className={s.dayText}><b>Ainda não</b><span>só anotando a ideia</span></span></button>
+        </div>
+        <MoreDetails label="Datas, endereço e comprovante" hint={`${v.checkin_date ? v.checkin_date.slice(8, 10) + '/' + v.checkin_date.slice(5, 7) : ''} → ${v.checkout_date ? v.checkout_date.slice(8, 10) + '/' + v.checkout_date.slice(5, 7) : ''}`} open={!linkOk}>
+          <FieldGrid>
+            <Field label="Check-in"><input type="date" value={v.checkin_date} onChange={(e) => setV({ ...v, checkin_date: e.target.value })} /></Field>
+            <Field label="Horário do check-in"><input type="time" value={v.checkin_time} onChange={(e) => setV({ ...v, checkin_time: e.target.value })} /></Field>
+            <Field label="Check-out"><input type="date" value={v.checkout_date} onChange={(e) => setV({ ...v, checkout_date: e.target.value })} /></Field>
+            <Field label="Horário do check-out"><input type="time" value={v.checkout_time} onChange={(e) => setV({ ...v, checkout_time: e.target.value })} /></Field>
+            <Field label="Comprovante"><select value={v.document_id} onChange={(e) => setV({ ...v, document_id: e.target.value })}><option value="">Nenhum</option>{resDocs.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></Field>
+          </FieldGrid>
+          <Field label="Endereço"><input value={v.address} maxLength={200} onChange={(e) => setV({ ...v, address: e.target.value })} /></Field>
+          <Field label="Link da reserva ou do anúncio" error={!linkOk ? 'Use um link que comece com http:// ou https://.' : undefined}><input type="url" inputMode="url" value={v.link_url} maxLength={500} onChange={(e) => setV({ ...v, link_url: e.target.value })} placeholder="https://" /></Field>
+          <Field label="Observações"><textarea rows={2} value={v.notes} maxLength={2000} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
+        </MoreDetails>
+        {stay ? <PayItem type="stay" id={stay.id} /> : null}
       </div>
     </Sheet>
   );
@@ -378,9 +392,8 @@ export function ActivitySheet({ stop, act, day, onClose }: { stop: Stop; act: Ac
     await run(() => source.remove('activities', { id: act.id }).then(reload).then(onClose), { success: 'Atividade removida.' });
   };
   return (
-    <Sheet open onClose={onClose} title={act ? 'Atividade' : 'Nova atividade'} footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !v.title.trim()} onDelete={act ? () => void del() : undefined} deleteLabel="Remover" />}>
+    <Sheet open onClose={onClose} title={act ? act.title : 'Nova atividade'} description={act ? 'Todos os detalhes' : undefined} footer={<Footer onClose={onClose} onSave={() => void save()} disabled={busy || !v.title.trim()} onDelete={act ? () => void del() : undefined} deleteLabel="Remover" />}>
       <div className={s.form}>
-        {act ? <PayItem type="activity" id={act.id} /> : null}
         <Field label="O que fazer"><input value={v.title} maxLength={160} required onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
         <FieldGrid>
           <Field label="Dia"><select value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })}>{days.map((d) => <option key={d} value={d}>{dayWeekU(d)}</option>)}</select></Field>
@@ -405,6 +418,7 @@ export function ActivitySheet({ stop, act, day, onClose }: { stop: Stop; act: Ac
           onText={setPlaceText}
           onPick={(p) => { setPlaceText(p.name); setPlace({ name: p.name.slice(0, 80), lat: p.lat, lng: p.lng, path: null, by: 'osm' }); }}
         />
+        {act ? <PayItem type="activity" id={act.id} /> : null}
       </div>
     </Sheet>
   );

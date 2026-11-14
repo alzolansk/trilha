@@ -8,7 +8,10 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivitySheet, AddStopSheet, ChooseDaySheet, EditStopSheet, TransportSheet } from '../components/route/RouteSheets';
+import { ActivityInline, activityWhat } from '../components/route/ActivityInline';
+import { ActivitySheet, AddStopSheet, EditStopSheet } from '../components/route/RouteSheets';
+import { TicketSheet } from '../components/route/Ticket';
+import { TourDetail } from '../components/route/Tour';
 import { Button, IconButton } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAction, useToast } from '../components/ui/feedback';
@@ -29,7 +32,8 @@ import { sortedStops, stayOf, stopNights, straightKm } from '../lib/derive';
 import { activityCapForStop } from '../lib/explore';
 import { dateSpan, dayMonth, hhmm } from '../lib/format';
 import { formatMoney } from '../lib/money';
-import { bookingTodo, focusStopId, legInto, placeDaySuggestions, returnLeg, stayState, waitingCount, type BookingTodo, type Leg, type TodoGroup } from '../lib/route';
+import { bookingTodo, focusStopId, legInto, placeDaySuggestions, returnLeg, stayState, stopTours, waitingCount, type BookingTodo, type Leg, type TodoGroup } from '../lib/route';
+import { tourWhat } from '../lib/tourInfo';
 import { isRestDay, stopSlots, type DaySlot } from '../lib/suggestions';
 import { daysBetween, todayIn } from '../lib/time';
 import s from './roteiro.module.css';
@@ -45,7 +49,7 @@ type Open =
   | { kind: 'act'; stop: Stop; act: Activity | null; day?: string }
   | { kind: 'menu'; stop: Stop }
   | { kind: 'edit'; stop: Stop }
-  | { kind: 'choose'; stop: Stop; sg: Suggestion; day: string | null }
+  | { kind: 'tour'; stop: Stop; sg: Suggestion }
   | null;
 
 /** Desktop (> 820 px): lista e mapa lado a lado. */
@@ -247,11 +251,11 @@ function RouteList() {
       )}
 
       <AddStopSheet open={open?.kind === 'add'} onClose={() => setOpen(null)} stops={stops} onCreated={(id) => setFocus(id)} />
-      {open?.kind === 'transport' ? <TransportSheet stop={open.stop} t={b.transports.find((t) => t.stop_id === open.stop.id && !t.is_return) ?? null} onClose={() => setOpen(null)} /> : null}
-      {open?.kind === 'return' ? <TransportSheet stop={open.stop} t={open.t} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'transport' ? <TicketSheet stop={open.stop} t={b.transports.find((t) => t.stop_id === open.stop.id && !t.is_return) ?? null} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'return' ? <TicketSheet stop={open.stop} t={open.t} isReturn onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'act' ? <ActivitySheet stop={open.stop} act={open.act} day={open.day} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'edit' ? <EditStopSheet stop={open.stop} onClose={() => setOpen(null)} /> : null}
-      {open?.kind === 'choose' ? <ChooseDaySheet suggestion={open.sg} stop={open.stop} initial={open.day} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === 'tour' ? <TourFromSuggestion b={b} stop={open.stop} sg={open.sg} onClose={() => setOpen(null)} /> : null}
       {open?.kind === 'menu' ? <StopMenu stop={open.stop} stops={stops} base={base} onClose={() => setOpen(null)} onEdit={() => setOpen({ kind: 'edit', stop: open.stop })} onTransport={() => setOpen({ kind: 'transport', stop: open.stop })} /> : null}
     </div>
   );
@@ -454,6 +458,7 @@ function DayRow({ b, stop, slot, suggestions, canEdit, setOpen }: { b: TripBundl
       await voteSuggestions(source, b, list, me);
       await reload();
     }, { success: 'Votação criada com os preços. A turma vota em Turma › Votos.' });
+  const [openAct, setOpenAct] = useState<string | null>(null);
   const empty = !acts.length;
   const inlineOne = suggestions.length === 1 || (!!suggestions.length && slot.state === 'folga');
   const label = dayLabel(stop, slot);
@@ -468,14 +473,19 @@ function DayRow({ b, stop, slot, suggestions, canEdit, setOpen }: { b: TripBundl
         <span className="sr">Dia {slot.dayNumber}</span>
         {slot.state === 'vazio' || slot.state === 'folga' || slot.state === 'cheio' ? <DayBar count={acts.length} hint={inlineOne} /> : null}
         {acts.map((a) => {
+          if (canEdit && openAct === a.id) {
+            return <ActivityInline key={a.id} act={a} stop={stop} onClose={() => setOpenAct(null)} onMore={() => { setOpenAct(null); setOpen({ kind: 'act', stop, act: a }); }} />;
+          }
+          const what = activityWhat(b, a);
           const inner = (
             <>
               <span className={s.actTitle}>{a.time ? <span className={`${s.actTime} num`}>{hhmm(a.time)}</span> : null}{a.title}</span>
-              {a.notes ? <span className={s.actNote}>{a.notes}</span> : null}
+              {what ? <span className={s.actWhat}>{what}</span> : null}
+              {a.notes && a.notes !== what ? <span className={s.actNote}>{a.notes}</span> : null}
             </>
           );
           return canEdit ? (
-            <button key={a.id} type="button" className={s.act} onClick={() => setOpen({ kind: 'act', stop, act: a })} aria-label={`${a.title}. Editar atividade`}>{inner}</button>
+            <button key={a.id} type="button" className={s.act} onClick={() => setOpenAct(a.id)} aria-expanded={false} aria-label={`${a.title}. Abrir no dia`}>{inner}</button>
           ) : (
             <div key={a.id} className={s.act}>{inner}</div>
           );
@@ -485,7 +495,7 @@ function DayRow({ b, stop, slot, suggestions, canEdit, setOpen }: { b: TripBundl
         {empty && slot.state === 'vazio' ? <span className={s.emptyDay}>Dia livre, ainda sem plano.</span> : null}
 
         {inlineOne ? (
-          <Inline sg={suggestions[0]} slot={slot} free={slot.state === 'folga' ? freeLabel(acts) : null} canEdit={canEdit} busy={busy} onAdd={() => void accept(suggestions[0])} />
+          <Inline sg={suggestions[0]} slot={slot} free={slot.state === 'folga' ? freeLabel(acts) : null} canEdit={canEdit} busy={busy} onAdd={() => void accept(suggestions[0])} onOpen={() => setOpen({ kind: 'tour', stop, sg: suggestions[0] })} />
         ) : suggestions.length > 1 ? (
           <div className={s.options}>
             <span className={s.optionsLead}>A Trilha separou {suggestions.length} opções para esse dia:</span>
@@ -494,14 +504,10 @@ function DayRow({ b, stop, slot, suggestions, canEdit, setOpen }: { b: TripBundl
                 const card = (
                   <>
                     <Photo photo={sg.payload.photo?.url ? (sg.payload.photo as PhotoData) : null} place={sg.payload.photo_query ?? sg.payload.title} alt="" height={70} radius="0" caption={false} />
-                    <span className={s.miniText}><b>{sg.payload.title}</b><span>{fitLabel(sg)}</span></span>
+                    <span className={s.miniText}><b>{sg.payload.title}</b>{tourWhat(sg.payload) ? <span className={s.miniWhat}>{tourWhat(sg.payload)}</span> : null}<span>{fitLabel(sg)}</span></span>
                   </>
                 );
-                return canEdit ? (
-                  <button key={sg.id} type="button" className={s.mini} onClick={() => setOpen({ kind: 'choose', stop, sg, day: slot.date })} aria-label={`${sg.payload.title}: pôr no roteiro`}>{card}</button>
-                ) : (
-                  <div key={sg.id} className={s.mini}>{card}</div>
-                );
+                return <button key={sg.id} type="button" className={s.mini} onClick={() => setOpen({ kind: 'tour', stop, sg })} aria-label={`${sg.payload.title}: saber mais`}>{card}</button>;
               })}
             </div>
             {canEdit ? <Button variant="dark" size="sm" onClick={() => void vote(suggestions)} disabled={busy}>Mandar as {suggestions.length} para votação</Button> : null}
@@ -524,21 +530,23 @@ function freeLabel(acts: Activity[]): string {
 }
 
 /** Sugestão tracejada dentro do dia, com o botão + de 44 px. */
-function Inline({ sg, slot, free, canEdit, busy, onAdd }: { sg: Suggestion; slot: DaySlot; free: string | null; canEdit: boolean; busy: boolean; onAdd: () => void }) {
+function Inline({ sg, slot, free, canEdit, busy, onAdd, onOpen }: { sg: Suggestion; slot: DaySlot; free: string | null; canEdit: boolean; busy: boolean; onAdd: () => void; onOpen: () => void }) {
   const p = sg.payload;
   const mid = p.cost_high != null && p.cost_high > 0 ? Math.round(((p.cost_low ?? p.cost_high) + p.cost_high) / 2) : null;
   const reason = free ? `Cabe ${free === 'tempo livre' ? 'no tempo livre' : `na ${free}`}` : `Sugestão · ${fitLabel(sg)}`;
   return (
     <div className={s.inline}>
       <Photo photo={p.photo?.url ? (p.photo as PhotoData) : null} place={p.photo_query ?? p.title} alt="" height={56} radius="12px" caption={false} className={s.inlineThumb} />
-      <span className={s.inlineText}>
+      <button type="button" className={s.inlineText} onClick={onOpen} aria-label={`${p.title}: saber mais`}>
         <span className={s.inlineReason}>{reason}</span>
         <b>{p.title}</b>
+        {tourWhat(p) ? <span className={s.inlineWhat}>{tourWhat(p)}</span> : null}
         <span className={s.inlineMeta}>
           {p.duration ? <span>{p.duration}</span> : null}
           {mid != null ? <Price cents={mid} currency={p.currency ?? 'BRL'} estimate suffix="/pessoa" /> : p.cost_high === 0 ? <span>grátis</span> : null}
+          <span className={s.inlineMore}>Saber mais</span>
         </span>
-      </span>
+      </button>
       {canEdit ? (
         <button type="button" className={s.plus} onClick={onAdd} disabled={busy} aria-label={`Adicionar ${p.title} ao dia ${slot.dayNumber}`}>
           <Icon name="plus" size={20} />
@@ -629,4 +637,11 @@ function StopMenu({ stop, stops, base, onClose, onEdit, onTransport }: { stop: S
       </div>
     </Sheet>
   );
+}
+
+/** Painel do passeio a partir de uma sugestão do dia (o mesmo da página da parada). */
+function TourFromSuggestion({ b, stop, sg, onClose }: { b: TripBundle; stop: Stop; sg: Suggestion; onClose: () => void }) {
+  const t = useMemo(() => stopTours(b, stop).find((x) => x.suggestion?.id === sg.id) ?? null, [b, stop, sg.id]);
+  if (!t) return null;
+  return <TourDetail t={t} stop={stop} onClose={onClose} />;
 }

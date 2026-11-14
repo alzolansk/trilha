@@ -1,11 +1,12 @@
 // Roteiro e página da parada (planning §5.2 e §5.3). Funções puras e testáveis: o que mostrar
 // em cada parada, em cada dia e entre paradas. Nada aqui inventa dado: sem valor, devolve null.
-import type { Activity, PhotoRef, Stop, Suggestion, Transport, TransportMode, TripBundle } from '../data/types';
+import type { Activity, PhotoRef, Stop, Suggestion, SuggestionPayload, TourTag, Transport, TransportMode, TripBundle } from '../data/types';
 import { durationLabel, sortedStops, stayOf, transportMinutes } from './derive';
-import { fitOf } from './explore';
+import { fitOf, nightlyCap } from './explore';
 import { normalize } from './format';
 import { inspirationScore } from './polls';
 import { bestDayFor, dayNumber, isRestDay, stopSlots, type DaySlot } from './suggestions';
+import { tourTag, tourWhat, tourWhyGo } from './tourInfo';
 
 const fold = (s: string) => normalize(s).replace(/[^a-z0-9]+/g, ' ').trim();
 /** Mesma coisa? Compara a parte antes da vírgula, sem acento, nos dois sentidos ("Montanha Colorida, saindo de Cusco" ≈ "Montanha Colorida"). */
@@ -264,6 +265,13 @@ export interface Tour {
   key: string;
   title: string;
   why: string | null;
+  /** o que é, em uma frase (fase 1 do canvas): `what` da sugestão, senão o `why` antigo, senão a nota da atividade */
+  what: string | null;
+  tag: TourTag | null;
+  tagReason: string | null;
+  whyGo: string[];
+  caveats: string[];
+  bookingHint: string | null;
   duration: string | null;
   effort: string | null;
   dayFit: string | null;
@@ -281,6 +289,15 @@ export interface Tour {
   savedBy: string | null;
   suggestion: Suggestion | null;
   activity: Activity | null;
+}
+
+function extrasOf(p: SuggestionPayload): Pick<Tour, 'what' | 'tag' | 'tagReason' | 'whyGo' | 'caveats' | 'bookingHint'> {
+  const tag = tourTag(p);
+  return {
+    what: tourWhat(p), tag: tag?.tag ?? null, tagReason: tag?.reason ?? null, whyGo: tourWhyGo(p),
+    caveats: Array.isArray(p.caveats) ? p.caveats.filter((x): x is string => typeof x === 'string' && !!x.trim()).slice(0, 3) : [],
+    bookingHint: p.booking_hint?.trim() || null,
+  };
 }
 
 const firstName = (b: TripBundle, uid: string) => b.profiles.find((p) => p.id === uid)?.display_name?.split(' ')[0] ?? 'Alguém';
@@ -322,7 +339,7 @@ export function stopTours(b: TripBundle, stop: Stop): Tour[] {
       : s.status === 'voting' ? voteOf(p.title) : s.status === 'accepted' ? { kind: 'votacao', pos: null, total: null } : { kind: 'nova', slot: bestDayFor(b, s) };
     if (s.status === 'accepted' && !act) continue; // aceita e depois removida do roteiro: não volta como nova
     out.push({
-      key: s.id, title: p.title, why: p.why ?? null, duration: p.duration ?? null, effort: p.effort ?? null, dayFit: p.day_fit ?? null,
+      key: s.id, title: p.title, why: p.why ?? null, ...extrasOf(p), duration: p.duration ?? null, effort: p.effort ?? null, dayFit: p.day_fit ?? null,
       costLow: act?.cost_cents ?? p.cost_low ?? null, costHigh: act?.cost_cents ?? p.cost_high ?? null,
       currency: (act?.cost_cents != null ? act.cost_currency : p.currency) ?? cur, estimate: act?.cost_cents != null ? act.cost_is_estimate !== false : (p.cost_high ?? 0) > 0,
       photo: (act?.photo?.url ? act.photo : p.photo?.url ? p.photo : null) ?? null, photoQuery: p.photo_query ?? p.title,
@@ -334,7 +351,7 @@ export function stopTours(b: TripBundle, stop: Stop): Tour[] {
     const isTour = a.cost_cents != null || a.suggested_by === 'ai' || !!a.from_poll_id || !!a.from_entry_id || !!a.photo;
     if (!isTour) continue;
     out.push({
-      key: a.id, title: a.title, why: a.notes, duration: null, effort: null, dayFit: null,
+      key: a.id, title: a.title, why: a.notes, what: a.notes?.trim() || null, tag: null, tagReason: null, whyGo: [], caveats: [], bookingHint: null, duration: null, effort: null, dayFit: null,
       costLow: a.cost_cents ?? null, costHigh: a.cost_cents ?? null, currency: a.cost_currency ?? cur, estimate: a.cost_cents != null && a.cost_is_estimate !== false,
       photo: a.photo?.url ? a.photo : null, photoQuery: `${a.title}, ${stop.name}`,
       status: { kind: 'roteiro', day: dayNumber(b, a.day), date: a.day }, ...social(a.title), suggestion: null, activity: a,
@@ -346,4 +363,113 @@ export function stopTours(b: TripBundle, stop: Stop): Tour[] {
   const star = out.filter((t) => t.status.kind !== 'roteiro').sort((x, y) => y.fans.length - x.fans.length || Number(!!y.savedBy) - Number(!!x.savedBy))[0]
     ?? out.find((t) => t.status.kind === 'nova') ?? out[0];
   return star ? [star, ...rest.filter((t) => t !== star)] : [];
+}
+
+// ───────────── O que falta na parada (canvas "cidade e reservas", fase 2) ─────────────
+
+export type ReadyKey = 'arrive' | 'stay' | 'days';
+export interface ReadyItem {
+  key: ReadyKey;
+  /** done = resolvido; todo = falta a turma agir; wait = depende da votação */
+  state: 'done' | 'todo' | 'wait';
+  /** selo curto ("Falta comprar") */
+  label: string;
+  title: string;
+  text: string;
+  /** texto do botão */
+  action: string;
+}
+
+const BY: Record<TransportMode, string> = { plane: 'de avião', train: 'de trem', bus: 'de ônibus', boat: 'de barco', car: 'de carro', walk: 'a pé', other: '' };
+const dm = (d: string | null | undefined) => {
+  if (!d) return '';
+  const [, m, day] = d.split('-').map(Number);
+  return `${day} ${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][m - 1]}`;
+};
+const nightsOf = (s: Stop) => Math.max(0, Math.round((Date.parse(s.departure_date) - Date.parse(s.arrival_date)) / 86_400_000));
+
+/**
+ * Até 3 respostas para "o que falta nesta parada?": chegar, dormir, dias. Cada uma com estado, frase
+ * e o texto da ação. Só usa dado que existe; o preço só aparece quando há valor (estimado ou não).
+ */
+export function stopReadiness(b: TripBundle, stops: Stop[], i: number, money: (cents: number, cur: string) => string): ReadyItem[] {
+  const stop = stops[i];
+  const out: ReadyItem[] = [];
+
+  // Chegar
+  const leg = legInto(b, stops, i);
+  const t = leg?.transport ?? null;
+  const from = stops[i - 1]?.name ?? b.trip.origin ?? null;
+  if (!t) {
+    out.push({
+      key: 'arrive', state: 'todo', label: 'Sem trecho', title: `Como chegar em ${stop.name}`,
+      text: `${from ? `De ${from} até ${stop.name}` : `Até ${stop.name}`}, em ${dm(stop.arrival_date)}. Registre o voo, o trem ou o ônibus.`,
+      action: 'Registrar a chegada',
+    });
+  } else if (leg!.booked) {
+    out.push({
+      key: 'arrive', state: 'done', label: 'Comprado', title: leg!.title,
+      text: [t.depart_date ? `Sai ${dm(t.depart_date)}${t.depart_time ? ` às ${t.depart_time.slice(0, 5)}` : ''}` : null, t.arrive_time ? `chega ${t.arrive_time.slice(0, 5)}` : null, t.booking_ref ? `localizador ${t.booking_ref}` : null].filter(Boolean).join(', ') + '.',
+      action: 'Ver o bilhete',
+    });
+  } else if (leg!.notBooked) {
+    const price = leg!.priceCents != null ? ` ${leg!.estimate ? 'A Trilha estima perto de' : 'Valor:'} ${money(leg!.priceCents, leg!.currency)} por pessoa.` : '';
+    out.push({
+      key: 'arrive', state: 'todo', label: 'Falta comprar', title: leg!.title,
+      text: `${t.depart_date ? `Em ${dm(t.depart_date)}` : `Até ${dm(stop.arrival_date)}`}${leg!.duration ? `, umas ${leg!.duration} de viagem` : ''}.${price}`,
+      action: 'Ver o bilhete',
+    });
+  } else {
+    out.push({ key: 'arrive', state: 'done', label: 'Sem reserva', title: leg!.title, text: `${BY[leg!.mode] ? `Vão ${BY[leg!.mode]}` : 'Vão por conta própria'}: não há o que comprar.`, action: 'Ver o trecho' });
+  }
+
+  // Dormir
+  const nights = nightsOf(stop);
+  const st = stayState(b, stop);
+  if (st !== 'none') {
+    const stay = stayOf(b, stop.id);
+    const where = stop.stay_base?.name ?? stop.area ?? null;
+    const cap = nightlyCap(b);
+    if (st === 'booked') {
+      out.push({ key: 'stay', state: 'done', label: 'Reservado', title: `Dormir em ${stay!.name}`, text: `${nights} ${nights === 1 ? 'noite' : 'noites'}${stay!.checkin_date ? `, check-in ${dm(stay!.checkin_date)}` : ''}.`, action: 'Ver a hospedagem' });
+    } else if (st === 'voting') {
+      out.push({ key: 'stay', state: 'wait', label: 'Em votação', title: `Dormir${where ? ` em ${where}` : ` em ${stop.name}`}`, text: 'A turma está votando onde ficar. Quando fechar, é só reservar.', action: 'Ver a votação' });
+    } else {
+      out.push({
+        key: 'stay', state: 'todo', label: where ? 'Bairro ok, hotel não' : 'Falta onde dormir', title: `Dormir${where ? ` em ${where}` : ` em ${stop.name}`}`,
+        text: `${where ? `${where} já está escolhido. Agora é achar o lugar` : 'Escolham o bairro e depois o lugar'}: ${nights} ${nights === 1 ? 'noite' : 'noites'}${cap ? `, até ${money(Math.round(cap / 100) * 100, b.trip.base_currency)} a noite` : ''}.`,
+        action: where ? `Ver lugares${stop.stay_base?.name ? '' : ` em ${where}`}` : 'Escolher o bairro',
+      });
+    }
+  }
+
+  // Dias
+  const slots = stopSlots(b, stop).filter((x) => x.state !== 'viagem');
+  if (slots.length) {
+    const planned = slots.filter((x) => x.count > 0 || x.state === 'aclimatar').length;
+    const total = b.activities.filter((a) => a.stop_id === stop.id).length;
+    const loose = stopTours(b, stop).filter((x) => x.status.kind === 'nova').map((x) => x.title);
+    const free = slots.length - planned;
+    const ideas = loose.length ? ` ${loose.length === 1 ? `Sobra 1 ideia sem dia: ${loose[0]}.` : `Sobram ${loose.length} ideias sem dia.`}` : '';
+    out.push(free === 0
+      ? { key: 'days', state: 'done', label: 'Dias com plano', title: `${slots.length} ${slots.length === 1 ? 'dia' : 'dias'}, ${total} ${total === 1 ? 'programa' : 'programas'}`, text: `Todo dia tem algo.${ideas}`, action: 'Ver os dias' }
+      : { key: 'days', state: 'todo', label: `${free} ${free === 1 ? 'dia livre' : 'dias livres'}`, title: `${slots.length} ${slots.length === 1 ? 'dia' : 'dias'} em ${stop.name}`, text: `${planned ? `${planned} com plano, ` : ''}${free} ainda sem nada.${ideas || ' Veja abaixo o que fazer.'}`, action: 'Ver o que fazer' });
+  }
+  return out;
+}
+
+/** Frase da capa: de onde chegam, como e quando, e para onde seguem. */
+export function stopIntro(b: TripBundle, stops: Stop[], i: number): string {
+  const stop = stops[i];
+  const inT = b.transports.find((x) => x.stop_id === stop.id && !x.is_return) ?? null;
+  const next = stops[i + 1];
+  const outT = next ? b.transports.find((x) => x.stop_id === next.id && !x.is_return) ?? null : b.transports.find((x) => x.is_return) ?? null;
+  const from = stops[i - 1]?.name ?? b.trip.origin ?? null;
+  const inBy = BY[inT?.mode ?? stop.arrival_mode ?? 'other'];
+  const outBy = next ? BY[outT?.mode ?? next.arrival_mode ?? 'other'] : outT ? BY[outT.mode] : '';
+  const arrive = `${i === 0 ? 'Primeira parada. ' : ''}Vocês chegam${from ? ` de ${from}` : ''}${inBy ? ` ${inBy}` : ''} em ${dm(inT?.arrive_date ?? stop.arrival_date)}`;
+  const leave = next
+    ? ` e seguem${outBy ? ` ${outBy}` : ''} para ${next.name} em ${dm(stop.departure_date)}.`
+    : ` e voltam${outBy ? ` ${outBy}` : ''} para ${b.trip.origin ?? 'casa'} em ${dm(stop.departure_date)}.`;
+  return arrive + leave;
 }

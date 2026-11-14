@@ -5,23 +5,30 @@ import { Button } from './Button';
 import { ConflictError, humanError } from '../../data/source';
 
 // ───── Toast (SPEC §7) ─────
-const ToastCtx = createContext<(msg: string) => void>(() => {});
+/** Ação no toast ("Desfazer"): fica 5 s em vez de 3,2 s, para dar tempo de tocar. */
+export interface ToastAction { label: string; run: () => void }
+const ToastCtx = createContext<(msg: string, action?: ToastAction) => void>(() => {});
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [msg, setMsg] = useState('');
+  const [action, setAction] = useState<ToastAction | null>(null);
   const [on, setOn] = useState(false);
   const t = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((m: string) => {
+  const show = useCallback((m: string, a?: ToastAction) => {
     setMsg(m);
+    setAction(a ?? null);
     setOn(true);
     if (t.current) clearTimeout(t.current);
-    t.current = setTimeout(() => setOn(false), 3200);
+    t.current = setTimeout(() => setOn(false), a ? 5000 : 3200);
   }, []);
   return (
     <ToastCtx.Provider value={show}>
       {children}
-      <div className={`toast${on ? 'on' : ''}`} role="status" aria-live="polite">
-        {msg}
+      <div className={`toast${on ? ' on' : ''}${action ? ' withAction' : ''}`} role="status" aria-live="polite">
+        <span>{msg}</span>
+        {action && on ? (
+          <button type="button" className="toastAction" onClick={() => { setOn(false); action.run(); }}>{action.label}</button>
+        ) : null}
       </div>
     </ToastCtx.Provider>
   );

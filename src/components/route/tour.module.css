@@ -1,0 +1,55 @@
+/* Passeio com contexto (canvas "cidade e reservas", artboards 1 e 2). */
+.tag { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; font: 700 12px/1.2 var(--font-body); white-space: nowrap; }
+.tag_classico { background: var(--brand-soft); color: var(--brand-ink); }
+.tag_achadinho { background: var(--sun); color: #FFFFFF; }
+.tag_combina { background: var(--ok-soft); color: var(--ok-ink); }
+.cardTag { position: absolute; left: 12px; top: 12px; box-shadow: 0 1px 6px rgba(13, 16, 23, .18); }
+.cardTag.tag_classico { background: #FFFFFF; }
+
+.card {
+  display: flex; flex-direction: column; padding: 0; border: 0; border-radius: 22px; overflow: hidden; background: var(--surface);
+  color: var(--ink); text-align: left; cursor: pointer; font: inherit; min-width: 0;
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.card:hover { box-shadow: 0 6px 22px rgba(13, 16, 23, .08); }
+.card:active { transform: scale(.995); }
+.card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.cardBody { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; flex: 1; min-width: 0; }
+.cardTitle { font: 700 17px/1.3 var(--font-body); }
+.cardWhat { font: 400 14px/1.45 var(--font-body); color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cardFans { font: 600 13px/1.3 var(--font-body); color: var(--sun-ink); }
+.cardMeta { font: 400 13px/1.4 var(--font-body); color: var(--mute); }
+.cardFoot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-2); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.st_ok { font: 700 13px/1.3 var(--font-body); color: var(--ok); }
+.st_brand { font: 700 13px/1.3 var(--font-body); color: var(--brand); }
+.st_todo { font: 700 13px/1.3 var(--font-body); color: var(--todo); }
+.more { font: 700 13px/1.3 var(--font-body); color: var(--brand-ink); white-space: nowrap; }
+
+/* painel */
+.detail { display: flex; flex-direction: column; gap: 20px; }
+.tagRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.tagReason { font: 400 13px/1.4 var(--font-body); color: var(--mute); }
+.what { margin: 0; font: 400 16px/1.5 var(--font-body); color: var(--ink-2); }
+.muted { margin: 0; font-size: 14px; line-height: 1.45; color: var(--mute); }
+.facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.facts div { background: var(--bg); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.facts dt { font: 400 12px/1.3 var(--font-body); color: var(--mute); }
+.facts dd { margin: 4px 0 0; font: 700 15px/1.3 var(--font-body); overflow-wrap: anywhere; }
+.block { display: flex; flex-direction: column; gap: 8px; }
+.block h3, .fit h3 { margin: 0; font: 700 16px/1.3 var(--font-body); }
+.block ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font: 400 15px/1.45 var(--font-body); color: var(--ink-2); }
+.fit { border-radius: 16px; background: var(--ok-soft); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.fit h3, .fit p { color: var(--ok-ink); }
+.fit p { margin: 0; font: 400 15px/1.45 var(--font-body); }
+.social { margin: 0; font: 600 14px/1.4 var(--font-body); color: var(--sun-ink); }
+.estimate { margin: 4px 0 0; display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--mute); }
+.days { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.day {
+  min-height: 64px; padding: 8px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: var(--ink);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; cursor: pointer; font: inherit;
+}
+.day b { font: 700 15px/1.2 var(--font-body); }
+.day span, .day small { font: 400 12px/1.3 var(--font-body); color: var(--mute); }
+.day[aria-checked="true"] { border-color: var(--brand); background: var(--brand-soft); }
+.day[aria-checked="true"] b { color: var(--brand-ink); }
+.day:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

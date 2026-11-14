@@ -769,6 +769,8 @@ export interface PollVote { poll_id: string; option_id: string; trip_id: string;
 export type SuggestionKind = 'destination' | 'activity' | 'area' | 'reminder';
 export type SuggestionStatus = 'new' | 'accepted' | 'voting' | 'dismissed';
 export type DayFit = 'manha' | 'tarde' | 'noite' | 'dia_todo';
+/** Clássico (o que todo mundo vai), achadinho (pouca gente vai) ou combina com o que a turma contou. */
+export type TourTag = 'classico' | 'achadinho' | 'combina';
 export interface SuggestionPayload {
   title: string;
   why?: string | null;
@@ -785,6 +787,16 @@ export interface SuggestionPayload {
   good?: string | null;
   watch?: string | null;
   walk?: string | null;
+  /** passeios: o que é, em uma frase neutra (sem convencer) */
+  what?: string | null;
+  /** passeios: selo de leitura rápida, só com motivo (`tag_reason`); sem motivo o selo não aparece */
+  tag?: TourTag | null;
+  tag_reason?: string | null;
+  /** passeios: por que vale (até 3 frases curtas) e o que pede atenção (até 3) */
+  why_go?: string[] | null;
+  caveats?: string[] | null;
+  /** passeios: dica de reserva ("hora marcada, compre antes"), quando a fonte disser */
+  booking_hint?: string | null;
   /** lembretes: para onde o cartão leva e de qual regra veio */
   href?: string | null;
   rule?: string | null;
