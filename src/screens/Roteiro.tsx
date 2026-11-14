@@ -385,7 +385,7 @@ function StopCompact({ b, stop, onFocus, onMenu }: { b: TripBundle; stop: Stop; 
 function StopFocus({ b, stop, base, canEdit, setOpen }: { b: TripBundle; stop: Stop; base: string; canEdit: boolean; setOpen: (o: Open) => void }) {
   const slots = stopSlots(b, stop);
   const placed = useMemo(() => placeDaySuggestions(b, stop, activityCapForStop(b, stop)), [b, stop]);
-  const tip = stop.stay_base?.name ? `Dormem em ${stop.stay_base.name}` : stop.area ? `Dica: fiquem em ${stop.area}` : null;
+  const tip = stop.stay_base?.name ? `Dormem em ${stop.stay_base.name}` : stop.area ? `Fiquem em ${stop.area}` : null;
   return (
     <article className={s.focus} aria-label={`Parada ${stop.name}`}>
       <Link href={`${base}/roteiro/${stop.id}`} className={s.cover} aria-label={`Ver a cidade: ${stop.name}${stop.area ? `, fiquem em ${stop.area}` : ''}`}>

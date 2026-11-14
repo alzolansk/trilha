@@ -77,7 +77,7 @@ button.leg:hover { background: var(--surface); }
 .compactThumb figure { height: 100%; }
 .compactText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .compactEyebrow { order: -1; font: 400 12.5px/1.35 var(--font-body); color: var(--mute); }
-.compactName { font: 400 30px/1 var(--font-story); overflow-wrap: anywhere; }
+.compactName { font: 800 22px/1.1 var(--font-title); letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .compactSub { display: flex; flex-wrap: wrap; gap: 2px 10px; font: 400 13px/1.4 var(--font-body); color: var(--mute); }
 .stayLine { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 400 13px/1.4 var(--font-body); color: var(--mute); }
 
@@ -91,9 +91,9 @@ button.leg:hover { background: var(--surface); }
 .coverBase { position: absolute; left: 18px; right: 18px; bottom: 16px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; }
 .coverTitles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .coverLine { font: 500 13px/1.3 var(--font-body); color: #F1F3F8; text-shadow: 0 1px 6px rgba(13, 16, 23, .4); }
-.coverName { margin: 0; font: 400 56px/0.95 var(--font-story); color: var(--on-dark); text-shadow: 0 2px 14px rgba(13, 16, 23, .3); overflow-wrap: anywhere; }
+.coverName { margin: 0; font: 800 40px/1 var(--font-title); letter-spacing: -0.03em; color: var(--on-dark); text-shadow: 0 2px 14px rgba(13, 16, 23, .3); overflow-wrap: anywhere; }
 .coverSide { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.coverTip { font: italic 400 19px/1.2 var(--font-story); color: var(--on-dark); text-shadow: 0 1px 8px rgba(13, 16, 23, .45); }
+.coverTip { padding: 5px 10px; border-radius: 999px; background: #FFFFFF; color: var(--ink) !important; text-shadow: none !important; font: 700 12px/1.2 var(--font-body); color: var(--on-dark); text-shadow: 0 1px 8px rgba(13, 16, 23, .45); }
 .chipDark { padding: 6px 11px; border-radius: 999px; background: rgba(13, 16, 23, .6); color: #FFFFFF; font: 600 12px/1.2 var(--font-body); }
 .focusTools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; min-height: 44px; }
 .focusActions { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
@@ -102,7 +102,7 @@ button.leg:hover { background: var(--surface); }
 .days { display: flex; flex-direction: column; }
 .day { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 18px 0; border-top: 1px solid var(--line); }
 .dayHead { display: flex; align-items: baseline; gap: 10px; }
-.dayDate { font: 400 28px/1 var(--font-story); color: var(--ink); white-space: nowrap; }
+.dayDate { font: 800 22px/1 var(--font-title); letter-spacing: -0.02em; color: var(--ink); white-space: nowrap; }
 .dayLabel { font: 400 13px/1.3 var(--font-body); color: var(--mute); }
 .dayBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .bar { display: flex; gap: 4px; height: 6px; margin-bottom: 8px; }
@@ -119,7 +119,7 @@ button.act:hover { background: var(--surface); }
 .actTime { margin-right: 6px; color: var(--brand-ink); }
 .actNote { font: 400 13px/1.4 var(--font-body); color: var(--mute); }
 .muted { color: var(--mute); }
-.emptyDay { font: italic 400 20px/1.3 var(--font-story); color: var(--mute); }
+.emptyDay { font: 400 15px/1.4 var(--font-body); color: var(--mute); }
 .addAct { margin-top: 6px; }
 
 /* sugestão tracejada dentro do dia */
@@ -172,7 +172,7 @@ button.mini:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px
 /* "Antes de ir": tudo que falta reservar num lugar só */
 .todo { display: flex; flex-direction: column; gap: 14px; margin-top: var(--s6); padding: 20px; border-radius: var(--r-card); background: var(--surface); scroll-margin-top: 16px; }
 .todoHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
-.todoTitle { margin: 0; font: 400 30px/1 var(--font-story); }
+.todoTitle { margin: 0; font: 800 22px/1.1 var(--font-title); letter-spacing: -0.02em; }
 .todoCount { font: 400 13px/1.3 var(--font-body); color: var(--mute); }
 .todoBar { display: flex; gap: 4px; height: 6px; }
 .todoBar i { flex: 1; border-radius: 3px; background: var(--line); }
@@ -205,12 +205,11 @@ button.todoRow:hover { background: var(--field); }
   .key { margin-left: 56px; }
   .cover { height: 300px; border-radius: 24px; }
   .coverBase { left: 26px; right: 26px; bottom: 22px; }
-  .coverName { font-size: 76px; }
+  .coverName { font-size: 52px; }
   .coverSide { align-items: flex-end; text-align: right; }
-  .coverTip { font-size: 22px; }
   .compactThumb { width: 128px; height: 96px; }
-  .compactName { font-size: 40px; }
+  .compactName { font-size: 26px; }
   .day { grid-template-columns: 92px minmax(0, 1fr); gap: 20px; padding: 22px 4px; }
   .dayHead { flex-direction: column; align-items: flex-start; gap: 4px; }
-  .dayDate { font-size: 34px; }
+  .dayDate { font-size: 26px; }
 }

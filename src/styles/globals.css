@@ -42,7 +42,6 @@
   /* tipografia */
   --font-body: var(--nf-inter), 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-title: var(--nf-bricolage), 'Bricolage Grotesque', var(--font-body);
-  --font-story: var(--nf-serif), 'Instrument Serif', Georgia, serif;
   --t-hero: 800 112px/0.9 var(--font-title);
   --t-display: 800 36px/1.02 var(--font-title);
   --t-title: 800 26px/1.1 var(--font-title);
