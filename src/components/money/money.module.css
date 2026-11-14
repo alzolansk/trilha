@@ -48,3 +48,10 @@
   .panel { padding: 16px; border-radius: 22px; }
   .summary { padding: 18px; top: 8px; }
 }
+/* linhas tocáveis (pessoa no caixa, último aporte) e lista de aportes da pessoa */
+.itemBtn { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 0; }
+.itemBtn:last-child { border-bottom: 0; }
+.itemBtn:hover b { color: var(--brand-ink); }
+.itemBtn:focus-visible { outline: 2.5px solid var(--brand); outline-offset: 2px; border-radius: 12px; }
+.poolList { list-style: none; margin: 0; padding: 0; }
+.danger { color: var(--warn); }

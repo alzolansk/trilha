@@ -31,6 +31,23 @@ test.describe('Dinheiro · Fase 6', () => {
     await expect(page.getByRole('dialog', { name: 'Atividade', exact: true }).getByText('Pago ✓', { exact: true })).toBeVisible();
   });
 
+  test('aporte feito sem querer sai pela pessoa no caixa', async ({ page }) => {
+    await page.goto('/demo/andes/dinheiro');
+    await page.getByRole('button', { name: 'Aporte no caixa', exact: true }).click();
+    const add = page.getByRole('dialog', { name: 'Aporte no caixa' });
+    await add.getByLabel('Valor do aporte').fill('123');
+    await add.getByRole('button', { name: 'Salvar aporte' }).click();
+    await expect(add).toBeHidden();
+    await expect(page.getByTestId('pool-balance')).toHaveText('R$ 3.973');
+    // Tocar na própria linha em "Cada um no caixa" abre os aportes, com Excluir
+    await page.getByRole('region', { name: 'Cada um no caixa' }).getByRole('button', { name: /^Ver aportes de/ }).first().click();
+    const list = page.getByRole('dialog', { name: /aportes/i });
+    await list.getByRole('button', { name: /^Excluir aporte de R\$ 123/ }).click();
+    await page.getByRole('dialog', { name: /Excluir aporte de R\$ 123/ }).getByRole('button', { name: 'Excluir' }).click();
+    await expect(page.getByTestId('pool-balance')).toHaveText('R$ 3.850');
+    await expect(list.getByRole('button', { name: /^Excluir aporte de R\$ 123/ })).toHaveCount(0);
+  });
+
   test('aporte altera juntado e a situação pessoal; cota zero é válida', async ({ page }) => {
     await page.goto('/demo/andes/dinheiro');
     await page.getByRole('button', { name: 'Aporte no caixa', exact: true }).click();
