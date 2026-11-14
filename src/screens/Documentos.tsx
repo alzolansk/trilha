@@ -21,6 +21,7 @@ import { CYCLE, DOC_CAT_VAR } from '../lib/identity/accent';
 import { ruleAlerts } from '../lib/rules';
 import { countdown } from '../lib/time';
 import { Badge, Button, Card, Checkbox, Chip, EmptyState, Field, FieldGrid, Progress, ScreenHeader, buttonClass } from '../components/ui';
+import { MoreDetails } from '../components/ui/MoreDetails';
 import s from './documentos.module.css';
 
 const CATS: DocCategory[] = ['passagem', 'identidade', 'reserva', 'ingresso', 'seguro', 'outro'];
@@ -578,10 +579,12 @@ function DocViewer({ id, onClose }: { id: string; onClose: () => void }) {
             <Field label="Categoria"><select value={v.category} onChange={(e) => setV({ ...v, category: e.target.value as DocCategory })}>{CATS.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}</select></Field>
             <Field label="Parada"><select value={v.stop_id} onChange={(e) => setV({ ...v, stop_id: e.target.value })}><option value="">Nenhuma</option>{sortedStops(b).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
             <Field label="Válido até"><input type="date" value={v.valid_until} onChange={(e) => setV({ ...v, valid_until: e.target.value })} /></Field>
-            <Field label="Subtítulo"><input value={v.subtitle} maxLength={120} onChange={(e) => setV({ ...v, subtitle: e.target.value })} /></Field>
             {owner ? <Field label="Quem vê"><select value={v.visibility} onChange={(e) => setV({ ...v, visibility: e.target.value as DocVisibility })}><option value="private">Só eu</option><option value="shared">Pessoas escolhidas</option><option value="trip">Toda a turma</option></select></Field> : null}
           </FieldGrid>
-          <Field label="Notas"><textarea rows={2} maxLength={2000} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
+          <MoreDetails label="Subtítulo e notas" hint={v.notes ? 'tem notas' : undefined}>
+            <Field label="Subtítulo"><input value={v.subtitle} maxLength={120} onChange={(e) => setV({ ...v, subtitle: e.target.value })} /></Field>
+            <Field label="Notas"><textarea rows={2} maxLength={2000} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
+          </MoreDetails>
           <div className={s.rowEnd}><Button variant="ghost" size="sm" onClick={() => setEdit(false)}>Cancelar</Button><Button size="sm" onClick={saveMeta} disabled={busy}>Salvar</Button></div>
         </Card>
       ) : null}

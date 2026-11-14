@@ -333,6 +333,14 @@ export const suggestActivitySchema = z.object({
     cost_low: money,
     cost_high: money,
     photo_query: z.string().min(2).max(80),
+    // Contexto do passeio (fase 1 do canvas "cidade e reservas"). Tudo opcional: a validação fina
+    // (selo só com motivo, listas curtas) fica em parseTourExtras.
+    what: z.string().max(240).nullish().catch(null),
+    tag: z.enum(['classico', 'achadinho', 'combina']).nullish().catch(null),
+    tag_reason: z.string().max(200).nullish().catch(null),
+    why_go: z.array(z.string().max(240)).max(5).nullish().catch(null),
+    caveats: z.array(z.string().max(200)).max(5).nullish().catch(null),
+    booking_hint: z.string().max(160).nullish().catch(null),
   })).min(1).max(6),
   areas: z.array(z.object({
     name: z.string().min(2).max(60),

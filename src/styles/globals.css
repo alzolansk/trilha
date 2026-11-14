@@ -130,6 +130,14 @@ img { display: block; }
   max-width: min(520px, calc(100vw - 32px)); box-shadow: var(--shadow-float); transition: opacity 200ms var(--ease), transform 240ms var(--ease); pointer-events: none;
 }
 .toast.on { opacity: 1; transform: translateX(-50%); }
+.toast.withAction { display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 18px; }
+.toast.withAction.on { pointer-events: auto; }
+.toastAction {
+  min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px; background: var(--dark-2); color: var(--brand-on-dark);
+  font: 700 14px/1 var(--font-body); cursor: pointer; white-space: nowrap;
+}
+.toastAction:hover { background: #343a47; }
+.toastAction:focus-visible { outline: 2px solid var(--brand-on-dark); outline-offset: 2px; }
 @media (min-width: 821px) { .toast { bottom: 32px; left: calc(50% + var(--sidenav-w) / 2); } }
 
 /* ============ keyframes ============ */

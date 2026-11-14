@@ -1,0 +1,41 @@
+/* Atividade aberta no próprio dia (canvas "cidade e reservas", artboard 4). */
+.card { background: var(--surface); border: 2px solid var(--brand); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 14px; margin: 4px 0; }
+.head { display: flex; gap: 10px; align-items: flex-start; }
+.titles { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.title {
+  border: 0; border-bottom: 1.5px solid transparent; padding: 2px 0; background: transparent; font: 700 18px/1.3 var(--font-body); color: var(--ink); width: 100%;
+}
+.title:hover { border-bottom-color: var(--line); }
+.title:focus { outline: none; border-bottom-color: var(--brand); }
+.what { margin: 0; font: 400 14px/1.45 var(--font-body); color: var(--ink-2); }
+.close { width: 44px; height: 44px; flex: none; border-radius: 22px; border: 0; background: var(--field); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.close:hover { background: var(--line); }
+.group { display: flex; flex-direction: column; gap: 8px; }
+.label { font: 700 14px/1.3 var(--font-body); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip, .chipGhost {
+  min-height: 40px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--line); background: var(--surface); color: var(--ink-2);
+  font: 600 14px/1 var(--font-body); cursor: pointer;
+}
+.chip[aria-checked="true"] { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-ink); }
+.chip:hover { border-color: var(--rail); }
+.chipGhost { border-color: transparent; color: var(--mute); }
+.chip:focus-visible, .chipGhost:focus-visible, .btn:focus-visible, .danger:focus-visible, .close:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.timeLabel { display: flex; align-items: center; gap: 10px; font: 600 14px/1.3 var(--font-body); color: var(--ink-2); }
+.timeLabel input { min-height: 44px; border-radius: 12px; border: 2px solid var(--line); padding: 0 12px; font: 600 16px/1 var(--font-body); color: var(--ink); background: var(--surface); }
+.timeLabel input:focus { outline: none; border-color: var(--brand); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill, .pillOk { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: 999px; font: 600 13px/1 var(--font-body); }
+.pill { background: var(--field); color: var(--ink-2); }
+.pillOk { background: var(--ok-soft); color: var(--ok-ink); }
+.note { border-radius: 14px; background: #FFF8E6; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+.noteLabel { font: 700 12px/1.3 var(--font-body); color: #7A4F00; }
+.note textarea { border: 0; padding: 0; background: transparent; resize: vertical; font: 400 15px/1.45 var(--font-body); color: var(--ink-2); width: 100%; }
+.note textarea:focus { outline: none; }
+.note:focus-within { box-shadow: 0 0 0 2px #E8B84A; }
+.actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.left { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 0; background: var(--field); color: var(--ink); font: 600 14px/1 var(--font-body); cursor: pointer; }
+.btn:hover { background: var(--line); }
+.danger { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--warn); font: 600 14px/1 var(--font-body); cursor: pointer; }
+.hint { margin: 0; font: 400 12px/1.4 var(--font-body); color: var(--mute); }
