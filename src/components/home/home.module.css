@@ -1,0 +1,117 @@
+/* Início 3.0 (planning §13): blocos da Início. Mesmos tokens da Início antiga (inicio.module.css). */
+.section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.h2 { margin: 0; font: var(--t-title); font-size: 24px; letter-spacing: -0.02em; }
+.more {
+  min-height: 44px; display: inline-flex; align-items: center; padding: 0; border: 0; background: none; white-space: nowrap;
+  font: 600 13px/1.2 var(--font-body); color: var(--brand); text-decoration: none; cursor: pointer;
+}
+.tag { padding: 3px 8px; border-radius: 6px; background: var(--field); color: var(--ink-2); font: 700 10.5px/1.3 var(--font-body); letter-spacing: .04em; white-space: nowrap; }
+.card { background: var(--surface); border-radius: var(--r-card); padding: var(--s4); }
+.note { margin: 0; font: 400 12.5px/1.45 var(--font-body); color: var(--mute); text-wrap: pretty; }
+
+/* ───────── pendências em fileira ───────── */
+.row {
+  display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+  margin: 0 calc(-1 * var(--gutter)); padding: 2px var(--gutter);
+}
+.row::-webkit-scrollbar { display: none; }
+.pill {
+  flex: none; scroll-snap-align: start; display: flex; flex-direction: column; gap: 3px; width: 172px; min-height: 76px;
+  padding: 12px 14px; border-radius: 18px; background: var(--surface); color: var(--ink); text-decoration: none;
+}
+.pill:hover { box-shadow: var(--shadow-float); }
+.pill:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.pillEyebrow { font: var(--t-micro); }
+.pillTitle { font: 700 14px/1.3 var(--font-body); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tone-brand { color: var(--brand); }
+.tone-warn { color: var(--warn); }
+.tone-ok { color: var(--ok); }
+.tone-mute { color: var(--mute); }
+
+/* ───────── bilhete da viagem ───────── */
+.ticket { background: var(--surface); border-radius: var(--r-card-lg); overflow: hidden; box-shadow: var(--shadow-float); }
+.tkHead { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; padding: 16px 18px 12px; }
+.tkCol { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tkColEnd { align-items: flex-end; text-align: right; }
+.tkEyebrow { font: var(--t-micro); color: var(--mute); }
+.tkTitle { margin: 0; font: 800 28px/1 var(--font-title); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.tkSide { font: 800 18px/1 var(--font-title); white-space: nowrap; }
+.perf { height: 0; margin: 0 18px 8px; border-top: 2px dashed var(--line); }
+.leg { position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); border-top: 1px solid var(--line-2); min-height: 92px; }
+.legPhoto { height: 100%; min-height: 92px; }
+.legBody { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; min-width: 0; }
+.legTop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.legName { font: 800 19px/1.1 var(--font-title); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+.legName::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+.legName:focus-visible { outline: none; }
+.leg:has(.legName:focus-visible) { outline: 2px solid var(--brand); outline-offset: -2px; }
+.legDates { font: 600 12px/1.2 var(--font-body); color: var(--mute); white-space: nowrap; }
+.stamps { display: flex; flex-wrap: wrap; gap: 6px; }
+.stamp { padding: 3px 7px; border-radius: 6px; border: 1.5px solid currentColor; font: 700 10.5px/1.3 var(--font-body); letter-spacing: .03em; text-transform: uppercase; }
+.stamp-ok { color: var(--ok); }
+.stamp-todo { color: var(--warn); }
+.stamp-mute { color: var(--mute); }
+.here { color: var(--brand); background: var(--brand-soft); border-color: var(--brand-soft); }
+.hop { display: flex; align-items: center; gap: 8px; padding: 6px 16px 6px 100px; background: var(--bg); font: 600 11.5px/1.2 var(--font-body); color: var(--mute); }
+.legCurrent { background: color-mix(in srgb, var(--brand) 5%, var(--surface)); }
+
+/* ───────── até a partida ───────── */
+.ms { display: flex; flex-direction: column; padding: 6px var(--s4); }
+.msRow { display: grid; grid-template-columns: 62px 14px minmax(0, 1fr); gap: 10px; align-items: start; padding: 9px 0; color: inherit; text-decoration: none; }
+a.msRow:hover .msTitle { color: var(--brand); }
+.msWhen { font: 700 12px/1.35 var(--font-body); color: var(--mute); text-align: right; white-space: nowrap; }
+.msWhenLate { color: var(--warn); }
+.msDot { width: 12px; height: 12px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--rail); background: var(--surface); }
+.msDotTodo { border-color: var(--warn); }
+.msDotFirst { background: currentColor; }
+.msTitle { display: block; font: 600 14px/1.35 var(--font-body); }
+.msDetail { display: block; margin-top: 1px; font: 400 12.5px/1.4 var(--font-body); color: var(--mute); }
+
+/* ───────── prontidão ───────── */
+.ready { display: flex; flex-direction: column; gap: 14px; }
+.rRow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.rName { display: flex; flex-direction: column; gap: 6px; font: 600 14px/1.2 var(--font-body); min-width: 0; }
+.bars { display: flex; gap: 3px; }
+.bar { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.barOk { background: var(--ok); }
+.rMiss { font: 600 12.5px/1.3 var(--font-body); color: var(--warn); text-align: right; }
+.rOk { color: var(--ok); }
+
+/* ───────── postal ───────── */
+.postal { position: relative; display: flex; flex-direction: column; background: var(--surface); border-radius: var(--r-card-lg); overflow: hidden; }
+.postalBody { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px 18px; }
+.postalTitle { margin: 0; font: 800 26px/1.05 var(--font-title); letter-spacing: -0.02em; }
+.postalTitle a { color: inherit; text-decoration: none; }
+.postalTitle a:hover { color: var(--brand); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 999px; background: var(--field); font: 600 12px/1 var(--font-body); color: var(--ink-2); }
+.chipBrand { background: var(--brand-soft); color: var(--brand); }
+.phrase { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px; border-radius: 16px; background: var(--bg); }
+.phraseText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.phraseText b { font: 700 16px/1.25 var(--font-body); }
+.phraseText span { font: 400 12.5px/1.4 var(--font-body); color: var(--mute); }
+
+/* ───────── clima e câmbio ───────── */
+.wx { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px; }
+.wxCell { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 4px; border-radius: 16px; background: var(--surface); text-align: center; min-width: 0; }
+.wxName { font: 600 12px/1.2 var(--font-body); color: var(--ink-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wxMax { font: 800 22px/1 var(--font-title); }
+.wxSub { font: 500 10.5px/1.25 var(--font-body); color: var(--mute); white-space: nowrap; }
+.fx { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.fxBig { font: 800 26px/1 var(--font-title); letter-spacing: -0.02em; white-space: nowrap; }
+.fxText { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+/* ───────── desde sua última visita ───────── */
+.feed { display: flex; flex-direction: column; padding: 4px var(--s4); }
+.feedRow { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; padding: 11px 0; border-bottom: 1px solid var(--line-2); color: inherit; text-decoration: none; }
+.feedRow:last-child { border-bottom: 0; }
+.feedRow:hover .feedText { color: var(--ink); }
+.feedText { margin: 0; font: 400 14px/1.4 var(--font-body); color: var(--ink-2); }
+.feedWhen { display: block; margin-top: 2px; font: 500 12px/1.3 var(--font-body); color: var(--mute); }
+.feedIcon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+
+@media (min-width: 821px) {
+  .row { margin: 0; padding: 2px 0; flex-wrap: wrap; overflow: visible; }
+  .pill { width: calc((100% - 16px) / 3); }
+}

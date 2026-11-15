@@ -10,6 +10,7 @@ import { DICTIONARY_ACCENT, PERSON_COLORS } from '../identity/accent';
 import { categoryKind, splitEqual } from '../money';
 import { addDays } from '../time';
 import { DEMO_RAW } from './demo.data';
+import { DEMO_PHOTOS } from './demoPhotos';
 
 export const DEMO_KEYS = ['andes', 'japao', 'marrocos', 'islandia'] as const;
 export type DemoKey = (typeof DEMO_KEYS)[number];
@@ -177,7 +178,7 @@ export function buildDemoBundle(key: DemoKey): TripBundle {
       altitude_m: alt ? Number(alt[1].replace(/\./g, '')) : null, lat: c?.[0] ?? null, lng: c?.[1] ?? null,
       arrival_mode: MODE[s.tmode] ?? 'other', color: null, notes: null, code: s.code, meta: s.meta,
       tip: s.tip ? { text: s.tip, kind: 'outro', by: 'ai', generated_at: now } : null,
-      area: AREA[key]?.[i] ?? null, photo: null,
+      area: AREA[key]?.[i] ?? null, photo: DEMO_PHOTOS[key]?.[s.city] ?? null,
     });
     const prevLeg = i > 0 ? raw.stops[i - 1].leg : '';
     const dur = prevLeg.match(/(\d+)h(\d+)?|(\d+)\s*min/);

@@ -24,7 +24,8 @@ import { pathLabel, placeOf } from '../../lib/activityPlace';
 import { callAi } from '../../lib/ai/client';
 import { currencyForCountry } from '../../lib/currency';
 import { dayWeekU, hhmm, MODE_LABEL } from '../../lib/format';
-import { fetchPhoto, photoCredit } from '../../lib/photos';
+import { fetchPhoto, photoCredit, unsplashAt } from '../../lib/photos';
+import { photoOptions, trackPhotoUse } from '../../data/photoServer';
 import { stopSlots, type DaySlot } from '../../lib/suggestions';
 import { dateRange, isValidTimeZone, listTimeZones } from '../../lib/time';
 import s from './route.module.css';
@@ -136,6 +137,9 @@ export function EditStopSheet({ stop, onClose, onDeleted }: { stop: Stop; onClos
   });
   const [photo, setPhoto] = useState<PhotoRef | null>(stop.photo?.url ? stop.photo : null);
   const [looking, setLooking] = useState<'idle' | 'busy' | 'none'>('idle');
+  // "Trocar foto" (14/11/2026): até 9 opções do Unsplash; a escolhida é marcada `picked` e a troca automática não mexe mais.
+  const [options, setOptions] = useState<PhotoRef[] | null>(null);
+  const [optErr, setOptErr] = useState<string | null>(null);
   const tzs = useMemo(() => listTimeZones(), []);
   const codeOk = !v.code || /^[A-Za-z0-9]{2,4}$/.test(v.code);
   const tzOk = !v.tz || isValidTimeZone(v.tz);
@@ -145,8 +149,9 @@ export function EditStopSheet({ stop, onClose, onDeleted }: { stop: Stop; onClos
     altitude_m: v.alt ? Math.round(Number(v.alt)) : null, lat: v.lat ? Number(v.lat) : null, lng: v.lng ? Number(v.lng) : null, arrival_mode: v.mode, meta: nn(v.meta),
     area: nn(v.area)?.slice(0, 80) ?? null, notes: nn(v.notes), photo,
   });
+  const changedPhoto = photo?.url !== stop.photo?.url;
   const save = () =>
-    run(() => source.update('stops', stop.id, patch(), stop.version).then(reload).then(onClose), {
+    run(() => source.update('stops', stop.id, patch(), stop.version).then(() => { if (changedPhoto) trackPhotoUse(photo); }).then(reload).then(onClose), {
       success: 'Parada atualizada.',
       onConflict: () => source.update('stops', stop.id, patch()).then(reload).then(onClose),
     });
@@ -164,7 +169,17 @@ export function EditStopSheet({ stop, onClose, onDeleted }: { stop: Stop; onClos
     setLooking('busy');
     const p = await fetchPhoto([v.name.trim(), v.country.trim()].filter(Boolean).join(', '));
     setLooking(p ? 'idle' : 'none');
-    if (p) setPhoto(p);
+    if (p) setPhoto({ ...p, picked: true });
+  };
+  const choose = async () => {
+    setLooking('busy');
+    setOptErr(null);
+    const r = await photoOptions(v.name.trim(), v.country.trim() || null);
+    if (!r.configured) return look(); // servidor sem Unsplash: segue a busca na Wikipedia
+    setLooking('idle');
+    if (r.error) return setOptErr(r.error);
+    if (!r.photos.length) return setOptErr('Nenhuma foto boa deste lugar no Unsplash. Dá pra tentar com outro nome.');
+    setOptions(r.photos);
   };
   const canLook = source.kind === 'supabase' && online;
 
@@ -195,9 +210,29 @@ export function EditStopSheet({ stop, onClose, onDeleted }: { stop: Stop; onClos
           <Photo photo={photo as PhotoData | null} place={v.name} ratio="16/9" />
           {photo ? <span className={s.note}>{photoCredit(photo)}</span> : <span className={s.note}>Sem foto: a capa usa a ilustração na cor da trilha.</span>}
           <div className={s.row}>
-            {canLook ? <Button size="sm" variant="secondary" icon={looking === 'busy' ? undefined : 'search'} onClick={() => void look()} disabled={looking === 'busy'}>{looking === 'busy' ? <Busy>Procurando</Busy> : 'Buscar na Wikipedia'}</Button> : null}
+            {canLook ? <Button size="sm" variant="secondary" icon={looking === 'busy' ? undefined : 'search'} onClick={() => void choose()} disabled={looking === 'busy' || v.name.trim().length < 2}>{looking === 'busy' ? <Busy>Procurando</Busy> : photo ? 'Trocar foto' : 'Escolher foto'}</Button> : null}
             {photo ? <Button size="sm" variant="ghost" onClick={() => setPhoto(null)}>Tirar foto</Button> : null}
           </div>
+          {options ? (
+            <div className={s.pickGrid} role="group" aria-label={`Fotos de ${v.name}`}>
+              {options.map((o) => (
+                <button
+                  key={o.url}
+                  type="button"
+                  className={s.pickOpt}
+                  aria-pressed={photo?.url === o.url}
+                  aria-label={`Usar foto de ${o.author ?? 'autor desconhecido'}`}
+                  style={o.color ? { backgroundColor: o.color } : undefined}
+                  onClick={() => setPhoto({ ...o, picked: true })}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={unsplashAt(o.url!, 360, 4 / 3)} alt="" loading="lazy" decoding="async" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {options ? <span className={s.note}>Fotos do Unsplash. A escolhida vale para a turma toda depois de salvar.</span> : null}
+          {optErr ? <span className={s.note}>{optErr}</span> : null}
           {looking === 'none' ? <span className={s.note}>Não achamos uma foto deste lugar com autor e licença. Melhor ficar sem do que mostrar outro lugar.</span> : null}
         </div>
       </div>

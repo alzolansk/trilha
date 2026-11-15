@@ -85,8 +85,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirst(req, TILES, 400));
     return;
   }
-  // Fotos públicas da Wikimedia (crédito vai junto no dado): cache-first, ~300 entradas.
-  if (url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') {
+  // Fotos públicas da Wikimedia e do Unsplash (crédito vai junto no dado): cache-first, ~300 entradas.
+  if (url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org' || url.hostname === 'images.unsplash.com') {
     event.respondWith(cacheFirst(req, PHOTOS, 300));
   }
   // Supabase e demais origens: rede direta (dados de usuário não passam pelo cache do SW).

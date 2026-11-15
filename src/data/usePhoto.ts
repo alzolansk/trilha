@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import type { PhotoRef } from './types';
 import { claimPhoto, fetchActivityPhoto, fetchPhoto, fetchPlacePhoto, type PlacePhotoQuery } from '../lib/photos';
 import { useAuth } from './AuthContext';
+import { trackPhotoUse } from './photoServer';
 
 /** `activityIn`: é um passeio nessa cidade; sem página na Wikipedia, procura também nos arquivos do Commons. */
 export function useResolvedPhoto(stored: PhotoRef | null | undefined, query: string | string[] | null | undefined, canResolve: boolean, onFound?: (p: PhotoRef) => void, activityIn?: string | null): PhotoRef | null {
@@ -24,7 +25,10 @@ export function useResolvedPhoto(stored: PhotoRef | null | undefined, query: str
       if (!alive || !p?.url) return;
       if (!claimPhoto(p.url, key.split('|')[0].toLowerCase())) return;
       setFound(p);
-      onFound?.(p);
+      if (onFound) {
+        onFound(p);
+        trackPhotoUse(p); // gravada para a turma: conta como uso
+      }
     });
     return () => {
       alive = false;
