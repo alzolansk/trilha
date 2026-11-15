@@ -77,7 +77,8 @@ export async function resolveUnsplash(ask: ResolveAsk): Promise<PhotoRef | null 
   const cityEn = (await englishName(ask.city)) ?? ask.city;
   const res = await api<UnsplashSearch>(unsplashSearchUrl(`${words.join(' ')} ${cityEn}`.trim()));
   if (res === undefined) return undefined;
-  const hit = await pickVerified(res?.results ?? [], { names: words }, async (id) => api<UnsplashPhoto>(unsplashPhotoUrl(id)), 2);
+  // Passeio: busca + no máximo 1 detalhe (o limite por hora é curto e as paradas têm prioridade).
+  const hit = await pickVerified(res?.results ?? [], { names: words }, async (id) => api<UnsplashPhoto>(unsplashPhotoUrl(id)), 1);
   return hit ? toPhotoRef(hit) : null;
 }
 

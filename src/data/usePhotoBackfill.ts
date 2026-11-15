@@ -54,18 +54,24 @@ export function usePhotoBackfill() {
           : await fetchPhoto([s.name, s.country].filter(Boolean).join(', '));
         await save('stops', s.id, s.version, photo, `${s.name}|${s.country ?? ''}`.toLowerCase());
       }
+      // Paradas antes dos passeios (14/11/2026): são o hero e o bilhete, e o limite por hora do Unsplash acaba rápido.
+      for (const s of upgrades) {
+        if (!alive) break;
+        tried.add(`up:${s.id}`);
+        const photo = await fetchServerPhoto({ kind: 'place', name: s.name, context: s.country, lat: s.lat, lng: s.lng, radiusKm: 40 });
+        if (photo?.provider === 'unsplash') await save('stops', s.id, s.version, photo, `${s.name}|${s.country ?? ''}`.toLowerCase());
+      }
+      // Mostra as paradas novas já, sem esperar os passeios.
+      if (saved && alive && acts.length) {
+        await reload();
+        saved = 0;
+      }
       for (const a of acts) {
         if (!alive) break;
         tried.add(a.id);
         const city = bundle.stops.find((s) => s.id === a.stop_id)?.name ?? '';
         const photo = await fetchActivityPhoto([a.title.replace(/^Bate-volta: /, '')], city);
         await save('activities', a.id, a.version, photo, `act|${a.title}|${city}`.toLowerCase());
-      }
-      for (const s of upgrades) {
-        if (!alive) break;
-        tried.add(`up:${s.id}`);
-        const photo = await fetchServerPhoto({ kind: 'place', name: s.name, context: s.country, lat: s.lat, lng: s.lng, radiusKm: 40 });
-        if (photo?.provider === 'unsplash') await save('stops', s.id, s.version, photo, `${s.name}|${s.country ?? ''}`.toLowerCase());
       }
       running.current = false;
       if (saved && alive) await reload();
