@@ -6,6 +6,8 @@
 /* crédito da foto embaixo, para não brigar com a turma no topo */
 .heroPhoto :global(button[aria-label="Crédito da foto"]) { top: auto; bottom: 10px; right: 12px; }
 .heroPhoto :global([role="note"]) { top: auto; bottom: 50px; }
+/* crédito do Unsplash um pouco maior no hero (legível em captura) */
+.heroPhoto figcaption { font-size: 12.5px; padding: 4px 9px; }
 
 .heroTop {
   position: absolute; left: var(--gutter); right: var(--gutter); top: calc(16px + env(safe-area-inset-top));
