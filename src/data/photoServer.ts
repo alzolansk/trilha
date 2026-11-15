@@ -3,19 +3,22 @@
 import type { PhotoRef } from './types';
 import type { ServerPhotoFn } from '../lib/photos';
 
-/** null = ainda não sabemos; false = o servidor não tem chave do Unsplash (não pergunta mais nesta sessão). */
-let configured: boolean | null = null;
+/**
+ * Quando o servidor disse que não tem chave do Unsplash, não pergunta de novo por 5 minutos
+ * (antes era até recarregar a página: uma aba aberta antes de a chave existir nunca tentava de novo).
+ */
+const RETRY_MS = 5 * 60 * 1000;
+let noKeyUntil = 0;
 
 export const serverPhoto: ServerPhotoFn = async (ask) => {
-  if (configured === false) return undefined;
+  if (Date.now() < noKeyUntil) return undefined;
   const r = await fetch('/api/photos/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(ask) });
   if (!r.ok) return undefined;
   const j = (await r.json()) as { configured?: boolean; unavailable?: boolean; photo?: PhotoRef | null };
   if (j.configured === false) {
-    configured = false;
+    noKeyUntil = Date.now() + RETRY_MS;
     return undefined;
   }
-  configured = true;
   if (j.unavailable || j.photo === undefined) return undefined;
   return j.photo?.url ? j.photo : null;
 };
