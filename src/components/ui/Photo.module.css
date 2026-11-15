@@ -19,7 +19,7 @@
 /* Crédito do Unsplash escrito na foto (diretriz da API): canto de baixo, fundo escuro para 4.5:1. */
 .byline {
   position: absolute; right: 8px; bottom: 8px; z-index: 3; max-width: calc(100% - 16px); padding: 3px 7px; border-radius: 7px;
-  background: rgba(13, 16, 23, .62); color: #FFFFFF; font: 500 10.5px/1.3 var(--font-body);
+  background: rgba(13, 16, 23, .62); color: #FFFFFF; font: 500 11.5px/1.3 var(--font-body);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .byline a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }

@@ -76,7 +76,7 @@ describe('PhotoRef e URLs', () => {
     expect(p).toMatchObject({ provider: 'unsplash', provider_id: 'abc123XYZ', author: 'Sora Sagano', color: '#A0B0C0', license: 'Licença Unsplash' });
     expect(p.author_url).toBe('https://unsplash.com/@sora?utm_source=trilha&utm_medium=referral');
     expect(p.source_url).toContain('utm_medium=referral');
-    expect(photoCredit(p)).toBe('Foto: Sora Sagano no Unsplash');
+    expect(photoCredit(p)).toBe('Foto de Sora Sagano no Unsplash');
   });
 
   it('pede largura, formato automático e, com proporção, recorte pela área interessante', () => {

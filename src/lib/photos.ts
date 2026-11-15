@@ -117,11 +117,11 @@ export function parseImageInfo(json: ImageInfoJson): PhotoRef | null {
   };
 }
 
-/** Texto do crédito: "Foto: Fulano · CC BY-SA 4.0 · Wikimedia Commons" ou "Foto: Fulano no Unsplash". */
+/** Texto do crédito: "Foto: Fulano · CC BY-SA 4.0 · Wikimedia Commons" ou "Foto de Fulano no Unsplash" (formato que o Unsplash pede). */
 export function photoCredit(p: PhotoRef | null | undefined): string | null {
   if (!p) return null;
   if (p.path && !p.url) return 'Foto da turma';
-  if (p.provider === 'unsplash' || (p.url && isUnsplashImage(p.url))) return `Foto: ${p.author || 'autor desconhecido'} no Unsplash`;
+  if (p.provider === 'unsplash' || (p.url && isUnsplashImage(p.url))) return `Foto de ${p.author || 'autor desconhecido'} no Unsplash`;
   return ['Foto: ' + (p.author || 'autor desconhecido'), p.license, 'Wikimedia Commons'].filter(Boolean).join(' · ');
 }
 

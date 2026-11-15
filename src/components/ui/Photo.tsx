@@ -138,8 +138,8 @@ export function Photo({ photo, place, alt, ratio, height, radius = 'var(--r-thum
       {children ? <div className={s.content}>{children}</div> : null}
       {byline ? (
         <figcaption className={s.byline}>
-          Foto: {photo!.author_url && !inLink ? <a href={photo!.author_url} target="_blank" rel="noopener noreferrer">{photo!.author || 'autor'}</a> : photo!.author || 'autor'}
-          {' / '}
+          Foto de {photo!.author_url && !inLink ? <a href={photo!.author_url} target="_blank" rel="noopener noreferrer">{photo!.author || 'autor desconhecido'}</a> : photo!.author || 'autor desconhecido'}
+          {' no '}
           {!inLink ? <a href={photo!.source_url || `https://unsplash.com/?${UNSPLASH_UTM}`} target="_blank" rel="noopener noreferrer">Unsplash</a> : 'Unsplash'}
         </figcaption>
       ) : caption && place && has ? <figcaption className={s.caption}>foto · {place}</figcaption> : null}
@@ -152,7 +152,7 @@ export function Photo({ photo, place, alt, ratio, height, radius = 'var(--r-thum
             <span className={s.credit} role="note">
               {unsplash ? (
                 <>
-                  Foto: {photo!.author_url ? <a href={photo!.author_url} target="_blank" rel="noopener noreferrer">{photo!.author || 'autor'}</a> : photo!.author || 'autor'}
+                  Foto de {photo!.author_url ? <a href={photo!.author_url} target="_blank" rel="noopener noreferrer">{photo!.author || 'autor desconhecido'}</a> : photo!.author || 'autor desconhecido'}
                   {' no '}
                   <a href={photo!.source_url || `https://unsplash.com/?${UNSPLASH_UTM}`} target="_blank" rel="noopener noreferrer">Unsplash</a>
                 </>
