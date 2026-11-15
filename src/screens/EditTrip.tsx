@@ -11,6 +11,7 @@ import { ACCENT_CHOICES } from '../lib/identity/accent';
 import { centsToDecimal, toCents } from '../lib/money';
 import { instantToWall, isValidTimeZone, listTimeZones, wallToInstant } from '../lib/time';
 import { Button, Card, Field, FieldGrid, ScreenHeader } from '../components/ui';
+import { TripExport } from '../components/TripExport';
 import s from './editTrip.module.css';
 
 const STYLES: TripStyle[] = ['Mochilão', 'Conforto', 'Aventura', 'Cultural'];
@@ -37,7 +38,7 @@ export default function EditTrip() {
   const tzs = useMemo(() => listTimeZones(), []);
   const ok = v.title.trim() && v.end >= v.start && isValidTimeZone(v.tz) && isValidTimeZone(v.home) && /^[A-Z]{3}$/.test(v.currency);
 
-  if (!canEdit) return <div className="wrap"><ScreenHeader title="Dados da trilha" subtitle="Só organizador e editores alteram os dados da trilha." /></div>;
+  if (!canEdit) return <div className="wrap"><ScreenHeader title="Dados da trilha" subtitle="Só organizador e editores alteram os dados da trilha." /><TripExport /></div>;
 
   const pickAccent = (hex: string | null) =>
     run(async () => {
@@ -135,6 +136,7 @@ export default function EditTrip() {
           {isOrganizer ? <Button variant="secondary" style={{ color: "var(--warn)", marginTop: 32 }} onClick={del}>Excluir trilha</Button> : null}
         </div>
       </section>
+      <TripExport />
     </div>
   );
 }

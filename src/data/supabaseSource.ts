@@ -46,13 +46,47 @@ function ensureOnline() {
   if (typeof navigator !== 'undefined' && !navigator.onLine) throw new OfflineError();
 }
 
+/** A exportação percorre todas as páginas, inclusive quando o servidor limita as respostas. */
+interface PageResult<T> { data: T[] | null; error: { code?: string; message?: string } | null }
+interface PageQuery<T> extends PromiseLike<PageResult<T>> {
+  order(column: string): PageQuery<T>;
+  range(from: number, to: number): PageQuery<T>;
+}
+
+export async function readAllPages<T>(query: (from: number, to: number) => PromiseLike<PageResult<T>>): Promise<PageResult<T>> {
+  const data: T[] = [];
+  for (;;) {
+    const page = await query(data.length, data.length + 499);
+    if (page.error) return { data: null, error: page.error };
+    if (!page.data?.length) return { data, error: null };
+    data.push(...page.data);
+  }
+}
+
+const COMPOSITE_ORDER: Partial<Record<TableName, string[]>> = {
+  trip_members: ['user_id'], expense_shares: ['expense_id', 'user_id'],
+  inspiration_votes: ['entry_id', 'user_id'], poll_votes: ['poll_id', 'option_id', 'user_id'],
+  trip_preferences: ['user_id'], document_shares: ['document_id', 'user_id'],
+  document_offline_prefs: ['document_id', 'user_id'], document_keys: ['document_id', 'user_id'],
+  user_keys: ['user_id'],
+};
+
 export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId: string): TripSource {
   return {
     kind: 'supabase',
     tripId,
     userId,
 
-    async load() {
+    async load(options) {
+      if (options?.allRows && typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error('Conecte-se à internet para exportar os dados atualizados da viagem.');
+      }
+      // Ordenação estável evita perder/duplicar linhas nos limites entre páginas.
+      const rows = <T,>(table: TableName, query: PageQuery<T>): PromiseLike<PageResult<T>> => {
+        if (!options?.allRows) return query;
+        for (const column of COMPOSITE_ORDER[table] ?? ['id']) query = query.order(column);
+        return readAllPages((from, to) => query.range(from, to));
+      };
       const tripRes = await sb.from('trips').select('*').eq('id', tripId).maybeSingle();
       if (tripRes.error) throw tripRes.error;
       if (!tripRes.data) throw Object.assign(new Error('Viagem não encontrada ou sem acesso.'), { code: 'NOT_FOUND' });
@@ -60,7 +94,7 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
         CHILD_TABLES.map(async ({ table, order, optional }) => {
           let q = sb.from(table).select('*').eq('trip_id', tripId);
           for (const [col, asc] of order ?? []) q = q.order(col, { ascending: asc, nullsFirst: false });
-          const r = await q;
+          const r = await rows(table, q);
           if (r.error) {
             if (optional && isMissingTable(r.error)) {
               console.warn(`[trilha] tabela ${table} não existe no banco: aplique as migrations pendentes.`);
@@ -85,12 +119,12 @@ export function createSupabaseSource(sb: SupabaseClient, tripId: string, userId:
         }
       })();
       const [shares, prefs, retro, profiles, docKeys, pubKeys] = await Promise.all([
-        docIds.length ? sb.from('document_shares').select('*').in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
-        docIds.length ? sb.from('document_offline_prefs').select('*').eq('user_id', userId).in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
+        docIds.length ? rows('document_shares', sb.from('document_shares').select('*').in('document_id', docIds)) : Promise.resolve({ data: [], error: null }),
+        docIds.length ? rows('document_offline_prefs', sb.from('document_offline_prefs').select('*').eq('user_id', userId).in('document_id', docIds)) : Promise.resolve({ data: [], error: null }),
         sb.from('trip_retros').select('*').eq('trip_id', tripId).maybeSingle(),
-        sb.from('profiles').select('*').in('id', memberIds),
-        docIds.length ? sb.from('document_keys').select('document_id,user_id,wrapped_key').in('document_id', docIds) : Promise.resolve({ data: [], error: null }),
-        sb.from('user_keys').select('user_id,public_key').in('user_id', memberIds),
+        rows('profiles', sb.from('profiles').select('*').in('id', memberIds)),
+        docIds.length ? rows('document_keys', sb.from('document_keys').select('document_id,user_id,wrapped_key').in('document_id', docIds)) : Promise.resolve({ data: [], error: null }),
+        rows('user_keys', sb.from('user_keys').select('user_id,public_key').in('user_id', memberIds)),
       ]);
       for (const r of [shares, prefs, retro, profiles, docKeys, pubKeys]) if (r.error) throw r.error;
       bundle.documentKeys = docKeys.data ?? [];

@@ -20,7 +20,7 @@ export interface TripSource {
   kind: 'supabase' | 'demo';
   tripId: string;
   userId: string;
-  load(): Promise<TripBundle>;
+  load(options?: { allRows?: boolean }): Promise<TripBundle>;
   insert<T = Record<string, unknown>>(table: TableName, row: Record<string, unknown>, opts?: { returning?: boolean }): Promise<T>;
   /** Atualiza com controle de versão quando `version` é informado (lança ConflictError). */
   update<T = Record<string, unknown>>(table: TableName, id: string, patch: Record<string, unknown>, version?: number): Promise<T>;
