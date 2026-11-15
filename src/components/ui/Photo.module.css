@@ -22,5 +22,6 @@
   background: rgba(13, 16, 23, .62); color: #FFFFFF; font: 500 11.5px/1.3 var(--font-body);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.byline a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* duas classes no seletor: ganha do a:hover global (azul ilegível no fundo escuro) */
+.byline a, .byline a:hover, .byline a:visited { color: #FFFFFF; text-decoration: underline; text-underline-offset: 2px; }
 .byline a:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 1px; }
