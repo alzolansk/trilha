@@ -1,6 +1,8 @@
 'use client';
 // Início (planning §5.1, canvas Inicio.dc.html): hero com foto e contagem, "Hoje a Trilha sugere",
 // cartão escuro do dinheiro da turma e o próximo passo do planejamento.
+// Início 3.0 (planning §13, 14/11/2026): pendências em fileira, bilhete da viagem, até a partida, prontidão da turma,
+// postal do dia, clima e câmbio e "desde sua última visita". Cada bloco some sem dado e muda com a fase.
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { TripSwitcherButton } from '../components/shell/TripSwitcher';
@@ -10,6 +12,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useAction } from '../components/ui/feedback';
 import type { IconName } from '../components/ui/icons.data';
 import { ListRow } from '../components/ui/ListRow';
+import { Milestones, PendingRow, PostcardBlock, Readiness, SinceLastVisit, TripTicket, WeatherFx } from '../components/home/HomeBlocks';
 import { Photo, type PhotoData } from '../components/ui/Photo';
 import { Progress } from '../components/ui/Progress';
 import { Sheet } from '../components/ui/Sheet';
@@ -26,6 +29,7 @@ import { budgetOverview, formatMoney } from '../lib/money';
 import { fetchPhoto } from '../lib/photos';
 import { hasDestination, nextStep, planStage } from '../lib/plan';
 import { parseOnboarding } from '../lib/onboarding';
+import { milestones, postcardOf, readiness } from '../lib/home';
 import { rankForHome, stopsNeedingSuggestions, type HomeCard, type HomeCardType } from '../lib/suggestions';
 import { countdown, todayIn } from '../lib/time';
 import PlanningHome from './PlanningHome';
@@ -37,7 +41,8 @@ export default function Inicio() {
   return hasDestination(bundle) ? <TripInicio /> : <PlanningHome />;
 }
 
-const VISIBLE = 3;
+/** cartão grande + até 4 pendências na fileira */
+const VISIBLE = 5;
 const ICON: Record<HomeCardType, { icon: IconName; tone: 'brand' | 'sun' | 'ok' | 'neutral' | 'dark'; eyebrow: 'brand' | 'warn' | 'ok' | 'mute' }> = {
   vote: { icon: 'check', tone: 'ok', eyebrow: 'warn' },
   reserve: { icon: 'bed', tone: 'brand', eyebrow: 'brand' },
@@ -156,7 +161,13 @@ function TripInicio() {
   const todayStop = phase.kind === 'during' || phase.kind === 'today'
     ? stops.find((x) => today >= x.arrival_date && today <= x.departure_date) ?? null
     : null;
+  // "A seguir": o primeiro passeio com horário que ainda não começou, no fuso da parada.
+  const nowHm = todayStop ? new Intl.DateTimeFormat('en-GB', { timeZone: todayStop.tz || trip.departure_tz || 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now) : '';
+  const marks = useMemo(() => milestones(b, today), [b, today]);
+  const ready = useMemo(() => readiness(b, me, now), [b, me, now]);
+  const postcard = useMemo(() => postcardOf(b, today), [b, today]);
   const todayActs = todayStop ? b.activities.filter((a) => a.stop_id === todayStop.id && a.day === today).sort((x, y) => (x.time ?? '99').localeCompare(y.time ?? '99') || x.position - y.position) : [];
+  const nextActId = todayActs.find((a) => a.time && a.time.slice(0, 5) >= nowHm)?.id ?? null;
 
   return (
     <div className={s.page}>
@@ -171,7 +182,7 @@ function TripInicio() {
           <div className={s.heroBase}>
             <span className={s.heroLine}>{trip.title} · {dateSpan(trip.start_date, trip.end_date)}</span>
             <HeroCount phase={phase} now={now} target={tripTarget(trip)} tz={trip.departure_tz || 'America/Sao_Paulo'} firstName={first?.name ?? trip.title} todayName={todayStop?.name ?? null} base={base} />
-            {heroPhoto && heroPlace ? <span className={s.heroCaption}>foto · {heroPlace}</span> : null}
+            {heroPhoto && heroPlace && heroPhoto.provider !== 'unsplash' ? <span className={s.heroCaption}>foto · {heroPlace}</span> : null}
           </div>
         </Photo>
       </section>
@@ -193,9 +204,10 @@ function TripInicio() {
               </div>
               {todayActs.length ? (
                 <div className={s.list}>
-                  {todayActs.map((a) => (
-                    <ListRow key={a.id} card icon="cal" iconTone="neutral" eyebrow={a.time ? a.time.slice(0, 5) : 'Hoje'} eyebrowTone="mute" title={a.title} subtitle={a.notes ?? undefined} />
-                  ))}
+                  {todayActs.map((a) => {
+                    const next = a.id === nextActId;
+                    return <ListRow key={a.id} card icon="cal" iconTone={next ? 'brand' : 'neutral'} eyebrow={next ? `A seguir · ${a.time!.slice(0, 5)}` : a.time ? a.time.slice(0, 5) : 'Hoje'} eyebrowTone={next ? 'brand' : 'mute'} title={a.title} subtitle={a.notes ?? undefined} />;
+                  })}
                 </div>
               ) : (
                 <EmptyState compact icon="cal" title="Dia livre" text="Nada marcado pra hoje. Bom dia pra descansar ou ver as sugestões." />
@@ -203,19 +215,18 @@ function TripInicio() {
             </section>
           ) : null}
 
+          {cards.length ? (
           <section className={s.section} aria-labelledby="sugere">
             <div className={s.sectionHead}>
               <h2 id="sugere" className={s.h2}>Hoje a Trilha sugere</h2>
-              {cards.length > VISIBLE ? (
+              {cards.length > visible.length ? (
                 <button type="button" className={s.more} onClick={() => setAll(true)}>
-                  <span className="num">{`${VISIBLE} de ${cards.length} · ver todas`}</span>
+                  <span className="num">{`${visible.length} de ${cards.length} · ver todas`}</span>
                 </button>
-              ) : cards.length ? <span className={s.count}><span className="num">{cards.length}</span> {cards.length === 1 ? 'item' : 'itens'}</span> : null}
+              ) : <span className={s.count}><span className="num">{cards.length}</span> {cards.length === 1 ? 'item' : 'itens'}</span>}
             </div>
 
-            {!cards.length ? (
-              <EmptyState compact icon="check" title="Tudo em dia" text="Sem votos, reservas ou pendências agora. Quando surgir algo, aparece aqui." />
-            ) : (
+            {(
               <div className={s.list}>
                 {big?.suggestion ? (
                   <SuggestionCard
@@ -232,10 +243,18 @@ function TripInicio() {
                     onDismiss={canEdit ? () => void dismiss(big) : undefined}
                   />
                 ) : null}
-                {rows.map((c) => <CardRow key={c.key} c={c} base={base} />)}
+                <PendingRow cards={rows} base={base} />
               </div>
             )}
           </section>
+          ) : null}
+
+          {phase.kind === 'after' ? null : <TripTicket b={b} base={base} today={today} during={phase.kind !== 'before'} />}
+          {phase.kind === 'before' ? <Milestones items={marks} today={today} base={base} /> : null}
+          {phase.kind === 'before' ? <Readiness rows={ready} base={base} /> : null}
+          {phase.kind === 'after' ? null : <PostcardBlock pc={postcard} b={b} base={base} today={today} />}
+          {phase.kind === 'after' ? null : <WeatherFx b={b} today={today} />}
+          <SinceLastVisit b={b} me={me} base={base} />
         </div>
 
         <aside className={s.side}>

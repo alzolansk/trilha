@@ -51,6 +51,8 @@ Este plano implementa esse design **no app Next.js atual**:
 | 8 — Descobrir e nova trilha | ✅ implementada e validada localmente (ressalvas abaixo; validação com IA/Supabase pendente) | branch `docs/planning-redesign` |
 | 9 — Polimento, PWA, acessibilidade e testes | ✅ parcialmente concluída (Lighthouse e aparelho real pendentes; ressalvas abaixo) | branch `docs/planning-redesign` |
 | 10 — Onboarding roteirizado | ✅ implementada e validada localmente (ressalvas abaixo; IA real e Supabase remoto pendentes) | branch `docs/planning-redesign` |
+| Fotos 2.0 (§12) | ✅ implementada; chave do Unsplash validada ao vivo (5/5 cidades do Japão conferidas); crédito visível | branch `feat/fotos-e-inicio-3` |
+| Início 3.0 (§13) | ✅ implementada (decisões em §13.7); validada na demo em 375 e 1280 px | branch `feat/fotos-e-inicio-3` |
 
 ### Pendências fechadas (14/11/2026)
 
@@ -1222,6 +1224,121 @@ Todos em `api/ai/explore` (mesma cota, mesma autenticação, só editor), com sc
    - onboarding com destino e IA real (Fase 10): "Itália, 15 dias, 2 pessoas, São Paulo" → conferir lugares e "Perto daqui", rota com ida e volta, passeios e orçamento de 14 noites; repetir com a IA desligada e conferir que cai no Roteiro manual;
    - modo avião: ler a Início, o Roteiro e os documentos offline; as ações de escrita mostram o aviso.
 4. Conferir a honestidade: toda estimativa com o selo ESTIMATIVA; nenhum nome de hotel vindo da IA; foto sempre com crédito; nada de "verificado"/"reservado" dito pela IA.
+
+## 12. Fotos 2.0: Unsplash no servidor (14/11/2026, implementado)
+
+**Problema.** A foto vinha da imagem da infobox da Wikipedia (colagem, foto antiga, vertical), em miniaturas fixas de até 1280 px, cortada no centro, buscada por cada aparelho (limite de taxa → placeholder) e sem cor de espera.
+
+**Como ficou.**
+- **Ordem das fontes:** foto da turma (upload) → **Unsplash conferido** (servidor) → Wikipedia/Commons conferida (navegador, lógica anterior) → ilustração na cor da trilha.
+- **Servidor primeiro:** com conta logada, `fetchPhoto`, `fetchPlacePhoto` e `fetchActivityPhoto` (`lib/photos.ts`) perguntam antes a `POST /api/photos/resolve`. A ponte é `setPhotoServer`, ligada no `AuthContext`. Sem chave, sem resposta ou sem foto conferida, segue a Wikipedia. Os testes rodam sem servidor.
+- **Chave e cache:** `UNSPLASH_ACCESS_KEY` só no servidor (`lib/unsplash.server.ts`). As respostas ficam no cache de dados do Next (`force-cache`, 30 dias, compartilhado entre todas as trilhas; só respostas 200 são guardadas). Um freio lê `X-Ratelimit-Remaining` e pausa 1 h abaixo de 4 chamadas (modo demo: 50/h).
+- **Nunca foto de outro lugar** (`lib/unsplash.ts`, puro e testado): só paisagem ≥ 1600 px, sem Unsplash+. A foto vale quando o texto dela (descrição, local, tags) cita o nome **por palavra inteira** ou quando as coordenadas dela caem no raio do lugar (`PHOTO_RADIUS`). A busca não traz local, então o servidor abre o detalhe das 3 primeiras (2 para passeio). O nome em inglês vem dos langlinks da Wikipedia ("Quioto" → "Kyoto"). Passeio confere pelas palavras próprias (`keyWords`).
+- **`PhotoRef` v2** (`types.ts`): `provider`, `provider_id`, `author_url`, `color`, `blur_hash` e `picked`. `valid_photo` no banco já aceitava (sem migration).
+- **`<Photo>`:** fundo na cor média, prévia borrada (blurhash 32×32), fade ao carregar e srcset do CDN do Unsplash (400 a 2048 px, `auto=format`). Com proporção conhecida (`ratio`), recorte `crop=entropy` em vez do centro. O crédito liga para o fotógrafo e para o Unsplash com UTM.
+- **Trocar foto:** na edição da parada (`StopSheet`), "Escolher/Trocar foto" mostra até 9 opções (`GET /api/photos/options`). A escolhida ganha `picked: true`. Sem Unsplash no servidor, o botão faz a busca antiga na Wikipedia.
+- **Troca das fotos antigas:** o `usePhotoBackfill` troca a foto automática da Wikimedia das paradas (até 8 por sessão; nunca `picked` nem upload) por uma do Unsplash conferida.
+- **Aviso de download** (diretriz da API): `POST /api/photos/track` quando uma foto é gravada para a turma (backfill, `useResolvedPhoto` com `onFound`, troca à mão).
+- **Offline:** o service worker guarda `images.unsplash.com` no mesmo cache das fotos.
+- **Testes:** `tests/unit/unsplash.test.ts` (qualidade, conferência, URLs, deduplicação, servidor primeiro com reserva).
+
+**Atualização (14/11/2026, noite).**
+- **Chave configurada** (`.env.local` e Vercel) e validada ao vivo pela função do servidor: Tóquio, Hakone, Kyoto, Nara e Osaka voltaram com foto conferida, 1 chamada cada. O aviso de download das 5 respondeu 200.
+- **Crédito visível:** o `<Photo>` escreve "Foto: Fulano / Unsplash" (com links e UTM) quando a foto aparece com pelo menos 180×100 px. Em miniaturas, continua o ⓘ. Dentro de link ou botão, o crédito vira texto (sem link aninhado). O texto do hero da Início subiu para não encostar no crédito.
+- **Demo do Japão com fotos** (`lib/demo/demoPhotos.ts`): ficam gravadas na demo (que não tem conta e não chama o servidor). As outras 3 demos seguem sem foto.
+
+**Pendências.**
+- **Pedir produção** (1000/h) no painel do Unsplash, com capturas do hero e do postal mostrando o crédito.
+- **Testar com conta real logada:** abrir uma trilha, ver o backfill trocar as fotos e usar o "Trocar foto" na parada.
+- **Fotos das demos Andes, Marrocos e Islândia:** mesmo script, quando sobrar cota.
+
+## 13. Início 3.0 (planejamento, 14/11/2026)
+
+Proposta visual no Claude Design: projeto "Trilha · Início com feed + fotos", arquivo `Inicio propostas.dc.html` (opções 1a Painel da partida, 1b Postal do dia, 1c Bilhete da viagem, cardápio de blocos e fotos). O servidor do Claude Design standalone sai do ar até 14/12/2026: exportar o HTML ou levar para um artefato antes disso.
+
+### 13.1 Problema e princípio
+
+A Início com destino tem hero (placeholder sem foto), até 3 pendências e o cartão do dinheiro, e acaba. **Princípio:** nada de feed genérico. Cada bloco usa dado que a trilha já tem e muda com a fase (antes, a menos de 14 dias, durante, depois). Sem dado, o bloco some (mesma regra da foto).
+
+### 13.2 Composição escolhida (proposta: mistura de 1a + 1c, com o postal de 1b)
+
+Ordem na fase **antes** (celular; no desktop, a coluna lateral segue com dinheiro e próximo passo):
+1. **Hero** (como hoje), agora com foto do Unsplash da primeira parada.
+2. **Pendências em fileira** (chips roláveis no lugar dos `ListRow`): o mesmo `rankForHome`, até 5. O cartão grande de sugestão sai daqui e vira o postal.
+3. **Bilhete da viagem**: um trecho por parada com foto, datas, noites e **carimbos** (hotel ok / sem hotel / N passeios / votação aberta / dia livre), com o transporte entre paradas. Toque abre a parada.
+4. **Até a partida**: linha do tempo de marcos datados (próximos 5; "ver tudo" abre a lista completa).
+5. **A turma está pronta?**: uma linha por pessoa, com 4 barras (aporte, documentos, voto, mala). Você vê o que falta de você; dos outros, só a contagem.
+6. **Postal do dia** (só quando há passeio com foto): um lugar do roteiro por dia, com 2 linhas, "no dia N" e a frase do dia.
+7. **Clima e câmbio** (dois mini cartões lado a lado).
+8. **Dinheiro da turma** (o cartão escuro atual).
+9. **Desde sua última visita** (até 3 linhas).
+
+**Durante:** hero "Dia N de M · Cidade", **Agora / a seguir** (próximo passeio com hora; substitui "Hoje em X"), clima de hoje, câmbio, dinheiro, desde sua última visita. Bilhete e marcos somem. **Depois:** hero com a melhor foto do Diário, acerto de contas pendente no topo, "Abrir o Diário". **Sem destino:** `PlanningHome` não muda.
+
+### 13.3 Blocos: dado, regra e onde mora
+
+| Bloco | Dado (já existe) | Regra | Novo código |
+|---|---|---|---|
+| Pendências em fileira | `rankForHome` (`lib/suggestions.ts`) | até 5; a sugestão com foto não é mais destaque | `components/home/PendingRow.tsx` |
+| Bilhete | `sortedStops`, `stays`, `transports`, `activities`, `polls` | carimbo por regra: estadia confirmada? passeios no dia? votação aberta ligada à parada? dia sem nada? | `lib/home.ts: ticketLegs(b)` + `components/home/TripTicket.tsx` |
+| Até a partida | `planSteps` (`lib/plan.ts`), `polls.closes_at`, `documents.valid_until`, `transports` (partida) | marcos com data: fechamento de votação, "reserve até" (regra nova, por tipo: hospedagem sem reserva a 60 dias, a definir), validade de documento < 6 meses da volta, check-in do voo (partida − 48 h), saída | `lib/home.ts: milestones(b, now)` |
+| Prontidão | `memberPoolStatus` (`lib/money.ts`), `docMatrix` (`lib/docMatrix.ts`), `myPendingVotes` (`lib/polls.ts`), `packingItems.assignee_id` | 4 dimensões; uma dimensão sem dado (ex.: sem orçamento) não conta | `lib/home.ts: readiness(b, me)` |
+| Postal do dia | `activities` com `photo` + `stops` | escolha determinística por dia (`hash(tripId + data) % n`), sem repetir na semana; texto curto da IA guardado no passeio (`notes` não; campo novo `blurb`?) | `components/home/Postcard.tsx`; decisão 13.5-2 |
+| Frase do dia | lista fixa por idioma (país da parada) | só se o idioma do destino ≠ pt | `lib/phrases.ts` (≈ 30 frases × 8 idiomas) |
+| Clima | Open-Meteo (já usado em `Parada.tsx` e no cron) | > 14 dias: média do mês (archive/climate); ≤ 14: previsão; durante: hoje | extrair `lib/weather.ts` do `Parada.tsx` |
+| Câmbio | `useFx` (`components/money/useFx.ts`) | só se a moeda do destino ≠ `base_currency`; variação desde o 1º aporte | `components/home/FxMini.tsx` |
+| Desde sua última visita | `updated_at`/`created_by` das linhas; `localStorage trilha.seen.<trip>` | até 3 itens de outras pessoas, desde a última abertura da Início | `lib/home.ts: sinceLastVisit(b, me, seenAt)`; decisão 13.5-3 |
+
+### 13.4 Fases de implementação
+
+1. **Fundação:** `lib/home.ts` puro (bilhete, marcos, prontidão, desde a última visita) com testes em `tests/unit/home.test.ts` usando a demo do Japão.
+2. **Bilhete + pendências em fileira:** troca a lista atual e já resolve "tela vazia" sem custo novo.
+3. **Até a partida + prontidão.**
+4. **Clima e câmbio:** extrair `lib/weather.ts`, reaproveitar `useFx`.
+5. **Postal do dia + frase do dia.**
+6. **Fases durante/depois** (Agora / a seguir; hero do Diário).
+7. **Verificação:** e2e na demo (`/demo/japao`) em 375 e 1280 px; sem rolagem horizontal; leitura offline; cada bloco some sem dado (trilha recém-criada).
+
+### 13.5 Decisões em aberto
+
+1. **Composição:** 1a + 1c + postal (proposta acima) ou uma das opções puras.
+2. **Texto do postal:** gerar com a IA uma vez por passeio e guardar (campo `blurb` em `activities`, migration pequena) ou montar só com dados (sem texto livre).
+3. **"Desde sua última visita":** derivar de `updated_at` (barato, mas não sabe quem editou: `created_by` só existe em algumas tabelas) ou criar uma tabela `trip_events` (quem, o quê, quando) gravada pelo `TripSource`. Recomendo derivar primeiro e só criar a tabela se ficar pobre.
+4. **Prontidão visível para a turma:** mostrar o que falta dos outros (pressão social) ou só contagens (proposta).
+
+### 13.6 Fotos na demo
+
+A demo não tem conta, então não chama `/api/photos/resolve`, e a Início dela (o que se vê ao avaliar o app) fica sem fotos. Opção: gravar em `lib/demo/demo.data.ts` fotos do Unsplash escolhidas à mão para as cidades das 4 demos (com crédito), resolvidas uma vez por script com a chave. Entra na fase 2.
+
+### 13.7 Implementado (14/11/2026): decisões tomadas e o que ficou de fora
+
+**Decisões (§13.5):**
+1. Composição 1a + 1c + postal, na ordem da §13.2.
+2. **Postal só com dados**, sem IA e sem migration: título, notas e custo do passeio, dia e hora. Passeio com foto tem preferência. **Sem foto, o postal fica só com o texto** (a tela encolhe em vez de enfeitar).
+3. **"Desde sua última visita" derivado** das linhas (`created_at` + autor quando existe: gastos, aportes, votações, votos, documentos, Diário). Passeios novos aparecem sem nome ("X entrou no dia N"). A visita fica em `localStorage` por trilha e pessoa e só conta depois de 4 s na tela. Na primeira visita, mostra os últimos 7 dias. Sem tabela `trip_events` por ora.
+4. **Prontidão:** de você, o que falta por nome; dos outros, só a contagem ("falta 3 itens").
+
+**Como ficou.**
+- **Lógica:** `lib/home.ts` (`ticketLegs`, `milestones`, `readiness`, `postcardOf`, `sinceLastVisit`, `destinationCurrency`), `lib/phrases.ts` (8 idiomas, revisados à mão) e `lib/weather.ts`. Testes: `tests/unit/home.test.ts` (18).
+- **Apresentação:** `components/home/HomeBlocks.tsx` + `home.module.css`. A `Inicio.tsx` monta por fase:
+  - **Antes:** sugestões (cartão grande + pendências em fileira, na mesma região "Hoje a Trilha sugere"), bilhete, até a partida, prontidão, postal, clima e câmbio, desde a última visita.
+  - **Durante:** "Hoje em X" com o próximo passeio marcado "A seguir", sugestões, bilhete com "você está aqui", postal (de amanhã em diante), clima e câmbio, desde a última visita.
+  - **Depois:** sugestões e desde a última visita.
+  - A coluna lateral (dinheiro e próximo passo) não mudou.
+- **Clima:** a até 15 dias da chegada, previsão. Mais longe, **as mesmas datas do ano passado** (arquivo da Open-Meteo), dito assim na tela. Nada de "média do mês" inventada. Cache no aparelho até o dia seguinte.
+- **Marcos:**
+  - votação com prazo;
+  - hospedagem por reservar, idealmente até 60 dias antes; com o prazo vencido, aparece como "quanto antes";
+  - documento de identidade que vence até 6 meses depois da volta;
+  - check-in do voo (48 h antes);
+  - embarque.
+
+**Fora / pendente.**
+- **Câmbio:** sem a variação "desde o primeiro aporte", porque não guardamos histórico de cotação.
+- **Fase "depois":** sem o hero com a melhor foto do Diário.
+- **Desktop:** prontidão e clima ficam na coluna principal; a lateral continua só com dinheiro e próximo passo.
+- **Demo sem fotos:** §13.6 continua pendente, precisa da chave do Unsplash para escolher as fotos.
+- **`Parada.tsx`:** continua com o próprio `useWeather` (não migrou para `lib/weather.ts`).
 
 ## Arquivos críticos
 

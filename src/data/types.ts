@@ -374,7 +374,10 @@ export interface OnboardingState {
   details?: Record<string, PlaceDetail>;
 }
 
-/** Foto escolhida: Wikimedia (com crédito) ou upload próprio (`path` no bucket covers). */
+/**
+ * Foto escolhida: Unsplash ou Wikimedia (com crédito), ou upload próprio (`path` no bucket covers).
+ * Sem `provider` = Wikimedia (fotos gravadas antes de 14/11/2026).
+ */
 export interface PhotoRef {
   url?: string;
   path?: string;
@@ -383,6 +386,17 @@ export interface PhotoRef {
   author?: string | null;
   license?: string | null;
   source_url?: string | null;
+  provider?: 'unsplash' | 'wikimedia' | null;
+  /** id da foto no provider (Unsplash: para o aviso de download e para não repetir) */
+  provider_id?: string | null;
+  /** perfil do fotógrafo (Unsplash pede link para ele) */
+  author_url?: string | null;
+  /** cor média (#RRGGBB): fundo enquanto a foto carrega */
+  color?: string | null;
+  /** prévia borrada enquanto a foto carrega */
+  blur_hash?: string | null;
+  /** escolhida à mão por alguém da turma: a troca automática nunca mexe */
+  picked?: boolean;
 }
 
 export type BudgetStyle = 'economico' | 'equilibrado' | 'conforto';

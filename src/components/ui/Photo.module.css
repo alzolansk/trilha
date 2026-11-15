@@ -1,5 +1,7 @@
 .photo { position: relative; margin: 0; width: 100%; overflow: hidden; background: var(--field); isolation: isolate; }
-.img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease; }
+.img[data-loaded] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .img { transition: none; } }
 .ph { position: absolute; inset: 0; width: 100%; height: 100%; }
 .l0 { fill: color-mix(in srgb, var(--trip-accent) 38%, var(--surface)); }
 .l1 { fill: color-mix(in srgb, var(--trip-accent) 62%, var(--surface)); }
@@ -13,3 +15,12 @@
 .info::before { content: ""; position: absolute; inset: -6px; }
 .credit { position: absolute; left: 8px; right: 8px; top: 44px; z-index: 3; padding: 8px 10px; border-radius: 10px; background: rgba(13, 16, 23, .82); color: var(--on-dark); font-size: 12px; line-height: 1.35; }
 .credit a { color: var(--brand-on-dark); }
+
+/* Crédito do Unsplash escrito na foto (diretriz da API): canto de baixo, fundo escuro para 4.5:1. */
+.byline {
+  position: absolute; right: 8px; bottom: 8px; z-index: 3; max-width: calc(100% - 16px); padding: 3px 7px; border-radius: 7px;
+  background: rgba(13, 16, 23, .62); color: #FFFFFF; font: 500 10.5px/1.3 var(--font-body);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.byline a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.byline a:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 1px; }

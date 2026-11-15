@@ -2,6 +2,8 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { setAnalyticsOptIn } from '../lib/analytics';
+import { setPhotoServer } from '../lib/photos';
+import { serverPhoto } from './photoServer';
 import { getSupabase } from '../lib/supabase/client';
 import { getTripList, saveTripList, wipeAllLocalData } from './offline';
 import type { Profile, Role, Trip, TripSummary } from './types';
@@ -62,6 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data.subscription.unsubscribe();
     };
   }, [sb]);
+
+  // Com conta logada, a foto é pedida antes ao servidor (Unsplash); sem conta, só Wikipedia no navegador.
+  // Na renderização (e não num efeito): os efeitos dos filhos, como o backfill de fotos, rodam antes dos do pai.
+  setPhotoServer(user ? serverPhoto : null);
 
   const refreshProfile = useCallback(async () => {
     if (!sb || !user) return setProfile(null);

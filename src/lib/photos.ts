@@ -9,7 +9,7 @@ export type WikiLang = (typeof WIKI_LANGS)[number];
 /** User-Agent pedido pela política da Wikimedia: identifica o app, sem e-mail pessoal. */
 export const WIKI_USER_AGENT = 'Trilha/2.0 (app de planejamento de viagens em grupo; https://github.com/alzolansk/trilha)';
 
-const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 /**
  * Hosts de imagem da Wikimedia. Desde 2026 as miniaturas vêm de thumb.wikimedia.org (antes, upload.wikimedia.org/…/thumb/…);
@@ -117,10 +117,11 @@ export function parseImageInfo(json: ImageInfoJson): PhotoRef | null {
   };
 }
 
-/** Texto do crédito: "Foto: Fulano · CC BY-SA 4.0 · Wikimedia Commons". */
+/** Texto do crédito: "Foto: Fulano · CC BY-SA 4.0 · Wikimedia Commons" ou "Foto: Fulano no Unsplash". */
 export function photoCredit(p: PhotoRef | null | undefined): string | null {
   if (!p) return null;
   if (p.path && !p.url) return 'Foto da turma';
+  if (p.provider === 'unsplash' || (p.url && isUnsplashImage(p.url))) return `Foto: ${p.author || 'autor desconhecido'} no Unsplash`;
   return ['Foto: ' + (p.author || 'autor desconhecido'), p.license, 'Wikimedia Commons'].filter(Boolean).join(' · ');
 }
 
@@ -132,10 +133,77 @@ export function thumbAt(url: string, width: number): string {
 /** Larguras do srcset: os "degraus" de miniatura que a Wikimedia serve (pedir 1200 devolve 1280). */
 export const PHOTO_WIDTHS = [500, 960, 1280] as const;
 
-/** srcset com as variantes do thumb da Wikimedia; null para qualquer outra origem (upload próprio, URL assinada). */
-export function photoSrcSet(url: string, widths: readonly number[] = PHOTO_WIDTHS): string | null {
+// ───────────── Unsplash (ajuste de 14/11/2026) ─────────────
+// A URL "raw" do Unsplash é redimensionada pelo próprio CDN (imgix): cada uso pede a largura certa, em AVIF/WebP,
+// e, quando a proporção é conhecida, o recorte pela área mais interessante (crop=entropy) em vez do centro.
+
+export const UNSPLASH_UTM = 'utm_source=trilha&utm_medium=referral';
+export const isUnsplashImage = (url: string) => /^https:\/\/images\.unsplash\.com\//.test(url);
+
+/** Larguras pedidas ao Unsplash (o CDN gera qualquer uma; estes degraus cobrem miniatura até hero em tela 3x). */
+export const UNSPLASH_WIDTHS = [400, 640, 960, 1280, 1600, 2048] as const;
+
+/** URL do Unsplash numa largura (e altura, se `ratio` = largura/altura), mantendo `ixid` e os demais parâmetros. */
+export function unsplashAt(url: string, width: number, ratio?: number | null): string {
+  const u = new URL(url);
+  for (const k of ['w', 'h', 'q', 'fit', 'crop', 'auto', 'fm', 'dpr']) u.searchParams.delete(k);
+  u.searchParams.set('w', String(width));
+  if (ratio && ratio > 0) {
+    u.searchParams.set('h', String(Math.round(width / ratio)));
+    u.searchParams.set('fit', 'crop');
+    u.searchParams.set('crop', 'entropy');
+  }
+  u.searchParams.set('q', '72');
+  u.searchParams.set('auto', 'format');
+  return u.toString();
+}
+
+/** "16/9" → 1.777…; qualquer outra coisa → null. */
+export function parseRatio(ratio: string | null | undefined): number | null {
+  const m = /^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*$/.exec(ratio ?? '');
+  if (!m) return null;
+  const r = Number(m[1]) / Number(m[2]);
+  return Number.isFinite(r) && r > 0 ? r : null;
+}
+
+/** srcset das variantes (Wikimedia ou Unsplash); null para qualquer outra origem (upload próprio, URL assinada). */
+export function photoSrcSet(url: string, widths: readonly number[] = PHOTO_WIDTHS, ratio?: number | null): string | null {
+  if (isUnsplashImage(url)) return UNSPLASH_WIDTHS.map((w) => `${unsplashAt(url, w, ratio)} ${w}w`).join(', ');
   if (!/^https:\/\/(upload|thumb)\.wikimedia\.org\/.+\/\d+px-[^/]+$/.test(url)) return null;
   return widths.map((w) => `${thumbAt(url, w)} ${w}w`).join(', ');
+}
+
+/** `src` padrão (sem srcset): Unsplash numa largura média; o resto como veio. */
+export function photoSrc(url: string, ratio?: number | null): string {
+  return isUnsplashImage(url) ? unsplashAt(url, 1280, ratio) : url;
+}
+
+/** Link com UTM para o Unsplash (a diretriz pede UTM em todo link de volta). */
+export function withUtm(url: string): string {
+  return url + (url.includes('?') ? '&' : '?') + UNSPLASH_UTM;
+}
+
+// ───────────── Servidor primeiro (ajuste de 14/11/2026) ─────────────
+// Quando há uma conta logada, a foto é pedida antes a /api/photos/resolve (Unsplash, com a chave no servidor e cache
+// compartilhado entre todas as trilhas). Sem chave, sem resposta ou sem foto conferida, segue a busca na Wikipedia.
+
+export type ServerPhotoAsk =
+  | { kind: 'place'; name: string; context?: string | null; lat?: number | null; lng?: number | null; radiusKm?: number }
+  | { kind: 'activity'; names: string[]; city: string };
+/** `undefined` = servidor não ajudou (sem chave, limite, rede): cai na Wikipedia. `null` = procurou e não há foto boa. */
+export type ServerPhotoFn = (ask: ServerPhotoAsk) => Promise<PhotoRef | null | undefined>;
+let server: ServerPhotoFn | null = null;
+/** Liga (ou desliga, com null) a busca no servidor. Os testes rodam sem. */
+export function setPhotoServer(fn: ServerPhotoFn | null) {
+  server = fn;
+}
+async function askServer(ask: ServerPhotoAsk): Promise<PhotoRef | null | undefined> {
+  if (!server) return undefined;
+  try {
+    return await server(ask);
+  } catch {
+    return undefined;
+  }
 }
 
 // ───────────── Busca no navegador (planning §10, ajuste de 08/11/2026) ─────────────
@@ -185,7 +253,8 @@ export async function findPhoto(query: string, lang: WikiLang, fetcher: typeof f
   return info ? parseImageInfo(info) : null;
 }
 
-const CACHE_KEY = 'trilha.photos.v3';
+// v4: fotos do Unsplash entram na frente; o que estava guardado (Wikipedia/sem foto) é buscado de novo.
+const CACHE_KEY = 'trilha.photos.v4';
 const DAY = 24 * 60 * 60 * 1000;
 type Cached = { p: PhotoRef | null; at: number };
 const memory = new Map<string, Promise<PhotoRef | null>>();
@@ -214,6 +283,32 @@ function writeCache(key: string, p: PhotoRef | null) {
 }
 
 /**
+ * Pergunta ao servidor, com cache no aparelho: foto achada vale 30 dias; "o servidor não tem" vale 1 dia e deixa
+ * a Wikipedia tentar. `undefined` = siga para a Wikipedia.
+ */
+async function viaServer(key: string, ask: ServerPhotoAsk): Promise<PhotoRef | undefined> {
+  if (!server) return undefined;
+  const k = `srv|${key}`;
+  const cached = readCache(k);
+  if (cached !== undefined) return cached ?? undefined;
+  const p = await askServer(ask);
+  if (p === undefined) return undefined; // falha passageira ou servidor sem chave: não guarda
+  writeCache(k, p);
+  return p ?? undefined;
+}
+
+/** Só a foto do servidor (Unsplash), sem cair na Wikipedia. Para trocar fotos antigas por melhores. */
+export async function fetchServerPhoto(ask: ServerPhotoAsk): Promise<PhotoRef | null> {
+  const key = ask.kind === 'place'
+    ? `up|${fold(ask.name)}|${fold(ask.context ?? '')}|${ask.lat?.toFixed(2) ?? ''}|${ask.lng?.toFixed(2) ?? ''}`
+    : `up|act|${fold(ask.city)}|${ask.names.map(fold).join('|')}`;
+  return (await viaServer(key, ask)) ?? null;
+}
+
+/** O servidor de fotos está ligado (conta logada)? */
+export const hasPhotoServer = () => !!server;
+
+/**
  * Navegador: foto de um lugar. Tenta cada busca de `queries` em português e em inglês, na ordem, até achar.
  * null quando não há foto; o Photo mostra o placeholder. Falha passageira não é guardada como "sem foto".
  */
@@ -225,6 +320,9 @@ export async function fetchPhoto(q: string | string[], lang: WikiLang = 'pt', fe
   if (cached !== undefined) return cached;
   if (!memory.has(key)) {
     memory.set(key, inQueue(async () => {
+      const [first, ...rest] = queries[0].split(',');
+      const fromServer = await viaServer(key, { kind: 'place', name: first.trim(), context: rest.join(',').trim() || null });
+      if (fromServer) { writeCache(key, fromServer); return fromServer; }
       let failed = false;
       for (const query of queries) {
         for (const l of lang === 'pt' ? (['pt', 'en'] as const) : (['en', 'pt'] as const)) {
@@ -273,7 +371,7 @@ export function nameMatches(name: string, title: string): boolean {
 
 const R = 6371;
 const rad = (d: number) => (d * Math.PI) / 180;
-function distKm(a: [number, number], b: [number, number]): number {
+export function distKm(a: [number, number], b: [number, number]): number {
   const h = Math.sin(rad(b[0] - a[0]) / 2) ** 2 + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(rad(b[1] - a[1]) / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
@@ -340,6 +438,8 @@ export async function fetchPlacePhoto(q: PlacePhotoQuery, fetcher: typeof fetch 
   if (cached !== undefined) return cached;
   if (!memory.has(key)) {
     memory.set(key, inQueue(async () => {
+      const fromServer = await viaServer(key, { kind: 'place', name: q.name, context: q.context ?? null, lat: q.lat ?? null, lng: q.lng ?? null, radiusKm: q.radiusKm });
+      if (fromServer) { writeCache(key, fromServer); return fromServer; }
       const searches = [...new Set([q.context ? `${q.name} ${q.context}` : '', q.name].map((x) => x.trim()).filter(Boolean))];
       let failed = false;
       for (const lang of ['pt', 'en'] as const) {
@@ -361,7 +461,7 @@ export async function fetchPlacePhoto(q: PlacePhotoQuery, fetcher: typeof fetch 
 const claims = new Map<string, string>();
 /** true quando a foto pode ser usada por `owner` (livre ou já dele). */
 export function claimPhoto(url: string, owner: string): boolean {
-  const base = url.replace(/\/\d+px-([^/]+)$/, '/$1');
+  const base = isUnsplashImage(url) ? url.split('?')[0] : url.replace(/\/\d+px-([^/]+)$/, '/$1');
   const cur = claims.get(base);
   if (cur && cur !== owner) return false;
   claims.set(base, owner);
@@ -439,6 +539,8 @@ export function pickCommonsImage(json: CommonsJson, words: string[]): PhotoRef |
 export async function fetchActivityPhoto(names: string[], city: string, fetcher: typeof fetch = fetch): Promise<PhotoRef | null> {
   const list = [...new Set(names.map((n) => n.trim()).filter((n) => n.length >= 2))];
   if (!list.length) return null;
+  const fromServer = await viaServer(`act|${fold(city)}|${list.map(fold).join('|')}`, { kind: 'activity', names: list, city });
+  if (fromServer) return fromServer;
   const wiki = await fetchPhoto(list.map((n) => (city ? `${n}, ${city}` : n)), 'pt', fetcher);
   if (wiki) return wiki;
   const words = keyWords(list, city);
